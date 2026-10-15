@@ -63,6 +63,35 @@ const CFG = {
     boostSpeed: 6,
   },
 
+  // Colours: [body, accent, driver]. Index 0 is the player.
+  racers: [
+    { name: 'YOU', colors: [0xe8322f, 0xffd23a, 0x2f6bff] },
+    { name: 'Rex', colors: [0x2f6bff, 0xffffff, 0xffd23a] },
+    { name: 'Luna', colors: [0x9b4dff, 0x5cc8ff, 0xffffff] },
+    { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f] },
+    { name: 'Mako', colors: [0x2fbf4a, 0xffffff, 0x333333] },
+    { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff] },
+  ],
+
+  grid: {
+    firstRow: 8,            // metres behind the start line
+    rowGap: 6,
+    colOffset: 3.2,         // lateral offset of the two columns
+  },
+
+  ai: {
+    skill: [0.88, 0.98],    // fraction of top speed each AI aims for (rolled per race)
+    cornerGrip: [24, 30],   // lateral accel (m/s^2) each AI dares in corners (rolled per race)
+    laneRange: 3.5,         // max distance of an AI's racing lane from the centre line (m)
+    lookAhead: [8, 15],     // pure-pursuit look-ahead (m), at standstill -> top speed
+    steerGain: 2.2,
+    mistakeEvery: [6, 15],  // seconds between mistakes (wobble or lift)
+    rubberBand: 0.004,      // speed change per metre of gap to the player
+    rubberMin: 0.85,
+    rubberMax: 1.06,
+    finishedPace: 0.7,      // lap-of-honour speed after crossing the line
+  },
+
   camera: {
     distance: 7,
     height: 3.2,
@@ -123,6 +152,7 @@ const physMats = {
 };
 world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.wall, { friction: 0.0, restitution: 0.3 }));
 world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.ground, { friction: 0.2, restitution: 0 }));
+world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.chassis, { friction: 0.05, restitution: 0.25 }));
 
 // ---------- 1c. Track ----------
 const track = buildTrack();
@@ -141,9 +171,19 @@ function buildTrack() {
     t.y = 0;
     t.normalize();
     tangents.push(t);
-    normals.push(new THREE.Vector3(t.z, 0, -t.x));
+    normals.push(new THREE.Vector3(t.z, 0, -t.x)); // points to the kart's left
   }
-  const data = { N, samples, tangents, normals };
+  const spacing = curve.getLength() / N; // metres between samples
+
+  // Approximate corner radius at each sample (heading change over a short arc), for AI braking
+  const radius = [];
+  const K = 6;
+  for (let i = 0; i < N; i++) {
+    const a = tangents[(i - K / 2 + N) % N], b = tangents[(i + K / 2) % N];
+    const ang = Math.acos(clamp(a.dot(b), -1, 1));
+    radius.push(ang > 1e-4 ? (K * spacing) / ang : Infinity);
+  }
+  const data = { N, samples, tangents, normals, spacing, radius };
 
   // Ground (visual + physics)
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), lambert(0x6cc04a));
@@ -365,10 +405,32 @@ function buildScenery({ N, samples }) {
   }
 }
 
-// ---------- 1d. Kart (physics + visuals) ----------
-const kart = buildKart();
+// ---------- 1d. Karts (physics + visuals). karts[0] is the player. ----------
+const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0));
+const kart = karts[0];
+world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
 
-function buildKart() {
+function makeRacer({ name, colors }, isPlayer) {
+  return Object.assign(buildKart(colors), {
+    name, isPlayer,
+    color: '#' + colors[0].toString(16).padStart(6, '0'),
+    ctl: { steer: 0, gas: false, brake: false }, // steer -1..1, positive = right
+    topMult: 1,
+    ai: isPlayer ? null : {},
+    ...freshDriveState(),
+  });
+}
+
+/** Per-kart driving + race-progress state, reset at every race start. */
+function freshDriveState() {
+  return {
+    speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
+    boost: 0, flipTimer: 0,
+    trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
+  };
+}
+
+function buildKart([bodyColor, accentColor, driverColor]) {
   const K = CFG.kart;
 
   // --- Physics: chassis + raycast vehicle ---
@@ -411,7 +473,6 @@ function buildKart() {
     });
   }
   vehicle.addToWorld(world);
-  world.addEventListener('preStep', applyStabilityAssist);
 
   // --- Visuals: chassis group ---
   const group = new THREE.Group();
@@ -423,22 +484,22 @@ function buildKart() {
     return mesh;
   };
   const y0 = K.chassisYOffset;
-  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), 0xe8322f, 0, y0 - 0.1, 0);       // floor pan
-  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), 0xe8322f, 0, y0 + 0.05, 1.1);   // nose
+  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), bodyColor, 0, y0 - 0.1, 0);      // floor pan
+  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), bodyColor, 0, y0 + 0.05, 1.1);  // nose
   add(new THREE.BoxGeometry(1.9, 0.16, 0.25), 0x333333, 0, y0 - 0.12, 1.5);   // bumper
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 0xffd23a, 0.72, y0 + 0.05, 0);   // side pods
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 0xffd23a, -0.72, y0 + 0.05, 0);
+  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), accentColor, 0.72, y0 + 0.05, 0); // side pods
+  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), accentColor, -0.72, y0 + 0.05, 0);
   add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6);   // seat back
   add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05); // engine
-  add(new THREE.CylinderGeometry(0.33, 0.4, 0.6, 8), 0x2f6bff, 0, y0 + 0.38, -0.3); // driver
+  add(new THREE.CylinderGeometry(0.33, 0.4, 0.6, 8), driverColor, 0, y0 + 0.38, -0.3); // driver
   const helmet = add(new THREE.IcosahedronGeometry(0.33, 1), 0xffffff, 0, y0 + 0.92, -0.3);
   add(new THREE.BoxGeometry(0.44, 0.15, 0.1), 0x1c2340, 0, 0.0, 0.29, helmet); // visor
-  add(new THREE.BoxGeometry(0.7, 0.07, 0.07), 0xe8322f, 0, 0.17, 0, helmet);    // stripe
+  add(new THREE.BoxGeometry(0.7, 0.07, 0.07), bodyColor, 0, 0.17, 0, helmet);   // stripe
   const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2);
   wheel.rotation.x = -0.9;
   add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, 0.6, y0 + 0.35, -1.35);  // spoiler struts
   add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, -0.6, y0 + 0.35, -1.35);
-  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), 0xffd23a, 0, y0 + 0.6, -1.4);       // spoiler
+  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), accentColor, 0, y0 + 0.6, -1.4);    // spoiler
 
   // Exhaust + boost flame
   const pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 6);
@@ -490,32 +551,25 @@ function buildKart() {
 }
 
 // ---------- 1e. Game state, HUD refs, minimap ----------
+// Race-wide state. Per-kart driving/lap state lives on each kart (see freshDriveState).
 const state = {
-  phase: 'menu',          // menu | countdown | race | finished
+  phase: 'menu',          // menu | countdown | race | finished (= the player has finished)
   countdown: 0,
   raceTime: 0,
-  lap: 1,
-  lapStart: 0,
+  lapStart: 0,            // player's lap timing
   bestLap: Infinity,
-  halfway: false,
-  trackIdx: 0,
-  speed: 0,
-  steerSmooth: 0,
-  steerAngle: 0,
-  driftAmt: 0,
-  drifting: false,
-  driftCharge: 0,
-  boost: 0,
-  flipTimer: 0,
+  finishedCount: 0,
+  resultsShown: false,
 };
 
 const input = { left: false, right: false, gas: false, brake: false, reset: false };
 
 const hud = {
   lap: $('lap'), time: $('time'), best: $('best'), speed: $('speed'),
+  place: $('place'), placeNum: $('place-num'), placeSuffix: $('place-suffix'), placeOf: $('place-of'),
   countdown: $('countdown'), message: $('message'),
-  driftFill: $('drift-fill'), overlay: $('overlay'), overlayText: $('overlay-text'),
-  startBtn: $('btn-start'),
+  driftFill: $('drift-fill'), overlay: $('overlay'),
+  overlayText: $('overlay-text'), howto: $('howto'), startBtn: $('btn-start'),
 };
 
 const minimap = buildMinimap();
@@ -611,9 +665,9 @@ function initControls() {
   window.addEventListener('resize', onResize);
   window.addEventListener('orientationchange', () => setTimeout(onResize, 200));
 
-  // --- Haptic bump on wall hits ---
+  // --- Haptic bump on wall / kart hits ---
   kart.body.addEventListener('collide', (e) => {
-    if (e.body.material !== physMats.wall) return;
+    if (e.body.material !== physMats.wall && e.body.material !== physMats.chassis) return;
     const impact = Math.abs(e.contact.getImpactVelocityAlongNormal());
     if (impact > 3 && navigator.vibrate) navigator.vibrate(Math.min(60, impact * 4));
   });
@@ -636,7 +690,7 @@ function onResize() {
 }
 
 /* ==========================================================================
- * 3. GAME FLOW (race start, laps, reset)
+ * 3. GAME FLOW (race start, grid, laps, positions, reset)
  * ========================================================================== */
 function startRace() {
   const el = document.documentElement;
@@ -646,26 +700,37 @@ function startRace() {
   hud.overlay.classList.add('hidden');
 
   Object.assign(state, {
-    phase: 'countdown', countdown: 3, raceTime: 0, lap: 1, lapStart: 0,
-    halfway: false, driftCharge: 0, boost: 0, flipTimer: 0, steerSmooth: 0,
+    phase: 'countdown', countdown: 3, raceTime: 0, lapStart: 0, finishedCount: 0, resultsShown: false,
   });
-  resetKart(track.N - 8); // a few metres behind the start line
+  placeOnGrid();
   camState.snap = true;
   showCountdown('3');
 }
 
-function resetKart(idx) {
-  const { samples, tangents } = track;
-  const s = samples[idx], t = tangents[idx];
-  const body = kart.body;
-  body.position.set(s.x, 1.2, s.z);
+/** Staggered two-column grid behind the start line. The AIs line up in front; the player starts last. */
+function placeOnGrid() {
+  const G = CFG.grid;
+  [...karts.slice(1), kart].forEach((k, slot) => {
+    Object.assign(k, freshDriveState());
+    const back = G.firstRow + Math.floor(slot / 2) * G.rowGap + (slot % 2) * G.rowGap * 0.5;
+    const lane = slot % 2 ? -G.colOffset : G.colOffset;
+    k.ai = k.isPlayer ? null : newAI(lane);
+    k.topMult = 1;
+    resetKart(k, track.N - Math.round(back / track.spacing), lane);
+  });
+  updatePlaces();
+}
+
+/** Puts a kart on the track at sample idx, `lane` metres left of the centre line, facing forward. */
+function resetKart(k, idx, lane = 0) {
+  const { samples, tangents, normals } = track;
+  const s = samples[idx], t = tangents[idx], n = normals[idx];
+  const body = k.body;
+  body.position.set(s.x + n.x * lane, 1.2, s.z + n.z * lane);
   body.quaternion.setFromAxisAngle(AXIS_Y, Math.atan2(t.x, t.z));
   body.velocity.setZero();
   body.angularVelocity.setZero();
-  state.trackIdx = idx;
-  state.flipTimer = 0;
-  state.driftCharge = 0;
-  state.boost = 0;
+  Object.assign(k, { trackIdx: idx, flipTimer: 0, driftCharge: 0, boost: 0, steerSmooth: 0 });
 }
 
 function updateGameFlow(dt) {
@@ -680,51 +745,93 @@ function updateGameFlow(dt) {
     }
   }
 
-  // Track progress & laps
-  const prevIdx = state.trackIdx;
-  const idx = nearestTrackIndex(kart.body.position, prevIdx);
-  state.trackIdx = idx;
-  const N = track.N;
-
-  if (state.phase === 'race') {
-    state.raceTime += dt;
-    if (Math.abs(idx - N / 2) < N * 0.1) state.halfway = true;
-    const crossedForward = prevIdx > N * 0.9 && idx < N * 0.1;
-    const crossedBackward = prevIdx < N * 0.1 && idx > N * 0.9;
-    if (crossedBackward) state.halfway = false;
-    if (crossedForward && state.halfway) completeLap();
-  }
-
-  // Auto-recover when flipped or beached (no wheel touching anything), or on reset button
-  const up = kart.body.quaternion.vmult(LOCAL_UP, tmpVec);
-  const grounded = kart.vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
-  state.flipTimer = up.y < 0.3 || !grounded ? state.flipTimer + dt : 0;
-  if ((input.reset || state.flipTimer > 1.5) && state.phase !== 'menu') {
-    resetKart(state.trackIdx);
-    camState.snap = true;
-  }
+  const racing = state.phase === 'race' || state.phase === 'finished';
+  if (racing) state.raceTime += dt;
+  for (const k of karts) updateKartProgress(k, dt, racing);
+  updatePlaces();
   input.reset = false;
 }
 
-function completeLap() {
-  const lapTime = state.raceTime - state.lapStart;
-  state.bestLap = Math.min(state.bestLap, lapTime);
-  state.lapStart = state.raceTime;
-  state.halfway = false;
+function updateKartProgress(k, dt, racing) {
+  const N = track.N;
+  const prevIdx = k.trackIdx;
+  const idx = nearestTrackIndex(k.body.position, prevIdx);
+  k.trackIdx = idx;
 
-  if (state.lap >= CFG.laps) {
-    state.phase = 'finished';
-    showMessage('FINISH!');
-    setTimeout(() => {
-      hud.overlayText.innerHTML =
-        `Total time <b>${fmtTime(state.raceTime)}</b><br>Best lap <b>${fmtTime(state.bestLap)}</b>`;
-      hud.startBtn.textContent = 'RACE AGAIN';
-      hud.overlay.classList.remove('hidden');
-    }, 1500);
-    return;
+  if (racing && !k.finished) {
+    if (Math.abs(idx - N / 2) < N * 0.1) k.halfway = true;
+    const crossedForward = prevIdx > N * 0.9 && idx < N * 0.1;
+    const crossedBackward = prevIdx < N * 0.1 && idx > N * 0.9;
+    if (crossedBackward) k.halfway = false;
+    if (crossedForward && k.halfway) completeLap(k);
   }
-  state.lap++;
-  showMessage(state.lap === CFG.laps ? 'FINAL LAP!' : `LAP ${state.lap}  ${fmtTime(lapTime)}`);
+  // Distance raced in samples. Before the halfway mark, the back half of the loop counts as
+  // "behind the line" (the grid at the start, or after crossing it backwards).
+  k.progress = (k.lap - 1) * N + (k.halfway || idx < N / 2 ? idx : idx - N);
+
+  // Auto-recover when flipped or beached (no wheel touching anything), on the reset button,
+  // or when the AI gives up on getting unstuck
+  const up = k.body.quaternion.vmult(LOCAL_UP, tmpVec);
+  const grounded = k.vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
+  k.flipTimer = up.y < 0.3 || !grounded ? k.flipTimer + dt : 0;
+  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.ai?.resetNow;
+  if (wantsReset && state.phase !== 'menu') {
+    resetKart(k, k.trackIdx, k.ai ? k.ai.lane : 0);
+    if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
+    if (k.isPlayer) camState.snap = true;
+  }
+}
+
+function completeLap(k) {
+  k.halfway = false;
+  if (k.isPlayer) {
+    const lapTime = state.raceTime - state.lapStart;
+    state.bestLap = Math.min(state.bestLap, lapTime);
+    state.lapStart = state.raceTime;
+    if (k.lap < CFG.laps) {
+      showMessage(k.lap + 1 === CFG.laps ? 'FINAL LAP!' : `LAP ${k.lap + 1}  ${fmtTime(lapTime)}`);
+    }
+  }
+  if (k.lap >= CFG.laps) finishKart(k);
+  else k.lap++;
+}
+
+function finishKart(k) {
+  k.finished = true;
+  k.finishTime = state.raceTime;
+  k.place = ++state.finishedCount;
+  if (k.isPlayer) {
+    state.phase = 'finished';
+    k.ai = newAI(0); // the CPU drives the player's lap of honour
+    showMessage(k.place === 1 ? 'YOU WIN!' : `FINISH! ${ordinal(k.place)}`);
+    setTimeout(showResults, 1800);
+  } else if (state.resultsShown) {
+    showResults(); // refresh the table as the AIs come home
+  }
+}
+
+/** Finished karts by finish time, then everyone else by distance raced. */
+function updatePlaces() {
+  const order = [...karts].sort((a, b) =>
+    (b.finished - a.finished) || (a.finished ? a.finishTime - b.finishTime : b.progress - a.progress));
+  order.forEach((k, i) => { k.place = i + 1; });
+}
+
+function showResults() {
+  state.resultsShown = true;
+  const rows = [...karts].sort((a, b) => a.place - b.place).map((k) => `
+    <tr class="${k.isPlayer ? 'me' : ''}">
+      <td>${ordinal(k.place)}</td>
+      <td><i class="swatch" style="background:${k.color}"></i>${k.name}</td>
+      <td>${k.finished ? fmtTime(k.finishTime) : 'racing&hellip;'}</td>
+    </tr>`).join('');
+  hud.overlayText.innerHTML =
+    `<span class="result-head">${ordinal(kart.place)} place!</span> Best lap <b>${fmtTime(state.bestLap)}</b>` +
+    `<table class="results">${rows}</table>`;
+  hud.howto.hidden = true;
+  hud.overlay.classList.add('results');
+  hud.startBtn.textContent = 'RACE AGAIN';
+  hud.overlay.classList.remove('hidden');
 }
 
 /** Nearest centre-line sample, searched locally around the previous index. */
@@ -745,98 +852,232 @@ function nearestTrackIndex(pos, hint) {
 }
 
 /* ==========================================================================
+ * 3b. AI DRIVERS
+ * Pure pursuit toward a point ahead on the AI's racing lane, braking for corners from the
+ * track's curvature. Each AI rolls its own pace and corner bravery per race, wanders between
+ * lanes, dodges slower karts, makes the odd mistake, and is rubber-banded to the player.
+ * ========================================================================== */
+const rand = (a, b) => a + Math.random() * (b - a);
+const aiFwd = new CANNON.Vec3();
+
+function newAI(lane) {
+  const A = CFG.ai;
+  return {
+    skill: rand(...A.skill), grip: rand(...A.cornerGrip),
+    lane, laneTarget: lane, laneTimer: rand(2, 5),
+    mistake: null, mistakeTimer: rand(...A.mistakeEvery),
+    startDelay: rand(0.05, 0.4), // reaction time at GO
+    stuckT: 0, backT: 0, stuckCount: 0, wrongT: 0, resetNow: false, resets: 0,
+    watchT: 0, watchProgress: -Infinity,
+  };
+}
+
+function updateAI(k, dt, canDrive) {
+  const A = CFG.ai, K = CFG.kart, ai = k.ai, ctl = k.ctl, b = k.body;
+  const { N, samples, normals, tangents, spacing, radius } = track;
+  ctl.steer = 0; ctl.gas = false; ctl.brake = false;
+  if (!canDrive) return;
+  if (ai.startDelay > 0) { ai.startDelay -= dt; return; }
+
+  const idx = k.trackIdx;
+  const n = normals[idx];
+  const fwd = b.quaternion.vmult(LOCAL_FWD, aiFwd);
+  const myLane = (b.position.x - samples[idx].x) * n.x + (b.position.z - samples[idx].z) * n.z;
+
+  // --- Racing lane: wander now and then; swing out round a slower kart just ahead
+  ai.laneTimer -= dt;
+  if (ai.laneTimer <= 0) {
+    ai.laneTarget = rand(-A.laneRange, A.laneRange);
+    ai.laneTimer = rand(2.5, 6);
+  }
+  let laneGoal = ai.laneTarget;
+  let blocked = false;
+  for (const o of karts) {
+    if (o === k) continue;
+    const dx = o.body.position.x - b.position.x, dz = o.body.position.z - b.position.z;
+    const ahead = dx * fwd.x + dz * fwd.z;
+    const side = dx * n.x + dz * n.z; // + = the other kart is to our left
+    if (ahead > 0 && ahead < 10 && Math.abs(side) < 2.4 && o.speed < k.speed + 1) {
+      const dir = myLane + side > 0 ? -1 : 1; // pass on the roomier side of them
+      laneGoal = clamp(myLane + side + dir * 3, -5.5, 5.5);
+      if (ahead < 5 && Math.abs(side) < 1.8) blocked = true; // right on their bumper: ease off
+    }
+  }
+  ai.lane += clamp(laneGoal - ai.lane, -3 * dt, 3 * dt);
+
+  // --- Steering: pure pursuit toward a look-ahead point on the lane
+  const speedRatio = clamp(k.speed / K.maxSpeed, 0, 1);
+  const j = (idx + Math.round(lerp(A.lookAhead[0], A.lookAhead[1], speedRatio) / spacing)) % N;
+  const tx = samples[j].x + normals[j].x * ai.lane;
+  const tz = samples[j].z + normals[j].z * ai.lane;
+  const d = wrapAngle(Math.atan2(tx - b.position.x, tz - b.position.z) - Math.atan2(fwd.x, fwd.z));
+  let steer = clamp(-d * A.steerGain, -1, 1);
+
+  // --- Speed: own pace x rubber band, capped so it can still brake for every corner ahead
+  const rubber = state.phase === 'race' && !k.finished
+    ? clamp(1 - (k.progress - kart.progress) * spacing * A.rubberBand, A.rubberMin, A.rubberMax)
+    : 1;
+  let target = K.maxSpeed * (k.finished ? A.finishedPace : ai.skill * rubber);
+  const brakeDecel = 10;
+  for (let s = 2; s * spacing < 45; s += 2) {
+    const vCorner = Math.sqrt(ai.grip * radius[(idx + s) % N]);
+    target = Math.min(target, Math.sqrt(vCorner * vCorner + 2 * brakeDecel * s * spacing));
+  }
+  k.topMult = target / K.maxSpeed;
+  ctl.gas = !blocked;          // the engine cuts out above target on its own (driveKart)
+  ctl.brake = k.speed > target + 5;
+
+  // --- Mistakes: a twitch of the wheel, or a lift off the gas
+  if (!k.finished) {
+    ai.mistakeTimer -= dt;
+    if (ai.mistakeTimer <= 0) {
+      ai.mistakeTimer = rand(...A.mistakeEvery);
+      ai.mistake = Math.random() < 0.5
+        ? { t: rand(0.25, 0.5), steer: Math.random() < 0.5 ? -0.8 : 0.8 }
+        : { t: rand(0.5, 1.0), lift: true };
+    }
+    if (ai.mistake) {
+      ai.mistake.t -= dt;
+      steer = clamp(steer + (ai.mistake.steer || 0), -1, 1);
+      if (ai.mistake.lift) ctl.gas = false;
+      if (ai.mistake.t <= 0) ai.mistake = null;
+    }
+  }
+
+  // --- Unsticking: back up with opposite lock; after repeated failures (or facing the wrong
+  // way for a while) get put back on the track like the player's reset button
+  if (ai.backT > 0) {
+    ai.backT -= dt;
+    Object.assign(ctl, { steer: -steer, gas: false, brake: true });
+    return;
+  }
+  if (k.speed > 8) ai.stuckCount = 0;
+  ai.stuckT = Math.abs(k.speed) < 1 ? ai.stuckT + dt : 0;
+  if (ai.stuckT > 1.2) {
+    ai.stuckT = 0;
+    ai.backT = 1.0;
+    if (++ai.stuckCount >= 3) { ai.resetNow = true; ai.stuckCount = 0; }
+  }
+  // Watchdog for anything the above misses (wedged on a wall, beached at an angle...)
+  ai.watchT += dt;
+  if (ai.watchT > 4) {
+    if (!k.finished && k.progress - ai.watchProgress < 10) ai.resetNow = true;
+    ai.watchT = 0;
+    ai.watchProgress = k.progress;
+  }
+  const t = tangents[idx];
+  ai.wrongT = fwd.x * t.x + fwd.z * t.z < -0.3 ? ai.wrongT + dt : 0;
+  if (ai.wrongT > 3) ai.resetNow = true;
+
+  ctl.steer = steer;
+}
+
+/* ==========================================================================
  * 4. PHYSICS STEP
  * ========================================================================== */
 const tmpVec = new CANNON.Vec3();
 const tmpFwd = new CANNON.Vec3();
 
 function stepPhysics(dt) {
+  const canDrive = state.phase === 'race' || state.phase === 'finished';
+  for (const k of karts) {
+    if (k.ai) {
+      updateAI(k, dt, canDrive);
+    } else {
+      k.ctl.steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      k.ctl.gas = input.gas;
+      k.ctl.brake = input.brake;
+    }
+    driveKart(k, dt, canDrive);
+  }
+  world.step(CFG.physicsStep, dt, CFG.maxSubSteps);
+}
+
+/** Turns a kart's controls (k.ctl) into steering, drift, boost, engine and brake forces. */
+function driveKart(k, dt, canDrive) {
   const K = CFG.kart;
-  const { body, vehicle } = kart;
-  const canDrive = state.phase === 'race';
+  const { body, vehicle, ctl } = k;
 
   const fwd = body.quaternion.vmult(LOCAL_FWD, tmpFwd);
   const speed = body.velocity.dot(fwd); // signed forward speed (m/s)
-  state.speed = speed;
+  k.speed = speed;
   const speedRatio = clamp(Math.abs(speed) / K.maxSpeed, 0, 1);
 
-  // --- Steering: buttons are digital, so ramp toward lock gradually and recentre quickly.
-  // Lock shrinks with speed so a held button can't ask for more grip than the tyres have.
-  // Positive input = right.
-  const steerInput = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  const recentring = steerInput === 0 || Math.sign(steerInput) !== Math.sign(state.steerSmooth);
+  // --- Steering: the player's buttons are digital, so ramp toward lock gradually and recentre
+  // quickly. Lock shrinks with speed so a held button can't ask for more grip than the tyres
+  // have. Positive input = right.
+  const steerInput = ctl.steer;
+  const recentring = Math.abs(steerInput) < Math.abs(k.steerSmooth) || Math.sign(steerInput) !== Math.sign(k.steerSmooth);
   const maxDelta = (recentring ? K.steerReturn : K.steerRate) * dt;
-  state.steerSmooth += clamp(steerInput - state.steerSmooth, -maxDelta, maxDelta);
-  const steerAngle = -state.steerSmooth * lerp(K.maxSteerLow, K.maxSteerHigh, Math.sqrt(speedRatio));
+  k.steerSmooth += clamp(steerInput - k.steerSmooth, -maxDelta, maxDelta);
+  const steerAngle = -k.steerSmooth * lerp(K.maxSteerLow, K.maxSteerHigh, Math.sqrt(speedRatio));
   vehicle.setSteeringValue(steerAngle, 0);
   vehicle.setSteeringValue(steerAngle, 1);
 
   // --- Drift: holding a turn at speed (lock ramps past ~75%) lowers rear grip a bit
   const driftAmt = canDrive
-    ? clamp((Math.abs(state.steerSmooth) - 0.75) / 0.25, 0, 1) * clamp((speed - K.driftMinSpeed) / 6, 0, 1)
+    ? clamp((Math.abs(k.steerSmooth) - 0.75) / 0.25, 0, 1) * clamp((speed - K.driftMinSpeed) / 6, 0, 1)
     : 0;
-  state.driftAmt = driftAmt;
+  k.driftAmt = driftAmt;
   const rearGrip = lerp(K.rearGrip, K.driftGrip, driftAmt);
   vehicle.wheelInfos[2].frictionSlip = rearGrip;
   vehicle.wheelInfos[3].frictionSlip = rearGrip;
-  if (driftAmt > 0) body.angularVelocity.y -= state.steerSmooth * driftAmt * K.driftYawAssist * dt;
+  if (driftAmt > 0) body.angularVelocity.y -= k.steerSmooth * driftAmt * K.driftYawAssist * dt;
 
   // --- Mini-turbo: drift long enough, then release
   const drifting = driftAmt > 0.55;
   if (drifting) {
-    state.driftCharge += dt;
+    k.driftCharge += dt;
   } else {
-    if (state.driftCharge > K.miniTurboTime) {
-      state.boost = K.boostDuration;
-      showMessage('BOOST!');
+    if (k.driftCharge > K.miniTurboTime) {
+      k.boost = K.boostDuration;
+      if (k.isPlayer) showMessage('BOOST!');
     }
-    state.driftCharge = 0;
+    k.driftCharge = 0;
   }
-  state.drifting = drifting;
-  state.boost = Math.max(0, state.boost - dt);
-  const boosting = state.boost > 0;
+  k.drifting = drifting;
+  k.boost = Math.max(0, k.boost - dt);
+  const boosting = k.boost > 0;
 
   // --- Engine & brakes
   let engine = 0, brake = 0;
   if (canDrive) {
-    const top = K.maxSpeed + (boosting ? K.boostSpeed : 0);
-    if (input.brake) {
+    const top = K.maxSpeed * k.topMult + (boosting ? K.boostSpeed : 0);
+    if (ctl.brake) {
       if (speed > 1) brake = K.brakeForce;
       else if (speed > -K.maxReverse) engine = -K.reverseForce;
-    } else if (input.gas || boosting) {
+    } else if (ctl.gas || boosting) {
       if (speed < top) engine = K.engineForce * (boosting ? K.boostMult : 1);
     } else {
       brake = K.coastBrake;
     }
   } else {
-    brake = K.brakeForce; // hold still during menu / countdown / finish
+    brake = K.brakeForce; // hold still during menu / countdown
   }
   // cannon-es pushes along -forward for positive force with this axle setup, hence the negation
   vehicle.applyEngineForce(-engine, 2);
   vehicle.applyEngineForce(-engine, 3);
   for (let i = 0; i < 4; i++) vehicle.setBrake(brake, i);
 
-  state.steerAngle = steerAngle;
-
-  world.step(CFG.physicsStep, dt, CFG.maxSubSteps);
+  k.steerAngle = steerAngle;
 }
 
 /**
- * Stability assist, run before every physics sub-step: compare the kart's yaw rate with what
- * the front wheels ask for (bicycle model, capped by available grip) and bleed off any excess,
- * so the tail can't swing round into a spin. Drifting allows some extra rotation.
+ * Stability assist, run on every kart before every physics sub-step: compare the kart's yaw rate
+ * with what the front wheels ask for (bicycle model, capped by available grip) and bleed off any
+ * excess, so the tail can't swing round into a spin. Drifting allows some extra rotation.
  */
-function applyStabilityAssist() {
+function applyStabilityAssist(k) {
   const K = CFG.kart;
-  const { body, vehicle } = kart;
+  const { body, vehicle } = k;
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
 
   const speed = body.velocity.dot(body.quaternion.vmult(LOCAL_FWD, tmpFwd));
   if (speed < 3 || !vehicle.wheelInfos.every((w) => w.raycastResult.hasHit)) return;
 
   const gripLimit = K.maxLateralAccel / speed;
-  const targetYaw = clamp((speed * Math.tan(state.steerAngle)) / K.wheelBase, -gripLimit, gripLimit);
-  const slack = K.yawSlack + K.steerYawSlack * Math.abs(state.steerSmooth) + K.driftYawSlack * state.driftAmt;
+  const targetYaw = clamp((speed * Math.tan(k.steerAngle)) / K.wheelBase, -gripLimit, gripLimit);
+  const slack = K.yawSlack + K.steerYawSlack * Math.abs(k.steerSmooth) + K.driftYawSlack * k.driftAmt;
   const yaw = body.angularVelocity.y;
   const excess = yaw - clamp(yaw, targetYaw - slack, targetYaw + slack);
   body.angularVelocity.y -= excess * 0.5;
@@ -849,14 +1090,15 @@ const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), 
 const desiredCam = new THREE.Vector3();
 
 function syncMeshes() {
-  const { body, vehicle, group, wheelMeshes } = kart;
-  group.position.copy(body.position);
-  group.quaternion.copy(body.quaternion);
-  for (let i = 0; i < vehicle.wheelInfos.length; i++) {
-    vehicle.updateWheelTransform(i);
-    const t = vehicle.wheelInfos[i].worldTransform;
-    wheelMeshes[i].position.copy(t.position);
-    wheelMeshes[i].quaternion.copy(t.quaternion);
+  for (const { body, vehicle, group, wheelMeshes } of karts) {
+    group.position.copy(body.position);
+    group.quaternion.copy(body.quaternion);
+    for (let i = 0; i < vehicle.wheelInfos.length; i++) {
+      vehicle.updateWheelTransform(i);
+      const t = vehicle.wheelInfos[i].worldTransform;
+      wheelMeshes[i].position.copy(t.position);
+      wheelMeshes[i].quaternion.copy(t.quaternion);
+    }
   }
 }
 
@@ -865,13 +1107,12 @@ function updateCamera(dt) {
   const b = kart.body;
   const fwd = b.quaternion.vmult(LOCAL_FWD, tmpVec);
   const yaw = Math.atan2(fwd.x, fwd.z);
-  const speedRatio = clamp(Math.abs(state.speed) / CFG.kart.maxSpeed, 0, 1);
+  const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
 
   if (camState.snap) {
     camState.yaw = yaw;
   } else {
-    const d = Math.atan2(Math.sin(yaw - camState.yaw), Math.cos(yaw - camState.yaw));
-    camState.yaw += d * (1 - Math.exp(-dt * C.yawLag));
+    camState.yaw += wrapAngle(yaw - camState.yaw) * (1 - Math.exp(-dt * C.yawLag));
   }
 
   const dist = C.distance + speedRatio * 1.5;
@@ -898,7 +1139,7 @@ function updateCamera(dt) {
   camera.lookAt(camState.look);
 
   // Speed-based FOV kick
-  const targetFov = 66 + speedRatio * 8 + (state.boost > 0 ? 8 : 0);
+  const targetFov = 66 + speedRatio * 8 + (kart.boost > 0 ? 8 : 0);
   if (Math.abs(camera.fov - targetFov) > 0.05) {
     camera.fov = lerp(camera.fov, targetFov, 1 - Math.exp(-dt * 4));
     camera.updateProjectionMatrix();
@@ -910,36 +1151,44 @@ function updateCamera(dt) {
 }
 
 function updateEffects() {
-  const { sparks, sparkMat, flames } = kart;
-  const charged = state.driftCharge > CFG.kart.miniTurboTime;
-  sparkMat.color.setHex(charged ? 0xffa21f : 0x5cc8ff);
-  for (const sp of sparks) {
-    sp.visible = state.drifting;
-    if (sp.visible) sp.scale.setScalar(0.6 + Math.random() * 0.8);
-  }
-  const boosting = state.boost > 0;
-  for (const f of flames) {
-    f.visible = boosting || (state.phase === 'race' && input.gas);
-    const s = boosting ? 1 + Math.random() * 0.6 : 0.35 + Math.random() * 0.15;
-    f.scale.set(s, s, s);
+  const driving = state.phase === 'race' || state.phase === 'finished';
+  for (const k of karts) {
+    const charged = k.driftCharge > CFG.kart.miniTurboTime;
+    k.sparkMat.color.setHex(charged ? 0xffa21f : 0x5cc8ff);
+    for (const sp of k.sparks) {
+      sp.visible = k.drifting;
+      if (sp.visible) sp.scale.setScalar(0.6 + Math.random() * 0.8);
+    }
+    const boosting = k.boost > 0;
+    for (const f of k.flames) {
+      f.visible = boosting || (driving && k.ctl.gas);
+      const s = boosting ? 1 + Math.random() * 0.6 : 0.35 + Math.random() * 0.15;
+      f.scale.set(s, s, s);
+    }
   }
 }
 
 let lastHud = '';
 function updateHUD() {
-  const kmh = Math.round(Math.abs(state.speed) * 3.6);
-  const lapTxt = `${Math.min(state.lap, CFG.laps)}/${CFG.laps}`;
-  const timeTxt = fmtTime(state.raceTime);
+  const kmh = Math.round(Math.abs(kart.speed) * 3.6);
+  const lapTxt = `${Math.min(kart.lap, CFG.laps)}/${CFG.laps}`;
+  const timeTxt = fmtTime(kart.finished ? kart.finishTime : state.raceTime);
   const bestTxt = fmtTime(state.bestLap);
-  const key = `${kmh}|${lapTxt}|${timeTxt}|${bestTxt}`;
+  const showPlace = state.phase !== 'menu';
+  const key = `${kmh}|${lapTxt}|${timeTxt}|${bestTxt}|${showPlace && kart.place}`;
   if (key !== lastHud) {
     lastHud = key;
     hud.speed.textContent = kmh;
     hud.lap.textContent = lapTxt;
     hud.time.textContent = timeTxt;
     hud.best.textContent = bestTxt;
+    hud.place.hidden = !showPlace;
+    hud.place.classList.toggle('first', kart.place === 1);
+    hud.placeNum.textContent = kart.place;
+    hud.placeSuffix.textContent = ordinal(kart.place).slice(-2);
+    hud.placeOf.textContent = `/${karts.length}`;
   }
-  const charge = clamp(state.driftCharge / CFG.kart.miniTurboTime, 0, 1);
+  const charge = clamp(kart.driftCharge / CFG.kart.miniTurboTime, 0, 1);
   hud.driftFill.style.width = `${charge * 100}%`;
   hud.driftFill.classList.toggle('charged', charge >= 1);
 
@@ -956,14 +1205,17 @@ function updateHUD() {
   const [sx, sy] = minimap.project(track.samples[0].x, track.samples[0].z);
   ctx.fillStyle = '#ffd23a';
   ctx.fillRect(sx - size * 0.03, sy - size * 0.05, size * 0.06, size * 0.1);
-  const [kx, ky] = minimap.project(kart.body.position.x, kart.body.position.z);
-  ctx.fillStyle = '#e8322f';
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = size * 0.02;
-  ctx.beginPath();
-  ctx.arc(kx, ky, size * 0.05, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  for (let i = karts.length - 1; i >= 0; i--) { // player last, so it's drawn on top
+    const k = karts[i];
+    const [kx, ky] = minimap.project(k.body.position.x, k.body.position.z);
+    ctx.fillStyle = k.color;
+    ctx.beginPath();
+    ctx.arc(kx, ky, size * (k.isPlayer ? 0.05 : 0.035), 0, Math.PI * 2);
+    ctx.fill();
+    if (k.isPlayer) ctx.stroke();
+  }
 }
 
 function render(dt) {
@@ -982,8 +1234,8 @@ function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
-  stepPhysics(dt);      // 4. physics
-  updateGameFlow(dt);   // 3. laps / countdown / recovery
+  stepPhysics(dt);      // 4. physics (AI decides its controls here too)
+  updateGameFlow(dt);   // 3. laps / positions / countdown / recovery
   render(dt);           // 5. sync + draw
 }
 
@@ -1008,9 +1260,16 @@ function fmtTime(t) {
   return `${m}:${s.toFixed(2).padStart(5, '0')}`;
 }
 
+function ordinal(n) {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th';
+  return n + s;
+}
+
+function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
+
 // ---------- Boot ----------
 onResize();
-resetKart(track.N - 8);
+placeOnGrid();
 
 // PWA: offline cache (service workers need a secure context: https or localhost)
 if ('serviceWorker' in navigator && window.isSecureContext) {

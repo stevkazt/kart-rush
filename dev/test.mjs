@@ -1,5 +1,7 @@
 // Drives the game in headless Chrome over the DevTools protocol. Run via dev/test.sh.
 //   node test.mjs <port> autopilot <seconds>  -> full race with dev/autopilot.js, prints lap log
+//   node test.mjs <port> trace <seconds> <probe.js> -> autopilot race plus an extra script that pushes to __log
+//   node test.mjs <port> eval <js expr>       -> prints the expression ~1 s after GO
 //   node test.mjs <port> tap <seconds>        -> on open grass at top speed, hold RIGHT for <seconds>,
 //                                                prints heading change / slip / yaw rate
 import fs from 'node:fs';
@@ -29,10 +31,14 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 await sleep(3000);
 await ev(`document.getElementById('btn-start').click()`);
 
-if (mode === 'autopilot') {
+if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
+  if (mode === 'trace') await ev(fs.readFileSync(process.argv[5], 'utf8')); // extra probe, logs to __log
   await sleep(+arg * 1000);
   console.log(await ev('__log.join("\\n")'));
+} else if (mode === 'eval') {
+  await sleep(5000); // countdown + ~1 s of racing
+  console.log(await ev(`(() => { try { return String(${arg}); } catch (e) { return 'ERR ' + e.stack; } })()`));
 } else if (mode === 'tap') {
   while ((await ev('__s.phase')) !== 'race') await sleep(100);
   // Teleport onto open infield grass heading +X at ~90 km/h, so no wall can interfere.
@@ -48,7 +54,7 @@ if (mode === 'autopilot') {
   await ev(`window.__h0 = __hd; __in.right = true; setTimeout(() => { __in.right = false; window.__hr = __hd; }, ${+arg * 1000});`);
   await sleep(+arg * 1000 + 1500);
   const rel = (x) => `((${x} - __h0 + 540) % 360 - 180).toFixed(1)`;
-  console.log(`hold RIGHT ${arg}s:`, await ev(`'heading at release ' + ${rel('__hr')} + ' / +1.5s ' + ${rel('__hd')} + 'deg, maxSlip ' + __m.maxSlip.toFixed(1) + 'deg, maxYawRate ' + __m.maxYaw.toFixed(2) + ', speed ' + (__s.speed * 3.6).toFixed(0) + 'kmh'`));
+  console.log(`hold RIGHT ${arg}s:`, await ev(`'heading at release ' + ${rel('__hr')} + ' / +1.5s ' + ${rel('__hd')} + 'deg, maxSlip ' + __m.maxSlip.toFixed(1) + 'deg, maxYawRate ' + __m.maxYaw.toFixed(2) + ', speed ' + (__k.speed * 3.6).toFixed(0) + 'kmh'`));
 }
 
 if (errors.length) console.log('PAGE ERRORS:\n' + errors.join('\n'));

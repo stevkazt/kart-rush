@@ -265,7 +265,7 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   text-shadow: 0 5px 0 #c2185b;
 }
 .panel h1 span { color: #5cc8ff; margin-left: 10px; }
-.panel p { margin: 6px 0; font-size: 15px; line-height: 1.4; opacity: 0.9; }
+.panel p, #overlay-text { margin: 6px 0; font-size: 15px; line-height: 1.4; opacity: 0.9; }
 .howto {
   list-style: none;
   padding: 0;
@@ -287,3 +287,49 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   cursor: pointer;
 }
 #btn-start:active { transform: translateY(4px); box-shadow: 0 2px 0 #b35c00; }
+
+/* ============ Race position (under the reset button) ============ */
+#place {
+  position: absolute;
+  top: 64px;
+  right: var(--edge-r);
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 4px 0 #2f3a8f, 0 6px 14px rgba(0, 0, 0, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+#place[hidden] { display: none; }
+#place-num { font-size: clamp(40px, calc(var(--app-h) * 0.15), 64px); }
+#place-suffix { font-size: clamp(16px, calc(var(--app-h) * 0.055), 24px); vertical-align: top; }
+#place-of { display: block; text-align: right; font-size: 14px; opacity: 0.8; margin-top: 2px; }
+#place.first { color: #ffe14a; text-shadow: 0 4px 0 #c2185b, 0 6px 14px rgba(0, 0, 0, 0.45); }
+
+/* ============ Results table ============ */
+#overlay.results h1 { display: none; } /* landscape phones are short: the table needs the room */
+.result-head {
+  display: block;
+  font-size: 26px;
+  font-weight: 900;
+  font-style: italic;
+  color: #ffe14a;
+}
+.results {
+  margin: 8px auto 12px;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.results td { padding: 2px 10px; text-align: left; }
+.results td:first-child { font-weight: 900; text-align: right; }
+.results td:last-child { text-align: right; opacity: 0.85; }
+.results tr.me { color: #ffe14a; font-weight: 800; }
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}

@@ -16,9 +16,19 @@ prompt need HTTPS. A public tunnel was offered but not set up: ask the user befo
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
 - `style.css`: `#app` is always laid out landscape; `.rotated` turns it 90deg in portrait. Sizes use `--app-h`
   and safe-area vars `--edge-l/--edge-r`, which map to the top/bottom insets when rotated.
-- `main.js` sections: 0 CONFIG (`CFG`; all tuning lives here) · 1 INITIALIZATION (renderer, world, track,
-  kart, state/HUD/minimap) · 2 CONTROL LISTENERS · 3 GAME FLOW (countdown, laps, resets) · 4 PHYSICS STEP
-  (+ `applyStabilityAssist` on `preStep`) · 5 RENDERING LOOP (sync meshes <- bodies, camera, effects, HUD).
+- `main.js` sections: 0 CONFIG (`CFG`; all tuning lives here, incl. `racers`, `grid`, `ai`) · 1 INITIALIZATION
+  (renderer, world, track, karts, state/HUD/minimap) · 2 CONTROL LISTENERS · 3 GAME FLOW (grid, countdown,
+  laps, places, results, resets) · 3b AI DRIVERS · 4 PHYSICS STEP (`driveKart` per kart + `applyStabilityAssist`
+  per kart on `preStep`) · 5 RENDERING LOOP (sync meshes <- bodies, camera, effects, HUD).
+- **Karts:** `karts[]` (6), `kart === karts[0]` is the player. Each kart object holds its physics/meshes plus its
+  own driving + lap state (`freshDriveState()`), and a `ctl {steer -1..1, gas, brake}` that `driveKart` turns into
+  forces. The player's `ctl` comes from the buttons; AI karts (`k.ai` set) fill it in `updateAI`. All karts run
+  the same physics, so tuning `CFG.kart` changes the AI too. `state` is race-wide only (phase, time, best lap).
+- **AI:** pure pursuit to a look-ahead point on the AI's lane; target speed = top x skill x rubber band, capped
+  by `track.radius` corner speeds; lane wander, dodging slower karts ahead, random wobble/lift mistakes;
+  back-up + reset recovery and a 4 s no-progress watchdog. After the player finishes, the CPU drives their kart.
+- **Places:** `k.progress` = (lap-1)*N + idx, with idx counted negative behind the line before halfway.
+  Finished karts rank by finish time. The results overlay refreshes live as AIs finish.
 - `manifest.webmanifest`, `sw.js`, `icons/`: PWA. **Bump `VERSION` in `sw.js` when shipping changes.**
 - `dev/test.sh`: headless Chrome regression tests (see Testing).
 
@@ -42,16 +52,23 @@ prompt need HTTPS. A public tunnel was offered but not set up: ask the user befo
    Don't attach that to `#overlay`, because it would kill the Start button's click.
 7. Keep track corners at a minimum radius of about 19 m or more (the half-width is 7 m, and the walls sit at
    8.3 m). A 9 m hairpin was unplayable. The track is the `CFG.track.points` Catmull-Rom loop.
+8. AI pile-ups: braking hard for corners made trailing AIs rear-end the leaders. AIs now take corners with
+   high `cornerGrip`, mostly just lift (brake only when 5 m/s over target), and lift when right behind a kart.
 
 ## Testing
 ```bash
 dev/test.sh autopilot 80        # full race with button-style autopilot; prints lap log + STUCK events
 dev/test.sh tap 0.25 0.6 1.0    # hold RIGHT on open grass at top speed; heading/slip/yaw per hold time
+dev/test.sh eval '<js expr>'    # print a page expression ~1 s after GO, e.g. '__karts.map(k=>k.place)'
+dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log
 ```
-Current baseline: autopilot laps of about 21–23 s with 0 STUCK events. `tap 0.6` gives about 35 degrees at
+Current baseline: autopilot laps of about 21–23 s with 0 STUCK events. The autopilot log lists every kart each
+5 s (place, lap/idx, speed, AI `resets=`). With AIs, the autopilot finishes 1st by ~2 s; the whole field
+finishes within ~10 s, with 0 AI resets in a clean run. `tap 0.6` gives about 35 degrees at
 release, slip under 2 degrees, and 95 km/h kept. `dev/test.sh` injects debug globals (`__k` kart, `__s` state,
 `__t` track, `__w` world, `__in` input) into a temp copy by replacing the `// ---------- Boot ----------` marker
-line in `main.js`. Keep that line. The page can't be tested on a real phone from here: ask the user to
+line in `main.js` (also `__karts`). Keep that line. `test.sh` refuses to run if port 8765 is already taken:
+an orphaned test server once served a stale copy and made every test lie. The page can't be tested on a real phone from here: ask the user to
 check touch and feel.
 
 ## User feedback so far
@@ -60,15 +77,10 @@ check touch and feel.
 - Wants it to feel like a finished game rather than a demo.
 
 ## Roadmap (agreed with the user)
-**Next: AI opponents.** This is the user's chosen priority.
-- 3–5 AI karts following the centre line, each with its own lateral offset, speed variance and occasional
-  mistakes. `dev/autopilot.js` already shows pure-pursuit steering on `track.samples`.
-- Reuse `buildKart()` (parameterise colour; it currently uses the shared `world` and pushes to the scene) so
-  AIs are real raycast vehicles that can bump the player.
-- Race position ("2nd / 6") from lap + trackIdx progress, a results screen with placings, and a start grid.
-- Rubber-banding so races stay close.
+**Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
+table, rubber-banding. Waiting on the user's on-phone feedback (difficulty, frame rate with 6 karts).
 
-Later, roughly in order:
+**Next**, roughly in order:
 - Sound: engine pitch from speed via WebAudio (no assets), drift/boost/wall/countdown SFX, music,
   mute toggle.
 - Mario Kart identity: item boxes (mushroom/banana/shell), boost pads, a hop-to-drift button with

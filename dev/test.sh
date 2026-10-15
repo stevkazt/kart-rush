@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Headless regression tests (macOS + Google Chrome + Node 22+).
 #   dev/test.sh autopilot [seconds=80]      full race driven by dev/autopilot.js
+#   dev/test.sh trace <probe.js> [seconds=40]  autopilot race + a probe script that pushes lines to __log
+#   dev/test.sh eval '<js expr>'          print a page expression ~1 s after GO (debug globals available)
 #   dev/test.sh tap [hold seconds ...]      steering response on open grass (default: 0.25 0.6 1.0)
 # Copies the game to a temp dir with debug globals injected, so the real files stay clean.
 # Screenshot of the final frame goes to $OUT_DIR (default: the temp dir), path printed at the end.
@@ -12,8 +14,11 @@ TMP="$(mktemp -d)"
 export OUT_DIR="${OUT_DIR:-$TMP}" GAME_PORT=8765
 DEBUG_PORT=9333
 
+if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
+fi
 cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__s=state;window.__t=track;window.__w=world;window.__in=input;#' \
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;window.__t=track;window.__w=world;window.__in=input;#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -35,7 +40,11 @@ run() {
   sleep 1
 }
 
-if [ "$MODE" = "tap" ]; then
+if [ "$MODE" = "trace" ]; then
+  run trace "${2:-40}" "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+elif [ "$MODE" = "eval" ]; then
+  run eval "$1"
+elif [ "$MODE" = "tap" ]; then
   for T in "${@:-0.25 0.6 1.0}"; do for t in $T; do run tap "$t"; done; done
 else
   run autopilot "${1:-80}"
