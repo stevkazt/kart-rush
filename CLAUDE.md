@@ -1,7 +1,7 @@
 # Kart Rush — handoff notes
 
 Mobile-first 3D kart racer (Mario Kart style). Vanilla JS + Three.js 0.160 + cannon-es 0.20, both from
-jsDelivr via the import map in `index.html`. No build step. The user plays it on an iPhone over the LAN.
+jsDelivr via the import map in `index.html`. No build step. The user plays it on an iPhone, installed from GitHub Pages (see Run).
 
 ## Run
 ```bash
@@ -81,7 +81,11 @@ check touch and feel.
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
-table, rubber-banding. Waiting on the user's on-phone feedback (difficulty, frame rate with 6 karts).
+table, rubber-banding. Waiting on the user's on-phone feedback:
+- Difficulty: tune `CFG.ai.skill`, `cornerGrip`, `rubberMin/rubberMax/rubberBand`. The autopilot drives flat out
+  on the centre line and only beats the AI by ~2 s, so a human may find it hard.
+- Frame rate with 6 karts: if it stutters, merge each kart's ~20 meshes (BufferGeometryUtils.mergeGeometries
+  with vertex colours) and/or turn off castShadow on AI karts.
 
 **Next**, roughly in order:
 - Sound: engine pitch from speed via WebAudio (no assets), drift/boost/wall/countdown SFX, music,
