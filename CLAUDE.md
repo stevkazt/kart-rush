@@ -8,9 +8,12 @@ jsDelivr via the import map in `index.html`. No build step. The user plays it on
 cd kart-racer && python3 -m http.server 8000 --bind 0.0.0.0
 # phone (same Wi-Fi): http://<mac LAN IP>:8000   ->  ipconfig getifaddr en0
 ```
-Plain HTTP on the LAN is not a secure context, so the service worker does not register on the phone.
-iOS "Add to Home Screen" still gives a fullscreen app with an icon. Offline play and the Android install
-prompt need HTTPS. A public tunnel was offered but not set up: ask the user before exposing it.
+**Hosted (2026-10-15):** public repo `github.com/stevkazt/kart-rush`, GitHub Pages from `main` /,
+live at https://stevkazt.github.io/kart-rush/. **Deploy = `git push`** (Pages rebuilds in ~1 min); bump `VERSION`
+in `sw.js` first so installed phones pick up the new files. The user installs it via Safari, Share, then Add to Home Screen; over
+HTTPS the service worker works, so it plays offline. All paths are relative, so it works under `/kart-rush/`.
+The user plans more games: one repo per game (`stevkazt.github.io/<repo>/`), optionally a `stevkazt.github.io`
+launcher repo later. The LAN server above still works for quick testing (no offline cache over plain HTTP).
 
 ## Files
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
