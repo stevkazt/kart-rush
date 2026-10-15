@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kart Rush">
+  <meta name="theme-color" content="#1b1f3a">
+  <title>Kart Rush</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- #app is always laid out landscape; in portrait it is rotated 90deg -->
+  <div id="app">
+    <canvas id="game"></canvas>
+
+    <!-- ===== HUD (non-interactive) ===== -->
+    <div id="hud">
+      <canvas id="minimap"></canvas>
+
+      <div id="hud-top">
+        <div class="pill"><span class="label">LAP</span><span id="lap">1/3</span></div>
+        <div class="pill"><span class="label">TIME</span><span id="time">0:00.00</span></div>
+        <div class="pill"><span class="label">BEST</span><span id="best">--:--.--</span></div>
+      </div>
+
+      <div id="message"></div>
+      <div id="countdown"></div>
+
+      <div id="speedo">
+        <span id="speed">0</span><small>km/h</small>
+        <div id="drift-bar"><div id="drift-fill"></div></div>
+      </div>
+    </div>
+
+    <!-- ===== Touch controls ===== -->
+    <div id="controls">
+      <div id="steer">
+        <button id="btn-left" class="ctl steer-btn" aria-label="Steer left">&#9664;</button>
+        <button id="btn-right" class="ctl steer-btn" aria-label="Steer right">&#9654;</button>
+      </div>
+
+      <div id="pedals">
+        <button id="btn-brake" class="ctl pedal" aria-label="Brake / Reverse">BRAKE<small>REV</small></button>
+        <button id="btn-gas" class="ctl pedal" aria-label="Gas">GAS</button>
+      </div>
+
+      <button id="btn-reset" aria-label="Reset kart">&#x21BB;</button>
+    </div>
+
+    <!-- ===== Menu / results overlay ===== -->
+    <div id="overlay">
+      <div class="panel">
+        <h1>KART<span>RUSH</span></h1>
+        <p id="overlay-text">3 laps. Hold a hard turn at speed to drift &mdash; keep it until the sparks turn orange for a mini-turbo!</p>
+        <ul class="howto">
+          <li><b>&#9664; &#9654;</b> &mdash; steer</li>
+          <li><b>GAS</b> &mdash; accelerate &middot; <b>BRAKE</b> &mdash; brake / reverse</li>
+        </ul>
+        <button id="btn-start">START RACE</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

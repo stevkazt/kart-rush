@@ -1,0 +1,289 @@
+/* ============ Base / mobile hardening ============ */
+* {
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  background: #1b1f3a;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #fff;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button { font: inherit; color: inherit; border: none; outline: none; padding: 0; }
+
+/* ============ Landscape container ============
+ * main.js sets width/height (always landscape) and adds .rotated in portrait,
+ * which turns the whole game 90deg so it plays sideways. */
+#app {
+  --app-h: 400px;          /* updated from JS: logical (landscape) height */
+  --edge-l: max(14px, env(safe-area-inset-left));
+  --edge-r: max(14px, env(safe-area-inset-right));
+  --ctl: clamp(64px, calc(var(--app-h) * 0.24), 112px);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+#app.rotated {
+  left: 100%;
+  transform-origin: 0 0;
+  transform: rotate(90deg);
+  /* rotated 90deg clockwise: game-left is the phone's top, game-right its bottom */
+  --edge-l: max(14px, env(safe-area-inset-top));
+  --edge-r: max(14px, env(safe-area-inset-bottom));
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* ============ HUD ============ */
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+#hud-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 78px;
+  padding: 5px 12px;
+  border-radius: 14px;
+  background: rgba(20, 24, 60, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  font-weight: 800;
+  font-size: 17px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+.pill .label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  opacity: 0.75;
+}
+
+#minimap {
+  position: absolute;
+  top: 10px;
+  left: var(--edge-l);
+  width: clamp(80px, calc(var(--app-h) * 0.26), 120px);
+  height: clamp(80px, calc(var(--app-h) * 0.26), 120px);
+  border-radius: 16px;
+  background: rgba(20, 24, 60, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+#speedo {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-weight: 900;
+  font-style: italic;
+  font-size: 40px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+#speedo small {
+  font-size: 13px;
+  margin-left: 4px;
+  opacity: 0.8;
+}
+#drift-bar {
+  width: 110px;
+  height: 7px;
+  margin: 6px auto 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+#drift-fill {
+  width: 0%;
+  height: 100%;
+  background: #5cc8ff;
+  transition: background 0.15s;
+}
+#drift-fill.charged { background: #ffa21f; }
+
+#countdown, #message {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: 900;
+  font-style: italic;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 5px 0 #c2185b, 0 8px 18px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+}
+#countdown { top: 42%; font-size: clamp(70px, calc(var(--app-h) * 0.28), 120px); color: #ffe14a; }
+#message   { top: 30%; font-size: clamp(26px, calc(var(--app-h) * 0.09), 40px); color: #fff; }
+
+.pop { animation: pop 0.9s ease-out forwards; }
+@keyframes pop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(2.2); }
+  20%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  75%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+}
+
+/* ============ Touch controls ============ */
+#controls {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+#steer, #pedals {
+  position: absolute;
+  bottom: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  pointer-events: auto;
+}
+#steer  { left: var(--edge-l); }
+#pedals { right: var(--edge-r); }
+
+.ctl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 900;
+  letter-spacing: 1px;
+  touch-action: none;
+  border: 3px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), inset 0 -6px 0 rgba(0, 0, 0, 0.18);
+  transition: transform 0.06s, filter 0.06s;
+}
+.ctl.pressed {
+  transform: translateY(4px) scale(0.93);
+  filter: brightness(1.25);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+}
+
+.steer-btn {
+  width: var(--ctl);
+  height: var(--ctl);
+  font-size: calc(var(--ctl) * 0.36);
+  background: radial-gradient(circle at 35% 30%, #c9d3ff, #5868d8);
+}
+
+#btn-gas {
+  width: var(--ctl);
+  height: var(--ctl);
+  font-size: calc(var(--ctl) * 0.2);
+  background: radial-gradient(circle at 35% 30%, #7dff9b, #22b14c);
+  margin-bottom: calc(var(--ctl) * 0.3);
+}
+#btn-brake {
+  width: calc(var(--ctl) * 0.78);
+  height: calc(var(--ctl) * 0.78);
+  font-size: calc(var(--ctl) * 0.13);
+  background: radial-gradient(circle at 35% 30%, #ff8a8a, #d62f3c);
+}
+#btn-brake small { font-size: 0.75em; opacity: 0.85; }
+
+#btn-reset {
+  position: absolute;
+  top: 10px;
+  right: var(--edge-r);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 900;
+  background: rgba(20, 24, 60, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  pointer-events: auto;
+}
+#btn-reset:active { filter: brightness(1.4); }
+
+/* ============ Overlay ============ */
+#overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(40, 30, 90, 0.75), rgba(10, 10, 30, 0.92));
+  transition: opacity 0.3s;
+}
+#overlay.hidden { opacity: 0; pointer-events: none; }
+
+.panel {
+  max-width: 460px;
+  text-align: center;
+}
+.panel h1 {
+  margin: 0 0 6px;
+  font-size: clamp(36px, calc(var(--app-h) * 0.13), 56px);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 2px;
+  color: #ffe14a;
+  text-shadow: 0 5px 0 #c2185b;
+}
+.panel h1 span { color: #5cc8ff; margin-left: 10px; }
+.panel p { margin: 6px 0; font-size: 15px; line-height: 1.4; opacity: 0.9; }
+.howto {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 16px;
+  font-size: 14px;
+  opacity: 0.85;
+}
+.howto li { margin: 3px 0; }
+
+#btn-start {
+  padding: 14px 40px;
+  border-radius: 30px;
+  font-size: 22px;
+  font-weight: 900;
+  font-style: italic;
+  background: linear-gradient(#ffe14a, #ffaa00);
+  color: #3a1d00;
+  box-shadow: 0 6px 0 #b35c00;
+  cursor: pointer;
+}
+#btn-start:active { transform: translateY(4px); box-shadow: 0 2px 0 #b35c00; }
