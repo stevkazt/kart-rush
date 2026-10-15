@@ -41,6 +41,7 @@
       <div id="place" hidden><span id="place-num">6</span><span id="place-suffix">th</span><small id="place-of">/6</small></div>
 
       <div id="message"></div>
+      <div id="warn" hidden>!</div>
       <div id="countdown"></div>
 
       <div id="speedo">
@@ -56,22 +57,26 @@
         <button id="btn-right" class="ctl steer-btn" aria-label="Steer right">&#9654;</button>
       </div>
 
+      <button id="btn-item" class="ctl" aria-label="Use item" data-item=""></button>
+
       <div id="pedals">
         <button id="btn-brake" class="ctl pedal" aria-label="Brake / Reverse">BRAKE<small>REV</small></button>
         <button id="btn-gas" class="ctl pedal" aria-label="Gas">GAS</button>
       </div>
 
       <button id="btn-reset" aria-label="Reset kart">&#x21BB;</button>
+      <button id="btn-mute" class="round-btn" aria-label="Mute sound"></button>
     </div>
 
     <!-- ===== Menu / results overlay ===== -->
     <div id="overlay">
       <div class="panel">
         <h1>KART<span>RUSH</span></h1>
-        <div id="overlay-text">3 laps against 5 rivals &mdash; you start at the back. Hold a hard turn at speed to drift &mdash; keep it until the sparks turn orange for a mini-turbo!</div>
+        <div id="overlay-text">3 laps against 5 rivals &mdash; you start at the back. Grab <b>?</b> boxes for items, hit the orange pads for a boost, and hold a hard turn at speed to drift until the sparks turn orange for a mini-turbo!</div>
         <ul class="howto" id="howto">
           <li><b>&#9664; &#9654;</b> &mdash; steer</li>
           <li><b>GAS</b> &mdash; accelerate &middot; <b>BRAKE</b> &mdash; brake / reverse</li>
+          <li><b>ITEM</b> &mdash; fire it! &#127812; boost &middot; &#127820; drop behind &middot; shells fly ahead (red ones home in)</li>
         </ul>
         <button id="btn-start">START RACE</button>
       </div>

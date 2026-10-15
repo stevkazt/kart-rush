@@ -19,10 +19,25 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
 - `style.css`: `#app` is always laid out landscape; `.rotated` turns it 90deg in portrait. Sizes use `--app-h`
   and safe-area vars `--edge-l/--edge-r`, which map to the top/bottom insets when rotated.
-- `main.js` sections: 0 CONFIG (`CFG`; all tuning lives here, incl. `racers`, `grid`, `ai`) · 1 INITIALIZATION
-  (renderer, world, track, karts, state/HUD/minimap) · 2 CONTROL LISTENERS · 3 GAME FLOW (grid, countdown,
-  laps, places, results, resets) · 3b AI DRIVERS · 4 PHYSICS STEP (`driveKart` per kart + `applyStabilityAssist`
-  per kart on `preStep`) · 5 RENDERING LOOP (sync meshes <- bodies, camera, effects, HUD).
+- `main.js` sections: 0 CONFIG (`CFG`; all tuning lives here, incl. `racers`, `grid`, `ai`, `items`) · 1 INITIALIZATION
+  (renderer, world, track, karts, 1f item boxes/pads/models, state/HUD/minimap) · 2 CONTROL LISTENERS · 3 GAME FLOW
+  (grid, countdown, laps, places, results, resets) · 3b AI DRIVERS · 3c ITEMS & BOOST PADS · 4 PHYSICS STEP
+  (`driveKart` per kart + `applyStabilityAssist` per kart on `preStep`, which also applies boost + brake pushes)
+  · 5 RENDERING LOOP (sync meshes <- bodies, camera, effects, item visuals, HUD, sound mix).
+- `sound.js`: all audio, synthesised with WebAudio (no assets). `sound.unlock()` runs on the Start tap (iOS needs a
+  gesture; also sets `navigator.audioSession.type = 'playback'` so the silent switch doesn't mute it). Player engine
+  + one engine voice per AI (panned, faded by distance), drift squeal, SFX one-shots, a step-sequenced chiptune
+  loop during the race, and a mute toggle (top right, saved in localStorage).
+- **Items:** 3 rows of `?` boxes, 3 boost pads (`CFG.items`). Items: mushroom (boost), banana (dropped behind),
+  green shell (straight, bounces off walls), red shell (follows the track, homes in on its target). Odds depend
+  on race position. AI red shells lock onto the player whenever the player is ahead within `aiTargetPlayer` m;
+  AI green shells go at the player (other AIs only after holding it a while). This is the difficulty lever the
+  user asked for instead of faster AI. Bananas/shells are not physics bodies (distance checks on the plane).
+  A hit = `spinOut`: speed halved, ~1.1 s with no power, visual-only spin of body + wheels. ITEM button sits
+  above BRAKE (Space/E on desktop). Red shell incoming shows a blinking `!` + alarm.
+- **Karts are baked**: `bakeMeshes` merges each kart body into one vertex-coloured mesh (plus one per wheel).
+  Before that, ~28 meshes per kart (x2 for the shadow pass) = 195 draw calls on the grid and stutter on the
+  phone when karts were close. Now 75. Add new kart parts before the `bakeMeshes` call.
 - **Karts:** `karts[]` (6), `kart === karts[0]` is the player. Each kart object holds its physics/meshes plus its
   own driving + lap state (`freshDriveState()`), and a `ctl {steer -1..1, gas, brake}` that `driveKart` turns into
   forces. The player's `ctl` comes from the buttons; AI karts (`k.ai` set) fill it in `updateAI`. All karts run
@@ -57,6 +72,16 @@ launcher repo later. The LAN server above still works for quick testing (no offl
    8.3 m). A 9 m hairpin was unplayable. The track is the `CFG.track.points` Catmull-Rom loop.
 8. AI pile-ups: braking hard for corners made trailing AIs rear-end the leaders. AIs now take corners with
    high `cornerGrip`, mostly just lift (brake only when 5 m/s over target), and lift when right behind a kart.
+9. **cannon-es `setBrake(x)` is an impulse cap per sub-step, not a force.** `brakeForce: 600` (or even 80) locks
+   the tyres at ~50 m/s^2 decel at the contact patch, below the centre of mass, and flips the kart onto its roof.
+   The committed AI build already did this on any hard brake at top speed. Now braking = tiny `wheelBrake` (1.5)
+   + `brakeDecel` applied to the velocity in `preStep`. Same for spin-outs. `brakeForce` is only used at standstill
+   (holding karts on the grid). `coastBrake: 12` is also an impulse; it stops the kart from top speed in ~1.4 s,
+   which is close to braking, but it doesn't flip and the AI's cornering relies on it, so it's left alone.
+10. **Boost is a centre-of-mass push** (`boostAccel` in `preStep`), not more engine force. Extra wheel torque
+    popped wheelies on boost pads. Braking cancels a boost, and AIs don't brake while boosting.
+11. Auto-recovery triggers on `up.y < 0.3` or **fewer than 3 wheels down** for 1.5 s (a kart once sat perched on
+    a wall with its rear wheels in the air). Resets record `k.lastReset` (AI reason or flip/button) for debugging.
 
 ## Testing
 ```bash
@@ -65,6 +90,10 @@ dev/test.sh tap 0.25 0.6 1.0    # hold RIGHT on open grass at top speed; heading
 dev/test.sh eval '<js expr>'    # print a page expression ~1 s after GO, e.g. '__karts.map(k=>k.place)'
 dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log
 ```
+`test.sh` also exposes `__r` (renderer: `__r.info.render.calls`) and `__snd` (sound; `__snd.context.state`), and runs
+Chrome with autoplay allowed so the audio code is exercised. The autopilot never fires items, so with items on it
+no longer reliably wins. To have it fire items, add `if (__k.item && __k.itemRoll <= 0) __in.item = true` in a
+trace probe. Spin-outs record `k.hitBy` ("red from Mako").
 Current baseline: autopilot laps of about 21–23 s with 0 STUCK events. The autopilot log lists every kart each
 5 s (place, lap/idx, speed, AI `resets=`). With AIs, the autopilot finishes 1st by ~2 s; the whole field
 finishes within ~10 s, with 0 AI resets in a clean run. `tap 0.6` gives about 35 degrees at
@@ -81,17 +110,19 @@ check touch and feel.
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
-table, rubber-banding. Waiting on the user's on-phone feedback:
-- Difficulty: tune `CFG.ai.skill`, `cornerGrip`, `rubberMin/rubberMax/rubberBand`. The autopilot drives flat out
-  on the centre line and only beats the AI by ~2 s, so a human may find it hard.
-- Frame rate with 6 karts: if it stutters, merge each kart's ~20 meshes (BufferGeometryUtils.mergeGeometries
-  with vertex colours) and/or turn off castShadow on AI karts.
+table, rubber-banding. AI pace knobs if ever needed: `CFG.ai.skill`, `cornerGrip`, `rubberMin/rubberMax/rubberBand`.
+
+**Done and deployed (2026-10-15, sw v4):**
+- Perf: baked kart meshes (stutter when karts were close). Sound (sound.js). Items + boost pads + AI item use.
+- Physics fixes: brake/spin flips (gotcha 9), boost wheelies (10), perched-kart recovery (11).
+- User feedback before this: "it does stutter when the cars are near me"; difficulty: "I always end 1st... keep it
+  like is while we add extra functionality that could make it harder". So AI pace is unchanged; items are the lever.
+  With items, an autopilot that never dodges finishes anywhere from 1st (by ~1–5 s) to 5th.
 
 **Next**, roughly in order:
-- Sound: engine pitch from speed via WebAudio (no assets), drift/boost/wall/countdown SFX, music,
-  mute toggle.
-- Mario Kart identity: item boxes (mushroom/banana/shell), boost pads, a hop-to-drift button with
-  mini-turbo levels.
+- Await the user's feedback on items, difficulty and frame rate. Sound: the engine was "really annoying" at high
+  speed (bright saw whine); it's now lower, darker and quieter at top speed (`setEngine` in sound.js).
+- Hop-to-drift button with mini-turbo levels (changes controls: ask the user first; steering feel is sensitive).
 - Visual polish: tyre smoke, skid marks, grass dust, grandstands/flags/tyre stacks, sky gradient,
   WRONG WAY warning, lap split vs best.
 - Structure: title screen, kart colour picker, more tracks (just new `points`), best times in

@@ -222,7 +222,7 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
 }
 #btn-brake small { font-size: 0.75em; opacity: 0.85; }
 
-#btn-reset {
+#btn-reset, #btn-mute {
   position: absolute;
   top: 10px;
   right: var(--edge-r);
@@ -235,7 +235,65 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   border: 2px solid rgba(255, 255, 255, 0.35);
   pointer-events: auto;
 }
-#btn-reset:active { filter: brightness(1.4); }
+#btn-reset:active, #btn-mute:active { filter: brightness(1.4); }
+#btn-mute { right: calc(var(--edge-r) + 56px); font-size: 20px; }
+#btn-mute::before { content: "\1F50A"; }
+#btn-mute.off::before { content: "\1F507"; }
+#btn-mute.off { opacity: 0.7; }
+
+/* ============ Item slot (tap to fire) ============ */
+#btn-item {
+  position: absolute;
+  right: calc(var(--edge-r) + var(--ctl) + 14px);
+  bottom: calc(16px + var(--ctl) * 0.78 + 16px);
+  width: calc(var(--ctl) * 0.72);
+  height: calc(var(--ctl) * 0.72);
+  font-size: calc(var(--ctl) * 0.38);
+  line-height: 1;
+  background: rgba(20, 24, 60, 0.55);
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.45);
+  pointer-events: auto;
+}
+#btn-item.ready {
+  border-style: solid;
+  border-color: #ffe14a;
+  background: radial-gradient(circle at 35% 30%, #fff6c2, #ffb800);
+  animation: item-ready 0.8s ease-in-out infinite alternate;
+}
+@keyframes item-ready { to { box-shadow: 0 0 18px 4px rgba(255, 225, 74, 0.8), 0 6px 0 rgba(0, 0, 0, 0.35); } }
+#btn-item[data-item="mushroom"]::before { content: "\1F344"; }
+#btn-item[data-item="banana"]::before { content: "\1F34C"; }
+#btn-item[data-item="green"]::before,
+#btn-item[data-item="red"]::before {
+  content: "";
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  border: 0.1em solid #fff;
+  background: radial-gradient(circle at 35% 30%, #9dffb0, #1d8f35);
+}
+#btn-item[data-item="red"]::before { background: radial-gradient(circle at 35% 30%, #ffb0a8, #c41f1c); }
+
+/* Red shell incoming */
+#warn {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
+  border-radius: 50%;
+  background: #e8322f;
+  border: 3px solid #fff;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 40px;
+  text-align: center;
+  animation: warn-blink 0.4s steps(2) infinite;
+}
+#warn[hidden] { display: none; }
+@keyframes warn-blink { 50% { opacity: 0.25; } }
 
 /* ============ Overlay ============ */
 #overlay {

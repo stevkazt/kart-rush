@@ -17,8 +17,8 @@ DEBUG_PORT=9333
 if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
 fi
-cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;window.__t=track;window.__w=world;window.__in=input;#' \
+cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;window.__t=track;window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -32,7 +32,7 @@ trap cleanup EXIT
 sleep 0.5
 
 run() {
-  "$CHROME" --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=844,390 \
+  "$CHROME" --headless=new --autoplay-policy=no-user-gesture-required --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=844,390 \
     --remote-debugging-port=$DEBUG_PORT --user-data-dir="$TMP/profile-$RANDOM" about:blank >/dev/null 2>&1 &
   sleep 2
   node "$GAME_DIR/dev/test.mjs" $DEBUG_PORT "$@"

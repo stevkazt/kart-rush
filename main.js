@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { sound } from './sound.js';
 
 /* ==========================================================================
  * 0. CONFIG
@@ -35,7 +36,9 @@ const CFG = {
 
     engineForce: 650,       // per driven (rear) wheel
     reverseForce: 350,
-    brakeForce: 600,        // per wheel
+    brakeForce: 600,        // per wheel, only used to hold karts still before the start
+    wheelBrake: 1.5,        // per wheel while braking (cannon-es: an impulse cap per step, not a force)
+    brakeDecel: 22,         // m/s^2 through the centre of mass (big wheel brakes flipped the kart)
     coastBrake: 12,         // rolling resistance when no pedal is held
     maxSpeed: 26,           // m/s
     maxReverse: 8,
@@ -59,7 +62,7 @@ const CFG = {
 
     miniTurboTime: 1.1,     // seconds of drift needed for a boost
     boostDuration: 1.0,
-    boostMult: 1.8,
+    boostAccel: 8,          // m/s^2 on top of the engine, pushed through the centre of mass (no wheelie)
     boostSpeed: 6,
   },
 
@@ -90,6 +93,24 @@ const CFG = {
     rubberMin: 0.85,
     rubberMax: 1.06,
     finishedPace: 0.7,      // lap-of-honour speed after crossing the line
+  },
+
+  items: {
+    boxRows: [100, 300, 490],         // track sample index of each row of item boxes
+    boxLanes: [-4.5, -1.5, 1.5, 4.5], // lateral offsets of the boxes in a row (m)
+    boxRespawn: 3,                    // seconds until a taken box comes back
+    pickupRadius: 1.8,
+    pads: [[150, 3], [440, -2.5], [565, 0]], // boost pads: [sample index, lane]
+    padLength: 4, padWidth: 3.2,
+    rollTime: 0.9,                    // item roulette before an item can be used
+    spinTime: 1.1,                    // spin-out after a banana / shell hit
+    mushroomBoost: 1.3,               // x the mini-turbo duration
+    shellSpeed: 38, shellLife: 6, shellBounces: 5,
+    redSpeed: 40, redLife: 12, redHomeDist: 14,
+    aiTargetPlayer: 140,              // AI red shells lock onto the player when they're up to this far ahead (m)
+    hitRadius: 1.4, bananaRadius: 1.2,
+    // Item odds by race position (index = place - 1): [mushroom, banana, green, red]
+    odds: [[5, 55, 40, 0], [15, 30, 35, 20], [25, 15, 30, 30], [25, 15, 30, 30], [45, 0, 15, 40], [45, 0, 15, 40]],
   },
 
   camera: {
@@ -425,7 +446,8 @@ function makeRacer({ name, colors }, isPlayer) {
 function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
-    boost: 0, flipTimer: 0,
+    boost: 0, flipTimer: 0, padT: 0,
+    item: null, itemRoll: 0, spin: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
   };
 }
@@ -527,6 +549,8 @@ function buildKart([bodyColor, accentColor, driverColor]) {
     return sp;
   });
 
+  // One draw call for the whole body instead of ~20 (each one is drawn twice: shadow + screen)
+  bakeMeshes(group, [...flames, ...sparks]);
   scene.add(group);
 
   // --- Visuals: wheels (positioned from the physics wheel transforms) ---
@@ -538,16 +562,125 @@ function buildKart([bodyColor, accentColor, driverColor]) {
     const tireGeo = new THREE.CylinderGeometry(K.wheelRadius, K.wheelRadius, width, 12);
     tireGeo.rotateZ(Math.PI / 2); // cylinder axis Y -> axle axis X
     const tire = new THREE.Mesh(tireGeo, tireMat);
-    tire.castShadow = true;
     const hubGeo = new THREE.CylinderGeometry(0.18, 0.18, width + 0.02, 6);
     hubGeo.rotateZ(Math.PI / 2);
     const hub = new THREE.Mesh(hubGeo, hubMat);
     g.add(tire, hub);
+    bakeMeshes(g);
     scene.add(g);
     return g;
   });
 
   return { body, vehicle, group, wheelMeshes, sparks, sparkMat, flames };
+}
+
+/**
+ * Merges every plain-coloured mesh under `group` (except `keep`) into a single vertex-coloured,
+ * shadow-casting mesh. `group` must still be at the origin with no transform.
+ */
+function bakeMeshes(group, keep = []) {
+  group.updateMatrixWorld(true);
+  const parts = [];
+  group.traverse((o) => { if (o.isMesh && !keep.includes(o)) parts.push(o); });
+  const pos = [], nor = [], col = [];
+  for (const m of parts) {
+    const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
+    const flat = g.index ? g.toNonIndexed() : g;
+    pos.push(...flat.attributes.position.array);
+    nor.push(...flat.attributes.normal.array);
+    const { r, g: gr, b } = m.material.color;
+    for (let i = 0; i < flat.attributes.position.count; i++) col.push(r, gr, b);
+  }
+  for (const m of parts) m.removeFromParent();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  mesh.castShadow = true;
+  group.add(mesh);
+  return mesh;
+}
+
+// ---------- 1f. Item boxes, boost pads, banana + shell models ----------
+const itemVis = buildItemVisuals();
+
+function buildItemVisuals() {
+  const I = CFG.items;
+  const { samples, tangents, normals } = track;
+  const onTrack = (idx, lane, y) => {
+    const s = samples[idx], n = normals[idx];
+    return new THREE.Vector3(s.x + n.x * lane, y, s.z + n.z * lane);
+  };
+  const canvasTex = (w, h, draw) => {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d'));
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+
+  // Item boxes: one instanced mesh, spun every frame
+  const boxTex = canvasTex(64, 64, (g) => {
+    const grad = g.createLinearGradient(0, 0, 64, 64);
+    grad.addColorStop(0, '#ff5fb0'); grad.addColorStop(0.5, '#ffd23a'); grad.addColorStop(1, '#5cc8ff');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(3, 3, 58, 58);
+    g.fillStyle = '#fff'; g.font = 'bold 44px system-ui, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 32, 35);
+  });
+  const boxes = [];
+  for (const idx of I.boxRows) for (const lane of I.boxLanes) {
+    boxes.push({ pos: onTrack(idx, lane, 1.0), idx, lane, hidden: 0 });
+  }
+  const boxMesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1.1, 1.1, 1.1),
+    new THREE.MeshLambertMaterial({ map: boxTex, transparent: true, opacity: 0.9 }),
+    boxes.length);
+  scene.add(boxMesh);
+
+  // Boost pads: chevrons scrolling toward the driving direction
+  const padTex = canvasTex(64, 128, (g) => {
+    g.fillStyle = '#ff8a00'; g.fillRect(0, 0, 64, 128);
+    g.strokeStyle = '#ffe14a'; g.lineWidth = 12; g.lineJoin = 'miter';
+    for (const y of [20, 84]) { g.beginPath(); g.moveTo(6, y + 34); g.lineTo(32, y); g.lineTo(58, y + 34); g.stroke(); }
+  });
+  padTex.wrapS = padTex.wrapT = THREE.RepeatWrapping;
+  padTex.repeat.set(1, 2);
+  const padMat = new THREE.MeshBasicMaterial({ map: padTex });
+  const pads = I.pads.map(([idx, lane]) => {
+    const geo = new THREE.PlaneGeometry(I.padWidth, I.padLength);
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, padMat);
+    mesh.position.copy(onTrack(idx, lane, 0.035));
+    mesh.rotation.y = Math.atan2(tangents[idx].x, tangents[idx].z) + Math.PI; // chevrons point forward
+    scene.add(mesh);
+    return { idx, lane, len: Math.ceil(I.padLength / track.spacing) };
+  });
+
+  // Banana + shell templates (baked to one mesh each; instances share geometry + material)
+  const template = (build) => {
+    const g = new THREE.Group();
+    build((geo, color, x, y, z) => {
+      const m = new THREE.Mesh(geo, lambert(color));
+      m.position.set(x, y, z);
+      g.add(m);
+      return m;
+    });
+    const mesh = bakeMeshes(g);
+    return { geo: mesh.geometry, mat: mesh.material };
+  };
+  const banana = template((add) => {
+    const body = add(new THREE.TorusGeometry(0.42, 0.14, 6, 10, Math.PI * 0.9), 0xffd23a, 0, 0.3, 0);
+    body.rotation.z = Math.PI * 0.05;
+    add(new THREE.CylinderGeometry(0.05, 0.06, 0.18, 5), 0x5a3a12, -0.44, 0.38, 0);
+  });
+  const shell = (color) => template((add) => {
+    add(new THREE.SphereGeometry(0.42, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), color, 0, 0.12, 0);
+    add(new THREE.CylinderGeometry(0.46, 0.46, 0.14, 10), 0xffffff, 0, 0.1, 0);
+  });
+  return { boxes, boxMesh, pads, padTex, models: { banana, green: shell(0x2fbf4a), red: shell(0xe8322f) } };
 }
 
 // ---------- 1e. Game state, HUD refs, minimap ----------
@@ -562,7 +695,7 @@ const state = {
   resultsShown: false,
 };
 
-const input = { left: false, right: false, gas: false, brake: false, reset: false };
+const input = { left: false, right: false, gas: false, brake: false, reset: false, item: false };
 
 const hud = {
   lap: $('lap'), time: $('time'), best: $('best'), speed: $('speed'),
@@ -570,6 +703,7 @@ const hud = {
   countdown: $('countdown'), message: $('message'),
   driftFill: $('drift-fill'), overlay: $('overlay'),
   overlayText: $('overlay-text'), howto: $('howto'), startBtn: $('btn-start'),
+  item: $('btn-item'), warn: $('warn'),
 };
 
 const minimap = buildMinimap();
@@ -634,8 +768,22 @@ function initControls() {
   bindHold($('btn-brake'), 'brake');
 
   $('btn-reset').addEventListener('pointerdown', (e) => { e.preventDefault(); input.reset = true; });
+  hud.item.addEventListener('pointerdown', (e) => { e.preventDefault(); input.item = true; hud.item.classList.add('pressed'); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.item.addEventListener(t, () => hud.item.classList.remove('pressed')));
 
   hud.startBtn.addEventListener('click', startRace);
+
+  // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
+  const muteBtn = $('btn-mute');
+  const showMute = () => { muteBtn.classList.toggle('off', sound.muted); muteBtn.setAttribute('aria-pressed', sound.muted); };
+  muteBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    sound.unlock();
+    sound.setMuted(!sound.muted);
+    showMute();
+  });
+  showMute();
+  document.addEventListener('pointerdown', () => { if (state.phase !== 'menu') sound.unlock(); });
 
   // --- Block browser gestures (scroll, pinch, double-tap zoom, long-press menu) ---
   const block = (e) => e.preventDefault();
@@ -658,7 +806,11 @@ function initControls() {
     input.left = keys.has('ArrowLeft') || keys.has('KeyA');
     input.right = keys.has('ArrowRight') || keys.has('KeyD');
   };
-  window.addEventListener('keydown', (e) => { keys.add(e.code); updateKeys(); if (e.code === 'KeyR') input.reset = true; });
+  window.addEventListener('keydown', (e) => {
+    keys.add(e.code); updateKeys();
+    if (e.code === 'KeyR') input.reset = true;
+    if (e.code === 'Space' || e.code === 'KeyE') input.item = true;
+  });
   window.addEventListener('keyup', (e) => { keys.delete(e.code); updateKeys(); });
 
   // --- Viewport ---
@@ -669,6 +821,7 @@ function initControls() {
   kart.body.addEventListener('collide', (e) => {
     if (e.body.material !== physMats.wall && e.body.material !== physMats.chassis) return;
     const impact = Math.abs(e.contact.getImpactVelocityAlongNormal());
+    if (impact > 2) sound.bump(impact / 10);
     if (impact > 3 && navigator.vibrate) navigator.vibrate(Math.min(60, impact * 4));
   });
 }
@@ -698,13 +851,17 @@ function startRace() {
     el.requestFullscreen().then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
   }
   hud.overlay.classList.add('hidden');
+  sound.unlock();
+  sound.music(false);
 
   Object.assign(state, {
     phase: 'countdown', countdown: 3, raceTime: 0, lapStart: 0, finishedCount: 0, resultsShown: false,
   });
+  clearItems();
   placeOnGrid();
   camState.snap = true;
   showCountdown('3');
+  sound.beep();
 }
 
 /** Staggered two-column grid behind the start line. The AIs line up in front; the player starts last. */
@@ -730,7 +887,7 @@ function resetKart(k, idx, lane = 0) {
   body.quaternion.setFromAxisAngle(AXIS_Y, Math.atan2(t.x, t.z));
   body.velocity.setZero();
   body.angularVelocity.setZero();
-  Object.assign(k, { trackIdx: idx, flipTimer: 0, driftCharge: 0, boost: 0, steerSmooth: 0 });
+  Object.assign(k, { trackIdx: idx, flipTimer: 0, driftCharge: 0, boost: 0, steerSmooth: 0, spin: 0 });
 }
 
 function updateGameFlow(dt) {
@@ -738,10 +895,12 @@ function updateGameFlow(dt) {
     const prev = Math.ceil(state.countdown);
     state.countdown -= dt;
     const now = Math.ceil(state.countdown);
-    if (now !== prev && now > 0) showCountdown(String(now));
+    if (now !== prev && now > 0) { showCountdown(String(now)); sound.beep(); }
     if (state.countdown <= 0) {
       state.phase = 'race';
       showCountdown('GO!');
+      sound.go();
+      sound.music(true);
     }
   }
 
@@ -749,7 +908,9 @@ function updateGameFlow(dt) {
   if (racing) state.raceTime += dt;
   for (const k of karts) updateKartProgress(k, dt, racing);
   updatePlaces();
+  updateItems(dt, racing);
   input.reset = false;
+  input.item = false;
 }
 
 function updateKartProgress(k, dt, racing) {
@@ -772,10 +933,12 @@ function updateKartProgress(k, dt, racing) {
   // Auto-recover when flipped or beached (no wheel touching anything), on the reset button,
   // or when the AI gives up on getting unstuck
   const up = k.body.quaternion.vmult(LOCAL_UP, tmpVec);
-  const grounded = k.vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
-  k.flipTimer = up.y < 0.3 || !grounded ? k.flipTimer + dt : 0;
+  // Fewer than 3 wheels down for a while = beached (e.g. perched on a wall with the rear in the air)
+  const wheelsDown = k.vehicle.wheelInfos.filter((w) => w.raycastResult.hasHit).length;
+  k.flipTimer = up.y < 0.3 || wheelsDown < 3 ? k.flipTimer + dt : 0;
   const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
+    k.lastReset = k.ai?.resetNow || (k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : 'button');
     resetKart(k, k.trackIdx, k.ai ? k.ai.lane : 0);
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
     if (k.isPlayer) camState.snap = true;
@@ -789,7 +952,9 @@ function completeLap(k) {
     state.bestLap = Math.min(state.bestLap, lapTime);
     state.lapStart = state.raceTime;
     if (k.lap < CFG.laps) {
-      showMessage(k.lap + 1 === CFG.laps ? 'FINAL LAP!' : `LAP ${k.lap + 1}  ${fmtTime(lapTime)}`);
+      const final = k.lap + 1 === CFG.laps;
+      showMessage(final ? 'FINAL LAP!' : `LAP ${k.lap + 1}  ${fmtTime(lapTime)}`);
+      final ? sound.finalLap() : sound.lap();
     }
   }
   if (k.lap >= CFG.laps) finishKart(k);
@@ -804,6 +969,8 @@ function finishKart(k) {
     state.phase = 'finished';
     k.ai = newAI(0); // the CPU drives the player's lap of honour
     showMessage(k.place === 1 ? 'YOU WIN!' : `FINISH! ${ordinal(k.place)}`);
+    sound.music(false);
+    sound.finish(k.place === 1);
     setTimeout(showResults, 1800);
   } else if (state.resultsShown) {
     showResults(); // refresh the table as the AIs come home
@@ -814,7 +981,9 @@ function finishKart(k) {
 function updatePlaces() {
   const order = [...karts].sort((a, b) =>
     (b.finished - a.finished) || (a.finished ? a.finishTime - b.finishTime : b.progress - a.progress));
+  const before = kart.place;
   order.forEach((k, i) => { k.place = i + 1; });
+  if (state.phase === 'race' && kart.place < before) sound.overtake();
 }
 
 function showResults() {
@@ -878,6 +1047,10 @@ function updateAI(k, dt, canDrive) {
   ctl.steer = 0; ctl.gas = false; ctl.brake = false;
   if (!canDrive) return;
   if (ai.startDelay > 0) { ai.startDelay -= dt; return; }
+  if (k.spin > 0) { // spun out: wait it out without the stuck detectors kicking in
+    Object.assign(ai, { stuckT: -1, backT: 0, watchT: 0 });
+    return;
+  }
 
   const idx = k.trackIdx;
   const n = normals[idx];
@@ -891,13 +1064,35 @@ function updateAI(k, dt, canDrive) {
     ai.laneTimer = rand(2.5, 6);
   }
   let laneGoal = ai.laneTarget;
+  // Head for a boost pad, or (with no item) the nearest item box, when one is coming up
+  const stepsTo = (i) => (i - idx + N) % N;
+  for (const pad of itemVis.pads) if (stepsTo(pad.idx) * spacing < 35 && stepsTo(pad.idx) > 2) laneGoal = pad.lane;
+  if (!k.item) {
+    for (const row of CFG.items.boxRows) {
+      const dist = stepsTo(row) * spacing;
+      if (dist > 4 && dist < 30) {
+        const open = itemVis.boxes.filter((bx) => bx.idx === row && bx.hidden < dist / Math.max(k.speed, 5));
+        if (open.length) laneGoal = open.reduce((a, c) => (Math.abs(c.lane - myLane) < Math.abs(a.lane - myLane) ? c : a)).lane;
+      }
+    }
+  }
+  // Steer round bananas
+  for (const d of drops) {
+    const dx = d.pos.x - b.position.x, dz = d.pos.z - b.position.z;
+    const dAhead = dx * fwd.x + dz * fwd.z;
+    const side = dx * n.x + dz * n.z;
+    if (dAhead > 0 && dAhead < 18 && Math.abs(myLane + side - laneGoal) < 2.2) {
+      laneGoal = clamp(myLane + side + (myLane + side > 0 ? -2.6 : 2.6), -5.5, 5.5);
+    }
+  }
   let blocked = false;
   for (const o of karts) {
     if (o === k) continue;
     const dx = o.body.position.x - b.position.x, dz = o.body.position.z - b.position.z;
     const ahead = dx * fwd.x + dz * fwd.z;
     const side = dx * n.x + dz * n.z; // + = the other kart is to our left
-    if (ahead > 0 && ahead < 10 && Math.abs(side) < 2.4 && o.speed < k.speed + 1) {
+    const closing = k.speed - o.speed;
+    if (ahead > 0 && ahead < Math.max(10, closing * 1.2) && Math.abs(side) < 2.4 && closing > -1) {
       const dir = myLane + side > 0 ? -1 : 1; // pass on the roomier side of them
       laneGoal = clamp(myLane + side + dir * 3, -5.5, 5.5);
       if (ahead < 5 && Math.abs(side) < 1.8) blocked = true; // right on their bumper: ease off
@@ -925,7 +1120,7 @@ function updateAI(k, dt, canDrive) {
   }
   k.topMult = target / K.maxSpeed;
   ctl.gas = !blocked;          // the engine cuts out above target on its own (driveKart)
-  ctl.brake = k.speed > target + 5;
+  ctl.brake = k.speed > target + 5 && k.boost <= 0; // full brakes against a boost tip the kart over
 
   // --- Mistakes: a twitch of the wheel, or a lift off the gas
   if (!k.finished) {
@@ -956,20 +1151,255 @@ function updateAI(k, dt, canDrive) {
   if (ai.stuckT > 1.2) {
     ai.stuckT = 0;
     ai.backT = 1.0;
-    if (++ai.stuckCount >= 3) { ai.resetNow = true; ai.stuckCount = 0; }
+    if (++ai.stuckCount >= 3) { ai.resetNow = 'stuck'; ai.stuckCount = 0; }
   }
   // Watchdog for anything the above misses (wedged on a wall, beached at an angle...)
   ai.watchT += dt;
   if (ai.watchT > 4) {
-    if (!k.finished && k.progress - ai.watchProgress < 10) ai.resetNow = true;
+    if (!k.finished && k.progress - ai.watchProgress < 10) ai.resetNow = 'watchdog';
     ai.watchT = 0;
     ai.watchProgress = k.progress;
   }
   const t = tangents[idx];
   ai.wrongT = fwd.x * t.x + fwd.z * t.z < -0.3 ? ai.wrongT + dt : 0;
-  if (ai.wrongT > 3) ai.resetNow = true;
+  if (ai.wrongT > 3) ai.resetNow = 'wrong-way';
 
   ctl.steer = steer;
+  updateAIItem(k, dt);
+}
+
+/* ==========================================================================
+ * 3c. ITEMS & BOOST PADS
+ * Boxes hand out an item rolled from the kart's race position. Bananas and shells are not physics
+ * bodies: they move on the track plane and hit karts by distance. A hit kart spins out (see driveKart).
+ * ========================================================================== */
+const ITEM_TYPES = ['mushroom', 'banana', 'green', 'red'];
+const drops = [];   // bananas on the track: { mesh, pos, owner, age }
+const shells = [];  // { kind, mesh, pos, vel, idx, owner, target, age, life, bounces }
+
+function clearItems() {
+  for (const o of [...drops, ...shells]) scene.remove(o.mesh);
+  drops.length = shells.length = 0;
+  for (const b of itemVis.boxes) b.hidden = 0;
+}
+
+function rollItem(place) {
+  const odds = CFG.items.odds[clamp(place, 1, CFG.items.odds.length) - 1];
+  let r = Math.random() * odds.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < odds.length; i++) if ((r -= odds[i]) < 0) return ITEM_TYPES[i];
+  return 'mushroom';
+}
+
+function spawnModel(kind, pos) {
+  const { geo, mat } = itemVis.models[kind];
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(pos);
+  mesh.castShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+const itemFwd = new CANNON.Vec3();
+function useItem(k) {
+  if (!k.item || k.itemRoll > 0 || k.spin > 0) return;
+  const I = CFG.items, b = k.body;
+  const fwd = b.quaternion.vmult(LOCAL_FWD, itemFwd);
+  const h = Math.hypot(fwd.x, fwd.z) || 1;
+  const fx = fwd.x / h, fz = fwd.z / h;
+  const item = k.item;
+  k.item = null;
+
+  if (item === 'mushroom') {
+    k.boost = CFG.kart.boostDuration * I.mushroomBoost;
+    if (k.isPlayer) sound.boost();
+  } else if (item === 'banana') {
+    const pos = new THREE.Vector3(b.position.x - fx * 2.4, 0, b.position.z - fz * 2.4);
+    drops.push({ mesh: spawnModel('banana', pos), pos, owner: k, age: 0 });
+    if (k.isPlayer) sound.drop();
+  } else {
+    const red = item === 'red';
+    const ahead = red ? redShellTarget(k) : null;
+    const speed = red ? I.redSpeed : I.shellSpeed;
+    const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0.15, b.position.z + fz * 2.4);
+    shells.push({
+      kind: item, mesh: spawnModel(item, pos), pos,
+      vel: new THREE.Vector3(fx * speed, 0, fz * speed), idx: k.trackIdx,
+      owner: k, target: ahead || null, age: 0, life: red ? I.redLife : I.shellLife, bounces: 0,
+    });
+    if (k.isPlayer || ahead?.isPlayer) sound.throwShell();
+  }
+}
+
+/** The kart in front; AIs go for the player instead whenever the player is ahead and within range. */
+function redShellTarget(k) {
+  if (k.ai && !kart.finished) {
+    const gap = (kart.progress - k.progress) * track.spacing;
+    if (gap > 0 && gap < CFG.items.aiTargetPlayer) return kart;
+  }
+  return karts.find((o) => o.place === k.place - 1 && !o.finished) || null;
+}
+
+function spinOut(k, by, what) {
+  if (k.spin > 0) return;
+  k.spin = CFG.items.spinTime;
+  k.hitBy = `${what} from ${by?.name}`;
+  k.boost = 0;
+  k.driftCharge = 0;
+  // Lose half the speed at once, then slide on: stopping dead got karts rear-ended into the air
+  k.body.velocity.x *= 0.5;
+  k.body.velocity.z *= 0.5;
+  if (k.isPlayer) {
+    showMessage('OUCH!');
+    sound.spin();
+    if (navigator.vibrate) navigator.vibrate(120);
+  } else if (by?.isPlayer) {
+    showMessage(`HIT ${k.name.toUpperCase()}!`);
+    sound.hitOther();
+  }
+}
+
+function updateItems(dt, racing) {
+  const I = CFG.items;
+  const { N, samples, normals } = track;
+  const flat2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+
+  // --- Boxes: pick up, respawn
+  for (const box of itemVis.boxes) {
+    if (box.hidden > 0) { box.hidden = Math.max(0, box.hidden - dt); continue; }
+    if (!racing) continue;
+    for (const k of karts) {
+      if (flat2(k.body.position, box.pos) > I.pickupRadius ** 2) continue;
+      box.hidden = I.boxRespawn;
+      if (!k.item && !k.finished) {
+        k.item = rollItem(k.place);
+        k.itemRoll = I.rollTime;
+        if (k.ai) k.ai.itemT = rand(0.4, 2.5);
+        if (k.isPlayer) sound.itemBox(I.rollTime);
+      }
+      break;
+    }
+  }
+
+  for (const k of karts) {
+    k.itemRoll = Math.max(0, k.itemRoll - dt);
+    // --- Boost pads
+    k.padT = Math.max(0, k.padT - dt);
+    if (!racing) continue;
+    for (const pad of itemVis.pads) {
+      const along = (k.trackIdx - pad.idx + N + pad.len / 2) % N;
+      if (along > pad.len) continue;
+      const s = samples[k.trackIdx], n = normals[k.trackIdx];
+      const lat = (k.body.position.x - s.x) * n.x + (k.body.position.z - s.z) * n.z;
+      if (Math.abs(lat - pad.lane) > I.padWidth / 2 + 0.3) continue;
+      if (k.padT <= 0 && k.isPlayer) sound.boost();
+      k.boost = Math.max(k.boost, CFG.kart.boostDuration);
+      k.padT = 0.5;
+    }
+  }
+
+  // --- Bananas
+  for (let i = drops.length - 1; i >= 0; i--) {
+    const d = drops[i];
+    d.age += dt;
+    const hit = karts.find((k) => (k !== d.owner || d.age > 0.8) && flat2(k.body.position, d.pos) < I.bananaRadius ** 2);
+    if (hit) {
+      spinOut(hit, d.owner, 'banana');
+      scene.remove(d.mesh);
+      drops.splice(i, 1);
+    }
+  }
+
+  // --- Shells: green ones fly straight and bounce off the walls; red ones follow the track
+  // and home in on their target once close
+  const wallLat = CFG.track.halfWidth + CFG.track.curb - 0.35;
+  for (let i = shells.length - 1; i >= 0; i--) {
+    const s = shells[i];
+    s.age += dt;
+    s.life -= dt;
+    const tgt = s.target && !s.target.finished ? s.target : null;
+    if (s.kind === 'red') {
+      let aim;
+      if (tgt && flat2(tgt.body.position, s.pos) < I.redHomeDist ** 2) {
+        aim = tgt.body.position;
+      } else {
+        const j = (s.idx + 9) % N;
+        aim = samples[j];
+      }
+      const want = Math.atan2(aim.x - s.pos.x, aim.z - s.pos.z);
+      const cur = Math.atan2(s.vel.x, s.vel.z);
+      const yaw = cur + clamp(wrapAngle(want - cur), -7 * dt, 7 * dt);
+      s.vel.set(Math.sin(yaw) * I.redSpeed, 0, Math.cos(yaw) * I.redSpeed);
+    }
+    s.pos.addScaledVector(s.vel, dt);
+    s.idx = nearestTrackIndex(s.pos, s.idx);
+    const c = samples[s.idx], n = normals[s.idx];
+    const lat = (s.pos.x - c.x) * n.x + (s.pos.z - c.z) * n.z;
+    if (Math.abs(lat) > wallLat) {
+      const side = Math.sign(lat);
+      s.pos.addScaledVector(n, (side * wallLat - lat) * 1.01);
+      const vn = s.vel.x * n.x + s.vel.z * n.z;
+      if (vn * side > 0) {
+        s.vel.x -= 2 * vn * n.x;
+        s.vel.z -= 2 * vn * n.z;
+        if (s.kind === 'green') s.bounces++;
+      }
+    }
+    s.mesh.position.copy(s.pos);
+    s.mesh.rotation.y += dt * 12;
+
+    let gone = s.life <= 0 || s.bounces > I.shellBounces;
+    const hit = !gone && karts.find((k) => (k !== s.owner || s.age > 0.6) && flat2(k.body.position, s.pos) < I.hitRadius ** 2);
+    if (hit) { spinOut(hit, s.owner, s.kind); gone = true; }
+    const banana = gone ? -1 : drops.findIndex((d) => flat2(d.pos, s.pos) < 1.2);
+    if (banana >= 0) {
+      scene.remove(drops[banana].mesh);
+      drops.splice(banana, 1);
+      gone = true;
+    }
+    if (gone) {
+      scene.remove(s.mesh);
+      shells.splice(i, 1);
+    }
+  }
+}
+
+/** Red shell coming for the player within ~45 m: drives the warning icon + alarm. */
+function redShellWarning() {
+  return shells.some((s) => s.kind === 'red' && s.target === kart && !kart.finished &&
+    (s.pos.x - kart.body.position.x) ** 2 + (s.pos.z - kart.body.position.z) ** 2 < 45 * 45);
+}
+
+/** AI item use: mushroom on a straight, banana when someone's on its tail, shells at whoever's ahead. */
+function updateAIItem(k, dt) {
+  const ai = k.ai;
+  if (!k.item || k.itemRoll > 0 || k.finished || k.spin > 0) return;
+  ai.itemT -= dt;
+  if (ai.itemT > 0) return;
+  const { N, radius, spacing } = track;
+  const fwd = k.body.quaternion.vmult(LOCAL_FWD, aiFwd);
+  let use = false;
+  if (k.item === 'mushroom') {
+    let tight = Infinity;
+    for (let s = 10; s * spacing < 40; s += 3) tight = Math.min(tight, radius[(k.trackIdx + s) % N]);
+    use = tight > 60 || ai.itemT < -6;
+  } else if (k.item === 'red') {
+    use = true;
+  } else {
+    const wantBehind = k.item === 'banana';
+    use = ai.itemT < (wantBehind ? -7 : -10);
+    for (const o of karts) {
+      if (o === k) continue;
+      const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
+      const ahead = dx * fwd.x + dz * fwd.z;
+      const side = Math.abs(dx * fwd.z - dz * fwd.x);
+      if (wantBehind) {
+        if (ahead < -2 && ahead > -14 && side < 3) use = true;
+      } else if (ahead > 3 && ahead < 30 && side < ahead * 0.12 + 0.6 && (o.isPlayer || ai.itemT < -5)) {
+        use = true; // shells go at the player; other AIs only once it's been held a while
+      }
+    }
+  }
+  if (use) useItem(k);
 }
 
 /* ==========================================================================
@@ -987,6 +1417,7 @@ function stepPhysics(dt) {
       k.ctl.steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
       k.ctl.gas = input.gas;
       k.ctl.brake = input.brake;
+      if (input.item && canDrive && !k.finished) useItem(k);
     }
     driveKart(k, dt, canDrive);
   }
@@ -1027,11 +1458,13 @@ function driveKart(k, dt, canDrive) {
   // --- Mini-turbo: drift long enough, then release
   const drifting = driftAmt > 0.55;
   if (drifting) {
+    const wasCharged = k.driftCharge > K.miniTurboTime;
     k.driftCharge += dt;
+    if (k.isPlayer && !wasCharged && k.driftCharge > K.miniTurboTime) sound.charged();
   } else {
     if (k.driftCharge > K.miniTurboTime) {
       k.boost = K.boostDuration;
-      if (k.isPlayer) showMessage('BOOST!');
+      if (k.isPlayer) { showMessage('BOOST!'); sound.boost(); }
     }
     k.driftCharge = 0;
   }
@@ -1041,13 +1474,22 @@ function driveKart(k, dt, canDrive) {
 
   // --- Engine & brakes
   let engine = 0, brake = 0;
-  if (canDrive) {
+  k.braking = false;
+  if (k.spin > 0) {
+    // Spun out by a banana / shell: no power, scrub off speed, wheels straight
+    k.spin = Math.max(0, k.spin - dt);
+    brake = K.wheelBrake;
+    k.braking = true;
+    vehicle.setSteeringValue(0, 0);
+    vehicle.setSteeringValue(0, 1);
+  } else if (canDrive) {
     const top = K.maxSpeed * k.topMult + (boosting ? K.boostSpeed : 0);
     if (ctl.brake) {
-      if (speed > 1) brake = K.brakeForce;
+      k.boost = 0; // braking cancels a boost
+      if (speed > 1) { brake = K.wheelBrake; k.braking = true; }
       else if (speed > -K.maxReverse) engine = -K.reverseForce;
     } else if (ctl.gas || boosting) {
-      if (speed < top) engine = K.engineForce * (boosting ? K.boostMult : 1);
+      if (speed < top) engine = K.engineForce;
     } else {
       brake = K.coastBrake;
     }
@@ -1072,7 +1514,23 @@ function applyStabilityAssist(k) {
   const { body, vehicle } = k;
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
 
-  const speed = body.velocity.dot(body.quaternion.vmult(LOCAL_FWD, tmpFwd));
+  const fwd = body.quaternion.vmult(LOCAL_FWD, tmpFwd);
+  const speed = body.velocity.dot(fwd);
+  // Boost: extra push through the centre of mass. Doing it with more wheel torque popped wheelies
+  // and flipped karts that hit a boost pad at low speed.
+  const onGround = vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
+  if (k.boost > 0 && k.spin <= 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed && onGround) {
+    const dv = K.boostAccel * CFG.physicsStep;
+    body.velocity.x += fwd.x * dv;
+    body.velocity.z += fwd.z * dv;
+  }
+  // Brakes, same idea: a big brake torque at the tyres pitched the kart onto its roof at speed
+  if (k.braking && speed > 0 && onGround) {
+    const dv = Math.min(speed, K.brakeDecel * CFG.physicsStep);
+    body.velocity.x -= fwd.x * dv;
+    body.velocity.z -= fwd.z * dv;
+  }
+
   if (speed < 3 || !vehicle.wheelInfos.every((w) => w.raycastResult.hasHit)) return;
 
   const gripLimit = K.maxLateralAccel / speed;
@@ -1089,17 +1547,68 @@ function applyStabilityAssist(k) {
 const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), snap: true };
 const desiredCam = new THREE.Vector3();
 
+const spinQ = new THREE.Quaternion();
+const spinAxis = new THREE.Vector3();
+
 function syncMeshes() {
-  for (const { body, vehicle, group, wheelMeshes } of karts) {
+  for (const { body, vehicle, group, wheelMeshes, spin } of karts) {
     group.position.copy(body.position);
     group.quaternion.copy(body.quaternion);
+    // Spin-out is visual only: turn the body and wheels about the kart's up axis (two full turns)
+    const spinning = spin > 0;
+    if (spinning) {
+      spinAxis.set(0, 1, 0).applyQuaternion(group.quaternion);
+      spinQ.setFromAxisAngle(spinAxis, (1 - spin / CFG.items.spinTime) * Math.PI * 4);
+      group.quaternion.premultiply(spinQ);
+    }
     for (let i = 0; i < vehicle.wheelInfos.length; i++) {
       vehicle.updateWheelTransform(i);
       const t = vehicle.wheelInfos[i].worldTransform;
-      wheelMeshes[i].position.copy(t.position);
-      wheelMeshes[i].quaternion.copy(t.quaternion);
+      const w = wheelMeshes[i];
+      w.position.copy(t.position);
+      w.quaternion.copy(t.quaternion);
+      if (spinning) {
+        w.position.sub(group.position).applyQuaternion(spinQ).add(group.position);
+        w.quaternion.premultiply(spinQ);
+      }
     }
   }
+}
+
+const boxMatrix = new THREE.Matrix4(), boxQuat = new THREE.Quaternion(), boxScale = new THREE.Vector3();
+const boxEuler = new THREE.Euler();
+let itemClock = 0, rouletteT = 0, warnT = 0;
+
+function updateItemVisuals(dt) {
+  itemClock += dt;
+  const { boxes, boxMesh, padTex } = itemVis;
+  boxEuler.set(0.5, itemClock * 1.6, 0.3);
+  boxQuat.setFromEuler(boxEuler);
+  boxes.forEach((bx, i) => {
+    // Taken boxes are hidden, then pop back in over the last 0.3 s
+    const sc = bx.hidden > 0.3 ? 0 : 1 - bx.hidden / 0.3;
+    boxScale.setScalar(sc);
+    bx.pos.y = 1.0 + Math.sin(itemClock * 2 + i) * 0.15;
+    boxMesh.setMatrixAt(i, boxMatrix.compose(bx.pos, boxQuat, boxScale));
+  });
+  boxMesh.instanceMatrix.needsUpdate = true;
+  padTex.offset.y = (padTex.offset.y + dt * 1.5) % 1;
+  for (const d of drops) d.mesh.rotation.y += dt * 0.5;
+
+  // Item slot: spins through the icons while rolling, then shows the item
+  let shown = kart.item || '';
+  if (kart.itemRoll > 0) {
+    rouletteT += dt;
+    shown = ITEM_TYPES[Math.floor(rouletteT * 14) % ITEM_TYPES.length];
+  }
+  if (hud.item.dataset.item !== shown) hud.item.dataset.item = shown;
+  hud.item.classList.toggle('ready', !!kart.item && kart.itemRoll <= 0);
+
+  // Red shell alarm
+  const warn = redShellWarning();
+  hud.warn.hidden = !warn;
+  warnT -= dt;
+  if (warn && warnT <= 0) { sound.warn(); warnT = 0.4; }
 }
 
 function updateCamera(dt) {
@@ -1218,12 +1727,39 @@ function updateHUD() {
   }
 }
 
+const camRight = new THREE.Vector3();
+const soundMix = { live: false, player: { ratio: 0, throttle: 0 }, drift: 0, charged: false, rivals: [] };
+
+/** Feeds the engine / drift sounds: the player's kart plus every rival, panned and faded by distance. */
+function updateSound(dt) {
+  const live = state.phase === 'race' || state.phase === 'finished';
+  const top = CFG.kart.maxSpeed;
+  const throttle = (k) => (live && (k.ctl.gas || k.boost > 0) ? 1 : 0);
+  camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  soundMix.live = live;
+  soundMix.player.ratio = clamp(Math.abs(kart.speed) / top, 0, 1.3);
+  soundMix.player.throttle = throttle(kart);
+  soundMix.drift = kart.drifting ? 1 : 0;
+  soundMix.charged = kart.driftCharge > CFG.kart.miniTurboTime;
+  soundMix.rivals = karts.slice(1).map((k) => {
+    const dx = k.body.position.x - camera.position.x, dz = k.body.position.z - camera.position.z;
+    const dist = Math.hypot(dx, dz);
+    return {
+      ratio: clamp(Math.abs(k.speed) / top, 0, 1.3), throttle: throttle(k), dist,
+      pan: clamp((dx * camRight.x + dz * camRight.z) / Math.max(dist, 1), -0.8, 0.8),
+    };
+  });
+  sound.update(dt, soundMix);
+}
+
 function render(dt) {
   syncMeshes();
   updateCamera(dt);
   updateEffects();
+  updateItemVisuals(dt);
   updateHUD();
   renderer.render(scene, camera);
+  updateSound(dt);
 }
 
 // ---------- Main loop ----------
