@@ -190,12 +190,12 @@ menus + results screen, pause, coasting + slide GAS->ITEM, smooth rendering (int
 continuous rails, shadow snapping), WRONG WAY, lap splits, rocket start, smoke/skids/dust/hit effects, title
 music, wider road, racing-line AI with personalities. The user plays with rotation unlocked (real landscape).
 
-**Done 2026-10-16 (uncommitted at time of writing, build 18):** variable road width + new 852 m track with a
+**Done 2026-10-16 (local commit 7d561a6, build 18, NOT pushed):** variable road width + new 852 m track with a
 12 m hairpin (`dev/track-check.py`), grip cut + rails cost speed (gotcha 13), START fires on pointerup.
 User: hairpin "feels more realistic now". AI pace after the grip cut looked weak in one race, but the user then
 ended last after item hits: they judged it fine (variance comes from items), no change needed.
 Lane changes at top speed after the cut (0.25 s tap 14 -> 9 deg): user says "feels ok... hard but normal at high
-speeds". Keep. Open before expansion: these build 16-18 changes are not committed yet; commit when the user says so.
+speeds". Keep. Nothing open before expansion.
 
 **Next**, roughly in order (agreed 2026-10-16):
 - 2 new themed tracks (ideas: desert canyon at sunset, snowy
