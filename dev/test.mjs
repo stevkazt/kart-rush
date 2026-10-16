@@ -1,6 +1,9 @@
 // Drives the game in headless Chrome over the DevTools protocol. Run via dev/test.sh.
 //   node test.mjs <port> autopilot <seconds>  -> full race with dev/autopilot.js, prints lap log
 //   node test.mjs <port> trace <seconds> <probe.js> -> autopilot race plus an extra script that pushes to __log
+//   node test.mjs <port> profile <seconds>   -> autopilot race with drawing switched off; prints the
+//                                                functions using the most CPU (JS cost, not software GL)
+//   node test.mjs <port> shots <idx,idx,...>  -> screenshots with the player parked at those track samples
 //   node test.mjs <port> eval <js expr>       -> prints the expression ~1 s after GO
 //   node test.mjs <port> tap <seconds>        -> on open grass at top speed, hold RIGHT for <seconds>,
 //                                                prints heading change / slip / yaw rate
@@ -27,8 +30,10 @@ await new Promise((r) => { ws.onopen = r; });
 const ev = async (x) => (await send('Runtime.evaluate', { expression: x })).result?.value;
 
 await send('Runtime.enable');
-await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/index.html` });
-await sleep(3000);
+await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/index.html${process.env.TRACK ? `?track=${process.env.TRACK}` : ''}` });
+// wait for the page (a track with heights takes longer to build), then START
+for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
+await sleep(500);
 await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
@@ -36,6 +41,32 @@ if (mode === 'autopilot' || mode === 'trace') {
   if (mode === 'trace') await ev(fs.readFileSync(process.argv[5], 'utf8')); // extra probe, logs to __log
   await sleep(+arg * 1000);
   console.log(await ev('__log.join("\\n")'));
+} else if (mode === 'profile') {
+  await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
+  await ev('__r.render = () => {}');
+  await sleep(4000); // countdown
+  await send('Profiler.enable');
+  await send('Profiler.start');
+  await sleep(+arg * 1000);
+  const { profile } = await send('Profiler.stop');
+  const self = {}, dt = profile.timeDeltas, total = dt.reduce((a, b) => a + b, 0);
+  const byId = Object.fromEntries(profile.nodes.map((n) => [n.id, n]));
+  profile.samples.forEach((id, i) => {
+    const f = byId[id].callFrame, name = `${f.functionName || '(anon)'} ${f.url.split('/').pop()}:${f.lineNumber + 1}`;
+    self[name] = (self[name] || 0) + dt[i];
+  });
+  for (const [name, t] of Object.entries(self).sort((a, b) => b[1] - a[1]).slice(0, 25)) {
+    console.log(`${((t / total) * 100).toFixed(1).padStart(5)}%  ${name}`);
+  }
+} else if (mode === 'shots') {
+  while ((await ev('__s.phase')) !== 'race') await sleep(200);
+  for (const spec of arg.split(',')) {
+    const [idx, lane = 0] = spec.split(':').map(Number);
+    await ev(`__resetKart(__k, ${idx}, ${lane}); __snap()`);
+    await sleep(2500);
+    const s = await send('Page.captureScreenshot');
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `shot-${idx}.png`), Buffer.from(s.data, 'base64'));
+  }
 } else if (mode === 'eval') {
   await sleep(5000); // countdown + ~1 s of racing
   console.log(await ev(`(() => { try { return String(${arg}); } catch (e) { return 'ERR ' + e.stack; } })()`));

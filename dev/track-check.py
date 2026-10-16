@@ -1,5 +1,7 @@
-"""Track design checker (offline, no browser). Usage: python3 dev/track-check.py '[[x,z],...]' out.svg
-min corner radius, clearance between non-adjacent parts, lap length. Also writes an SVG preview."""
+"""Track design checker (offline, no browser). Usage: python3 dev/track-check.py '[[x,z(,y)],...]' out.svg
+   or python3 dev/track-check.py "$(node -e '...print the track object as JSON...')" out.svg  (object with "points")
+min corner radius, clearance between non-adjacent parts (parts >= 6.5 m apart in height may cross: bridge),
+lap length, height profile. Also writes an SVG preview."""
 import json, math, sys
 
 def cr_point(p0, p1, p2, p3, t):
@@ -12,7 +14,7 @@ def cr_point(p0, p1, p2, p3, t):
     if dt0 < 1e-4: dt0 = dt1
     if dt2 < 1e-4: dt2 = dt1
     out = []
-    for k in range(2):
+    for k in range(len(p1)):
         x0, x1, x2, x3 = p0[k], p1[k], p2[k], p3[k]
         t1 = (x1 - x0) / dt0 - (x2 - x0) / (dt0 + dt1) + (x2 - x1) / dt1
         t2 = (x2 - x1) / dt1 - (x3 - x1) / (dt1 + dt2) + (x3 - x2) / dt2
@@ -39,11 +41,16 @@ def resample(pts, spacing=0.93):
         target = n * step
         while acc + seg[i] < target: acc += seg[i]; i += 1
         f = (target - acc) / seg[i]; a, b = pts[i], pts[(i + 1) % len(pts)]
-        out.append((a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f))
+        out.append(tuple(a[k] + (b[k] - a[k]) * f for k in range(len(a))))
     return out, L
 
-points = json.loads(sys.argv[1])
-s, L = resample(curve([p[:2] for p in points]))
+arg = json.loads(sys.argv[1])
+points = arg['points'] if isinstance(arg, dict) else arg
+# (x, z, y): same 3D centripetal curve as the game (heights change the parameterisation a little)
+pts3 = [(p[0], p[1], p[2] if len(p) > 2 else 0) for p in points]
+s3, L = resample(curve(pts3))
+s = [(p[0], p[1]) for p in s3]
+ys = [p[2] for p in s3]
 N = len(s)
 K = 6
 rad = []
@@ -55,16 +62,24 @@ for i in range(N):
 mi = min(range(N), key=lambda i: rad[i])
 # clearance: closest pair of samples more than 60 m apart along the track
 best = (1e9, 0, 0)
+crossings = set()
 for i in range(0, N, 3):
     for j in range(i + 1, N, 3):
         along = min(j - i, N - (j - i)) * L / N
         if along < 60: continue
         d = math.dist(s[i], s[j])
+        if abs(ys[i] - ys[j]) >= 6.5:  # a bridge: fine as long as they're far apart in height
+            if d < 20: crossings.add((i // 40 * 40, j // 40 * 40, round(ys[i], 1), round(ys[j], 1)))
+            continue
         if d < best[0]: best = (d, i, j)
 corners = [(i, round(rad[i], 1), tuple(round(v) for v in s[i])) for i in range(N) if rad[i] < 35 and rad[i] == min(rad[(i + d) % N] for d in range(-20, 21))]
 print(f"length {L:.0f} m, N {N}, min radius {rad[mi]:.1f} m at idx {mi}, corners<30m radii {corners}")
 print(f"closest approach between different parts: {best[0]:.1f} m (idx {best[1]} / {best[2]}), need >= 26")
 xs = [p[0] for p in s]; zs = [p[1] for p in s]
+print(f"crossings (idx~, idx~, y, y): {sorted(crossings)}")
+grade = [(ys[(i + 3) % N] - ys[i - 3]) / (6 * L / N) for i in range(N)]
+print(f"height {min(ys):.1f}..{max(ys):.1f} m, steepest grade up {max(grade)*100:.0f}% down {min(grade)*100:.0f}%")
+print("height every 50 samples: " + ' '.join(f"{i}:{ys[i]:.1f}" for i in range(0, N, 50)))
 print(f"bounds x {min(xs):.0f}..{max(xs):.0f}  z {min(zs):.0f}..{max(zs):.0f}")
 # start straight: heading change over the 30 m before idx 0 and 15 m after
 def heading(i): a, b = s[i % N], s[(i + 1) % N]; return math.atan2(b[0] - a[0], b[1] - a[1])

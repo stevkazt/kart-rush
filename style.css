@@ -401,6 +401,20 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
 }
 #overlay h1 span { display: block; color: #5cc8ff; }
 .tagline { margin: 12px 0 clamp(12px, calc(var(--app-h) * 0.05), 22px); font-size: 14px; font-weight: 700; opacity: 0.75; letter-spacing: 0.5px; }
+.track-pick { display: flex; gap: 8px; margin: calc(clamp(12px, calc(var(--app-h) * 0.05), 22px) * -0.4) 0 clamp(10px, calc(var(--app-h) * 0.045), 20px); }
+.trk {
+  padding: 7px 13px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.trk i { font-style: normal; margin-right: 6px; }
+.trk.on { opacity: 1; border-color: #ffe14a; background: rgba(255, 225, 74, 0.18); color: #ffe14a; }
 .record { margin: 10px 0 0; font-size: 13px; opacity: 0.8; font-variant-numeric: tabular-nums; }
 .record[hidden] { display: none; }
 .record .new { color: #ffe14a; font-weight: 900; }

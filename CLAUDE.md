@@ -24,7 +24,34 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   background; the loop skips physics + render while `state.paused`, audio is suspended. All screens go through
   `showOverlay(screen)`. Lap counter `#lapbox` sits under the minimap (build 19; turns yellow on the final lap). HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
   split under the LAP message (`showSplit`, green/red vs best lap so far).
-- **Track (2026-10-16, ~852 m, N 916 samples at `spacing` 0.93):** main straight, fast right, boost straight,
+- **Tracks (build 20):** `CFG.tracks` = layouts (`meadow` "Green Valley", `canyon` "Canyon Run"), each with
+  its theme, box rows and pads. `loadTrack(id)` tears down `trackRoot` (all track meshes) + `trackBodies` and
+  rebuilds `track`, `itemVis`, `theme`, the minimap; `track`, `itemVis`, `theme` are `let`. Picker on the title
+  screen (`#track-pick`, `selectTrack`), remembered in localStorage `kartrush.track`; `?track=canyon` in the URL
+  wins. Records are per track: `kartrush.records` `{ meadow: {race, lap}, canyon: {...} }` (the old flat record
+  became the meadow's). `THEMES` (section 1c-2): palette (road/curb/rail/arch), sky/fog/lights (`applyTheme`),
+  `build(track)` -> `{ update(dt) }` called every frame for animated scenery.
+- **Heights (canyon):** control points are (x, z, y, halfWidth); `samples[i].y` is the road height. `shapeTrack`
+  adds `bumps` (cosine crest), `jumps` (kicker up to the lip + 3-sample step down; taller rails `jumpWallHeight`
+  around it; hazard stripes) and `banks` (outside of the bend raised; `track.bank[i]` = tan). Helpers:
+  `surfaceY(i, lat)`, `roadPoint(i, lat, up)`, `lateral(i, p)`, `roadBasis(i)` (left/up/forward frame). Flat
+  tracks keep the single ground plane. Hilly tracks: wheels ride a **Trimesh** road (one row per sample,
+  exact), plus a safety net of boxes `netDepth` 0.25 m below for the chassis (cannon-es has NO box-vs-trimesh
+  collision); static boxes go in bodies of 16 (`staticChunks`: ~1200 one-box bodies made the physics step 5x
+  slower). Walls follow the road height. `nearestTrackIndex` weighs height (the bridge). Karts more than
+  2.5 m below the road for 0.6 s are reset ('fell'). In the air `airLevel` turns karts toward the road's tilt
+  and damps tumbling (`airLevel`, `airDamp`). Items sit on the surface; hit checks ignore > 2.5 m height gaps.
+- **Canyon (~1133 m, N 1218, lap ~44 s):** figure-8, start straight (y 0), banked right-hander, under the bridge
+  through a slot canyon, whoops (idx 440/457), 12 m uphill hairpin, crest on the mesa (idx 700, ~0.8 s air),
+  bridge 9 m over the lower road (idx ~890), jump (lip idx 1074, ~0.7 s, lands before the sweeper), banked
+  downhill sweeper. Design with `dev/track-check.py` (3D now: allows crossings >= 6.5 m apart in height).
+  Desert theme (`buildDesert`): height-field canyon from the road (min over nearby samples of road height + rise,
+  so the lower road gets the slot and the upper one the bridge), steel truss bridge, stone embankment faces,
+  chevron boards on corners < 22 m, cacti/rocks/bushes, gradient sky dome + sun, flags at the start, circling
+  vultures, hot-air balloons, tumbleweeds rolling across ahead of the player, dust devils. Builds in ~0.5 s.
+  Measured (no drawing, headless): 3-lap race 0 resets / flips; first version flipped karts landing a bigger
+  jump in the sweeper, and flat road boxes left 20 cm steps where banking eased in/out (watchdog resets).
+- **Meadow track (2026-10-16, ~852 m, N 916 samples at `spacing` 0.93):** main straight, fast right, boost straight,
   12-13 m hairpin, chicane, middle S, sweeper, 16 m kink. Road width is per sample per side (`track.wL/wR`,
   `roadWidths`): `halfWidth` (or a 3rd value on a control point) capped on the inside of bends so the inner
   rail keeps `innerWallRadius` of curve. Use `clampLane(i, x)` for anything lateral. Item rows / pads are
@@ -153,7 +180,13 @@ dev/test.sh autopilot 80        # full race with button-style autopilot; prints 
 dev/test.sh tap 0.25 0.6 1.0    # hold RIGHT on open grass at top speed; heading/slip/yaw per hold time
 dev/test.sh eval '<js expr>'    # print a page expression ~1 s after GO, e.g. '__karts.map(k=>k.place)'
 dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log
+dev/test.sh shots 300,860:3     # screenshots with the player parked at sample idx[:lane]
+dev/test.sh profile 8           # CPU profile, drawing off
+TRACK=canyon dev/test.sh ...    # any mode on another track
 ```
+Headless Chrome draws in software (5-10 fps), so the game runs in slow motion; for physics runs put
+`__r.render = () => {}` in a trace probe (runs about real time). `__loadTrack`, `__resetKart`, `__snap` are
+exposed too.
 `test.sh` also exposes `__r` (renderer: `__r.info.render.calls`) and `__snd` (sound; `__snd.context.state`), and runs
 Chrome with autoplay allowed so the audio code is exercised. The autopilot never fires items, so with items on it
 no longer reliably wins. To have it fire items, add `if (__k.item && __k.itemRoll <= 0) __in.item = true` in a
@@ -197,9 +230,19 @@ ended last after item hits: they judged it fine (variance comes from items), no 
 Lane changes at top speed after the cut (0.25 s tap 14 -> 9 deg): user says "feels ok... hard but normal at high
 speeds". Keep. Nothing open before expansion.
 
+**Build 20 (2026-10-16, not committed until the user has tried it):** Canyon Run (hills, bridge, jump, crest,
+banking, desert theme with life), track picker, per-track records. User asked for it as the physics test bed
+for future tracks. Phone feedback: jump "feels very realistic"; canyon walls and theme "perfect"; 60 fps
+(meter's worst-frame stat showed 20 once, not noticed); banked turns "don't help" (expected: the stability
+assist caps cornering at `maxLateralAccel` whatever the bank); driving consistent except on the bumps
+(likely: the assist only runs with all 4 wheels down); the user said bumps should feel that way: keep.
+Build 21: banks now add g * tan(bank) to the assist's grip limit when steering into them (12 deg: 14 -> ~18
+m/s^2; AI corner speeds too); user OK'd it as a quick tweak, "not that relevant". Fixed the kart turning ~9 deg
+left during the canyon countdown: karts on the grid are pinned (`k.held` in applyStabilityAssist) instead of
+held by `brakeForce` 600, whose left/right impulses fought on the grid's 0.1-0.2% slope (meadow: flat, no load).
+
 **Next**, roughly in order (agreed 2026-10-16):
-- 2 new themed tracks (ideas: desert canyon at sunset, snowy
-  night with falling snow + an icy section), track data with a theme, track picker, best times per track.
+- Another themed track (idea: snowy night with falling snow + an icy section).
 - Kart colour picker (body / trim / driver).
 - Maybe later: stronger drift as its own experiment (steering feel: ask first), hills/jumps (engine change),
   track editor with shareable links, ghost of the best lap, steering-sensitivity setting.

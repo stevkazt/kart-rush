@@ -12,28 +12,63 @@ const CFG = {
   laps: 3,
 
   track: {
-    // Control points (x, z[, halfWidth]) of a closed Catmull-Rom loop. ~850 m: main straight, fast right,
-    // boost straight, a 12-13 m hairpin (several points along it: a single apex point makes a cusp),
-    // flowing chicane, middle S-bends, fast sweeper, a 16 m kink on the left, back to the line.
-    // Designed with an offline checker: corner radii, >= 26 m between different parts of the loop.
-    points: [
-      [-20, -95], [50, -95], [95, -88], [118, -60], [126, -25], [126, 10],
-      [124.1, 35.1], [121.5, 39.6], [117.5, 43], [112.6, 44.8], [107.4, 44.8], [102.5, 43],
-      [98.5, 39.6], [95.9, 35.1], [95, 30], [92, 10], [84, -8], [62, -22],
-      [38, -18], [20, -2], [4, 16], [-6, 36], [-4, 56], [-2, 71.4],
-      [-2.9, 78.3], [-6, 84.6], [-10.9, 89.6], [-17.1, 92.9], [-24, 94], [-60, 96],
-      [-85, 88], [-105, 62], [-112, 28], [-100, -3], [-112, -35], [-102, -75],
-      [-70, -93],
-    ],
+    // Shared road geometry. The layouts themselves are in `tracks` below.
     spacing: 0.93,     // metres between centre-line samples (their count follows from the length)
-    halfWidth: 9,      // road half width (was 7: too tight to avoid other karts); a 3rd value on a control
+    halfWidth: 9,      // road half width (was 7: too tight to avoid other karts); a 4th value on a control
                        // point overrides it there. Narrowed automatically on the inside of tight bends.
     innerWallRadius: 3, // the inside rail of a bend never curves tighter than this (m), so it can't fold over
     minHalfWidth: 5,
     curb: 1,           // curb width (between road and wall)
     wallThickness: 0.6,
     wallHeight: 1.2,
+    jumpWallHeight: 2.6, // rails around jumps, so an airborne kart can't sail over them
     wallStride: 4,     // samples per wall segment
+    roadStride: 2,     // samples per safety-net box under a road with heights (flat roads use one ground plane)
+    netDepth: 0.25,    // ...that far below the surface the wheels ride on (see buildRoadBodies)
+  },
+
+  // Layouts. Control points are (x, z[, y height[, halfWidth]]) of a closed centripetal Catmull-Rom loop;
+  // design them with dev/track-check.py. Everything placed by sample index (items, pads, features) must
+  // move when a layout changes. Features: bumps [idx, length m, height m] (a crest: air above
+  // ~sqrt(20 * length^2 / (2 pi^2 height)) m/s), jumps [lip idx, ramp length m, rise m] (a kicker with a
+  // step down after the lip), banks [idx, half-length m, degrees] (the outside of the bend is raised).
+  tracks: {
+    meadow: {
+      name: 'Green Valley', icon: '\u{1F333}', theme: 'meadow',
+      // ~850 m: main straight, fast right, boost straight, a 12-13 m hairpin (several points along it: a
+      // single apex point makes a cusp), flowing chicane, middle S-bends, fast sweeper, a 16 m kink on
+      // the left, back to the line. >= 26 m between different parts of the loop.
+      points: [
+        [-20, -95], [50, -95], [95, -88], [118, -60], [126, -25], [126, 10],
+        [124.1, 35.1], [121.5, 39.6], [117.5, 43], [112.6, 44.8], [107.4, 44.8], [102.5, 43],
+        [98.5, 39.6], [95.9, 35.1], [95, 30], [92, 10], [84, -8], [62, -22],
+        [38, -18], [20, -2], [4, 16], [-6, 36], [-4, 56], [-2, 71.4],
+        [-2.9, 78.3], [-6, 84.6], [-10.9, 89.6], [-17.1, 92.9], [-24, 94], [-60, 96],
+        [-85, 88], [-105, 62], [-112, 28], [-100, -3], [-112, -35], [-102, -75],
+        [-70, -93],
+      ],
+      boxRows: [95, 450, 670],                           // sample index of each row of item boxes
+      pads: [[200, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]
+    },
+    canyon: {
+      name: 'Canyon Run', icon: '\u{1F335}', theme: 'desert',
+      // ~1130 m figure-8. Start straight (y 0), banked right-hander, under the bridge through a slot
+      // canyon, climb with whoops, 12 m uphill hairpin, crest on the mesa (y 9), over the bridge (9 m
+      // above the lower road), jump on the way down, banked downhill sweeper to the line.
+      points: [
+        [181, 20, 0], [180, -15, 0], [174, -50, 0], [160, -78, 0], [138, -96, 0], [110, -104, 0],
+        [80, -100, 0], [40, -55, 0], [15, -15, 0], [-15, 15, 0.3], [-45, 45, 1.8], [-80, 75, 3.6],
+        [-112, 96, 5], [-140, 103, 5.8], [-165, 104, 6.4], [-177, 99, 7], [-182, 87, 7.6], [-177, 75, 8.2],
+        [-165, 70, 8.6], [-145, 68, 9], [-128, 58, 9], [-122, 38, 9], [-122, 10, 9], [-115, -25, 9],
+        [-95, -48, 9], [-65, -55, 9], [-40, -42, 9], [-15, -15, 9], [15, 15, 9], [45, 45, 8.8],
+        [75, 75, 8], [105, 95, 7.2], [140, 100, 4.5], [165, 95, 1.6], [178, 78, 0.3], [181, 50, 0],
+      ],
+      bumps: [[440, 14, 0.7], [457, 14, 0.7], [700, 26, 1.9]],
+      jumps: [[1074, 9, 1.1]],
+      banks: [[110, 45, 12], [1140, 30, 8]],
+      boxRows: [230, 760, 1010],
+      pads: [[40, 0], [480, -2], [985, 0]],
+    },
   },
 
   kart: {
@@ -47,7 +82,7 @@ const CFG = {
 
     engineForce: 650,       // per driven (rear) wheel
     reverseForce: 350,
-    brakeForce: 600,        // per wheel, only used to hold karts still before the start
+    brakeForce: 600,        // unused: karts on the grid are pinned in applyStabilityAssist (k.held)
     wheelBrake: 1.5,        // per wheel while braking (cannon-es: an impulse cap per step, not a force)
     brakeDecel: 22,         // m/s^2 through the centre of mass (big wheel brakes flipped the kart)
     coastBrake: 12,         // rolling resistance when no pedal is held (unused while driving now: see playerCoast, ai.coast)
@@ -82,6 +117,8 @@ const CFG = {
     rocketEarly: 1.8,       // ...held since earlier than this before GO = engine stall
     rocketBoost: 0.9,       // boost seconds for a rocket start
     stallTime: 0.8,
+    airLevel: 6,            // in the air: turn toward the road's tilt (rad/s per rad off)...
+    airDamp: 3,             // ...and damp tumbling (per second)
     boostAccel: 8,          // m/s^2 on top of the engine, pushed through the centre of mass (no wheelie)
     boostSpeed: 6,
   },
@@ -123,11 +160,10 @@ const CFG = {
   },
 
   items: {
-    boxRows: [95, 450, 670],          // track sample index of each row of item boxes
+    // rows of boxes and boost pads are per track (CFG.tracks)
     boxLanes: [-6, -2, 2, 6],         // lateral offsets of the boxes in a row (m)
     boxRespawn: 3,                    // seconds until a taken box comes back
     pickupRadius: 1.8,
-    pads: [[200, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]
     padLength: 4, padWidth: 3.2,
     rollTime: 0.9,                    // item roulette before an item can be used
     spinTime: 1.1,                    // spin-out after a banana / shell hit
@@ -178,7 +214,9 @@ scene.fog = new THREE.Fog(0x8fd8ff, 90, 330);
 // which the flat road markings layered a few cm apart need to not shimmer far down the track
 const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.5, 600);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x5c9a3c, 1.3));
+// Sky, fog and light colours come from the track's theme (applyTheme)
+const hemi = new THREE.HemisphereLight(0xffffff, 0x5c9a3c, 1.3);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -187,10 +225,21 @@ sun.shadow.bias = -0.0005;
 scene.add(sun, sun.target);
 const SUN_OFFSET = new THREE.Vector3(40, 80, 30);
 // The shadow camera's orientation (it looks along -SUN_OFFSET), for snapping it to texels in updateCamera
-const lightQ = new THREE.Quaternion().setFromRotationMatrix(
-  new THREE.Matrix4().lookAt(SUN_OFFSET, new THREE.Vector3(), new THREE.Vector3(0, 1, 0)));
-const lightQInv = lightQ.clone().invert();
+const lightQ = new THREE.Quaternion(), lightQInv = new THREE.Quaternion();
 const shadowSnap = new THREE.Vector3();
+
+function applyTheme(th) {
+  scene.background = new THREE.Color(th.sky);
+  scene.fog = new THREE.Fog(th.fog[0], th.fog[1], th.fog[2]);
+  hemi.color.set(th.hemi[0]);
+  hemi.groundColor.set(th.hemi[1]);
+  hemi.intensity = th.hemi[2];
+  sun.color.set(th.sun[0]);
+  sun.intensity = th.sun[1];
+  SUN_OFFSET.set(...th.sunOffset);
+  lightQ.setFromRotationMatrix(new THREE.Matrix4().lookAt(SUN_OFFSET, new THREE.Vector3(), new THREE.Vector3(0, 1, 0)));
+  lightQInv.copy(lightQ).invert();
+}
 
 const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
 
@@ -209,16 +258,73 @@ world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.w
 world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.ground, { friction: 0.2, restitution: 0 }));
 world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.chassis, { friction: 0.05, restitution: 0.25 }));
 
-// ---------- 1c. Track ----------
-const track = buildTrack();
+// ---------- 1c. Track (rebuilt by loadTrack when another one is picked) ----------
+let track = null;                    // the current layout (see buildTrack)
+let itemVis = null;                  // its item boxes, pads and item models (see buildItemVisuals)
+let theme = null;                    // its theme's animated scenery: { update(dt) }
+const trackRoot = new THREE.Group(); // every mesh that belongs to the current track
+scene.add(trackRoot);
+let trackBodies = [];                // ...and every static physics body
 
-function buildTrack() {
+function addStatic(body) {
+  body.updateAABB(); // static bodies never refresh their AABB on their own (gotcha 1)
+  world.addBody(body);
+  trackBodies.push(body);
+  return body;
+}
+
+/**
+ * Groups static boxes into bodies of up to `per` shapes, in the order they're added (consecutive pieces
+ * of road or rail, so each body stays compact). The broadphase compares every body with its neighbours on
+ * every step: ~1200 one-box bodies made the canyon's physics step 5x slower than the meadow's.
+ */
+function staticChunks(material, per = 16) {
+  let body = null;
+  const flush = () => { if (body) addStatic(body); body = null; };
+  return {
+    add(shape, pos, quat) {
+      if (!body) {
+        body = new CANNON.Body({ mass: 0, material });
+        body.position.set(pos.x, pos.y, pos.z);
+      }
+      body.addShape(shape, new CANNON.Vec3(pos.x - body.position.x, pos.y - body.position.y, pos.z - body.position.z),
+        new CANNON.Quaternion(quat.x, quat.y, quat.z, quat.w));
+      if (body.shapes.length === per) flush();
+    },
+    done: flush,
+  };
+}
+
+/** Tears down the current track and builds track `id`: layout, physics, theme, items, minimap. */
+function loadTrack(id) {
+  if (itemVis) {
+    clearItems();
+    for (const m of Object.values(itemVis.models)) { m.geo.dispose(); m.mat.dispose(); }
+  }
+  trackRoot.traverse((o) => {
+    o.geometry?.dispose();
+    for (const m of [o.material].flat()) { m?.map?.dispose(); m?.dispose(); }
+  });
+  trackRoot.clear();
+  for (const b of trackBodies) world.removeBody(b);
+  trackBodies = [];
+  const def = CFG.tracks[id];
+  const th = THEMES[def.theme];
+  applyTheme(th);
+  track = buildTrack(def, th);
+  Object.assign(track, { id, def });
+  theme = th.build(track);
+  itemVis = buildItemVisuals();
+  minimap.layout();
+}
+
+function buildTrack(def, th) {
   const T = CFG.track;
   const curve = new THREE.CatmullRomCurve3(
-    T.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+    def.points.map(([x, z, y = 0]) => new THREE.Vector3(x, y, z)), true, 'centripetal');
   const N = Math.round(curve.getLength() / T.spacing);
 
-  const samples = curve.getSpacedPoints(N); // N + 1 points, last == first
+  const samples = curve.getSpacedPoints(N); // N + 1 points, last == first; y = road height
   const tangents = [];
   const normals = [];
   for (let i = 0; i <= N; i++) {
@@ -226,7 +332,7 @@ function buildTrack() {
     t.y = 0;
     t.normalize();
     tangents.push(t);
-    normals.push(new THREE.Vector3(t.z, 0, -t.x)); // points to the kart's left
+    normals.push(new THREE.Vector3(t.z, 0, -t.x)); // horizontal, points to the kart's left
   }
   const spacing = curve.getLength() / N; // metres between samples
 
@@ -238,7 +344,8 @@ function buildTrack() {
     const ang = Math.acos(clamp(a.dot(b), -1, 1));
     radius.push(ang > 1e-4 ? (K * spacing) / ang : Infinity);
   }
-  const { wL, wR } = roadWidths(T, curve, tangents, normals, N, spacing);
+  const { wL, wR } = roadWidths(def, curve, tangents, normals, N, spacing);
+  const { bank, wallH, ramp } = shapeTrack(def, samples, tangents, normals, N, spacing);
   const line = racingLine(samples, normals, N, wL, wR);
   // Corner radius along the racing line too: an AI on it takes corners much wider than the centre line
   const lineRadius = [];
@@ -249,33 +356,155 @@ function buildTrack() {
     const ang = Math.abs(wrapAngle(h2 - h1));
     lineRadius.push(ang > 1e-4 ? Math.hypot(cx - ax, cz - az) / ang : Infinity); // arc / turn
   }
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR };
+  const hilly = samples.some((p) => Math.abs(p.y) > 1e-3) || bank.some((b) => b !== 0);
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, bank, wallH, hilly };
+  track = data; // the road helpers below (surfaceY, roadPoint...) read the global
 
-  // Ground (visual + physics)
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), lambert(0x6cc04a));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  const groundBody = new CANNON.Body({ mass: 0, material: physMats.ground, shape: new CANNON.Plane() });
-  groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-  // Static bodies never refresh their AABB on their own. Without this the plane keeps the
-  // bounds of its un-rotated pose (z <= 0) and the wheel raycasts miss the ground for z > 0.
-  groundBody.updateAABB();
-  world.addBody(groundBody);
+  if (hilly) {
+    buildRoadBodies(data);
+    // a catch-all floor far below, in case a kart ever leaves the road (it is put back: updateKartProgress)
+    const floor = new CANNON.Body({ mass: 0, material: physMats.ground, shape: new CANNON.Plane() });
+    floor.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    floor.position.y = Math.min(...samples.map((p) => p.y)) - 8;
+    addStatic(floor);
+  } else {
+    const groundBody = new CANNON.Body({ mass: 0, material: physMats.ground, shape: new CANNON.Plane() });
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    // Without updateAABB (in addStatic) the plane keeps the bounds of its un-rotated pose (z <= 0)
+    // and the wheel raycasts miss the ground for z > 0.
+    addStatic(groundBody);
+  }
 
   // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
-  scene.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02, (i) => ((i / 10) | 0) % 2 ? 0x55585f : 0x5b5e66));
+  const P = th.palette;
+  trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02,
+    (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : P.road[((i / 10) | 0) % 2])));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
-  scene.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? 0xf2f2f2 : null)));
-  const curbColor = (i) => ((i / 3) | 0) % 2 ? 0xffffff : 0xe8322f;
-  scene.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, curbColor));
-  scene.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, curbColor));
+  trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
+  const curbColor = (i) => P.curb[((i / 3) | 0) % 2];
+  trackRoot.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, curbColor));
+  trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, curbColor));
 
-  buildWalls(data);
-  buildStartLine(data);
-  buildScenery(data);
+  buildWalls(data, P);
+  buildStartLine(data, P);
   return data;
+}
+
+/**
+ * Heights and banking on top of the control points' y (already in the samples): bumps (a cosine crest),
+ * jump kickers (a ramp that steepens up to the lip, then a short step back down), banking per sample
+ * (tan of the angle; + raises the left side) and rail heights (taller around jumps).
+ */
+function shapeTrack(def, samples, tangents, normals, N, spacing) {
+  const T = CFG.track;
+  const steps = (m) => Math.max(1, Math.round(m / spacing));
+  const around = (idx, from, to, fn) => { for (let d = from; d <= to; d++) fn((idx + d + N) % N, d); };
+  for (const [idx, len, h] of def.bumps || []) {
+    const half = steps(len / 2);
+    around(idx, -half, half, (i, d) => { samples[i].y += (h / 2) * (1 + Math.cos((Math.PI * d) / half)); });
+  }
+  const wallH = new Float32Array(N + 1).fill(T.wallHeight);
+  const ramp = new Uint8Array(N + 1); // jump kickers, painted with hazard stripes
+  for (const [idx, run, rise] of def.jumps || []) {
+    const n = steps(run);
+    around(idx, -n, 0, (i, d) => { samples[i].y += rise * ((d + n) / n) ** 2; ramp[i] = 1; });
+    around(idx, 1, 2, (i, d) => { samples[i].y += rise * (1 - d / 3); });
+    around(idx, -n - steps(10), steps(45), (i) => { wallH[i] = T.jumpWallHeight; });
+  }
+  const bank = new Float32Array(N + 1);
+  for (const [idx, halfLen, deg] of def.banks || []) {
+    const n = steps(halfLen);
+    // raise the outside of the bend: a left-hander (the track bends toward the left normal) gets the right side up
+    const a = normals[(idx - 4 + N) % N], b = tangents[(idx + 4) % N];
+    const sign = b.x * a.x + b.z * a.z > 0 ? -1 : 1;
+    around(idx, -n, n, (i, d) => {
+      const f = Math.min(1, (1 - Math.abs(d) / n) / 0.4); // full bank in the middle, easing in over the ends
+      bank[i] = Math.tan((sign * deg * (0.5 - 0.5 * Math.cos(Math.PI * f)) * Math.PI) / 180);
+    });
+  }
+  samples[N].y = samples[0].y;
+  bank[N] = bank[0];
+  wallH[N] = wallH[0];
+  return { bank, wallH, ramp };
+}
+
+/** Road surface height at sample i, `lat` metres left of the centre line (banking tilts it). */
+function surfaceY(i, lat = 0) { return track.samples[i].y + lat * track.bank[i]; }
+
+/** World point on the road at sample i, `lat` m left of the centre line, `up` m above the surface. */
+function roadPoint(i, lat, up = 0, out = new THREE.Vector3()) {
+  const s = track.samples[i], n = track.normals[i];
+  return out.set(s.x + n.x * lat, surfaceY(i, lat) + up, s.z + n.z * lat);
+}
+
+/** Lateral offset (+ = left) of a world point from the centre line at sample i. */
+function lateral(i, p) {
+  const s = track.samples[i], n = track.normals[i];
+  return (p.x - s.x) * n.x + (p.z - s.z) * n.z;
+}
+
+/** The road's frame at sample i as a rotation matrix: x = left (across the banking), y = up, z = forward (up the slope). */
+const _bf = new THREE.Vector3(), _bl = new THREE.Vector3(), _bu = new THREE.Vector3();
+function roadBasis(i, m = new THREE.Matrix4()) {
+  const { samples, tangents, normals, N, spacing, bank } = track;
+  const slope = (samples[(i + 1) % N].y - samples[(i - 1 + N) % N].y) / (2 * spacing);
+  _bf.set(tangents[i].x, slope, tangents[i].z).normalize();
+  _bl.set(normals[i].x, bank[i], normals[i].z).normalize();
+  _bu.crossVectors(_bf, _bl).normalize();
+  _bl.crossVectors(_bu, _bf);
+  return m.makeBasis(_bl, _bu, _bf);
+}
+
+/**
+ * Road with heights, in two layers:
+ * - the surface the wheels ride on: a triangle mesh, one row per sample, exact through slopes, crests and
+ *   banking (the wheels are raycasts, and cannon-es raycasts trimeshes fine);
+ * - under it, a safety net for the chassis: one thin box per `roadStride` samples, `netDepth` below the
+ *   surface (cannon-es has no box-vs-trimesh collision, so a hard landing would drop the chassis straight
+ *   through the mesh). Flat boxes can't follow banking that eases in and out: neighbours met with a ~20 cm
+ *   step at the road edges, which beached karts when the boxes were the driving surface.
+ */
+function buildRoadBodies({ N, samples, normals, wL, wR, bank }) {
+  const T = CFG.track, k = T.roadStride, thick = 1;
+  const edgeL = (i) => wL[i] + T.curb + T.wallThickness, edgeR = (i) => -(wR[i] + T.curb + T.wallThickness);
+  const ROWS = 40; // samples per trimesh body
+  for (let i0 = 0; i0 < N; i0 += ROWS) {
+    const i1 = Math.min(i0 + ROWS, N), o = samples[i0];
+    const verts = [], tris = [];
+    for (let i = i0; i <= i1; i++) {
+      for (const lat of [edgeR(i), edgeL(i)]) {
+        const p = roadPoint(i, lat);
+        verts.push(p.x - o.x, p.y - o.y, p.z - o.z);
+      }
+      if (i > i0) {
+        const a = (i - i0 - 1) * 2, b = a + 2; // a: right, a+1: left on the previous row
+        tris.push(a, b, a + 1, a + 1, b, b + 1); // (b - a) x (c - a) points up: ray tests skip backfaces
+      }
+    }
+    const body = new CANNON.Body({ mass: 0, material: physMats.ground, shape: new CANNON.Trimesh(verts, tris) });
+    body.position.set(o.x, o.y, o.z);
+    addStatic(body);
+  }
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), f = new THREE.Vector3(), l = new THREE.Vector3(), u = new THREE.Vector3();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const chunks = staticChunks(physMats.ground);
+  for (let i = 0; i < N; i += k) {
+    const j = Math.min(i + k, N);
+    a.copy(samples[i]);
+    b.copy(samples[j]);
+    f.subVectors(b, a);
+    const len = f.length();
+    f.normalize();
+    l.set(normals[i].x + normals[j].x, bank[i] + bank[j], normals[i].z + normals[j].z).normalize();
+    u.crossVectors(f, l).normalize();
+    l.crossVectors(u, f);
+    const left = Math.max(wL[i], wL[j]) + T.curb + T.wallThickness, right = Math.max(wR[i], wR[j]) + T.curb + T.wallThickness;
+    // centre: middle of the segment, shifted across to the middle of the (asymmetric) width, half a box down
+    a.add(b).multiplyScalar(0.5).addScaledVector(l, (left - right) / 2).addScaledVector(u, -thick / 2 - T.netDepth);
+    q.setFromRotationMatrix(m.makeBasis(l, u, f));
+    chunks.add(new CANNON.Box(new CANNON.Vec3((left + right) / 2, thick / 2, len / 2 + 0.05)), a, q);
+  }
+  chunks.done();
 }
 
 /**
@@ -285,13 +514,14 @@ function buildTrack() {
  * folds back into the road (why a 9 m hairpin was unplayable). The cap is spread over the neighbouring
  * samples so the road narrows and widens smoothly.
  */
-function roadWidths(T, curve, tangents, normals, N, spacing) {
-  // width from the control points (3rd value), interpolated along the loop by the curve parameter
-  const P = T.points.length;
+function roadWidths(def, curve, tangents, normals, N, spacing) {
+  const T = CFG.track;
+  // width from the control points (4th value), interpolated along the loop by the curve parameter
+  const P = def.points.length;
   const base = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     const u = (i / N) * P, a = Math.floor(u) % P, b = (a + 1) % P, f = u - Math.floor(u);
-    base[i] = lerp(T.points[a][2] ?? T.halfWidth, T.points[b][2] ?? T.halfWidth, f);
+    base[i] = lerp(def.points[a][3] ?? T.halfWidth, def.points[b][3] ?? T.halfWidth, f);
   }
   const inner = (sign) => {
     const cap = new Float32Array(N);
@@ -355,15 +585,15 @@ function racingLine(samples, normals, N, wL, wR) {
   return off;
 }
 
-/** Builds a flat strip between two signed lateral offsets along the centre line. */
-function makeRibbon({ N, samples, normals }, inner, outer, y, colorAt) {
+/** Builds a strip between two signed lateral offsets along the centre line, `y` above the road surface. */
+function makeRibbon({ N, samples, normals, bank }, inner, outer, y, colorAt) {
   // inner / outer: a lateral offset, or a function of the sample index
   const lo = typeof inner === 'function' ? inner : () => inner;
   const hi = typeof outer === 'function' ? outer : () => outer;
   const pos = [];
   const col = [];
   const c = new THREE.Color();
-  const p = (i, off) => [samples[i].x + normals[i].x * off, y, samples[i].z + normals[i].z * off];
+  const p = (i, off) => [samples[i].x + normals[i].x * off, samples[i].y + off * bank[i] + y, samples[i].z + normals[i].z * off];
 
   for (let i = 0; i < N; i++) {
     const color = colorAt(i);
@@ -385,48 +615,52 @@ function makeRibbon({ N, samples, normals }, inner, outer, y, colorAt) {
 /**
  * Static box colliders along both track edges, drawn as one continuous striped strip. (Drawing each
  * segment as its own box needed overlaps to close gaps on curves, and the overlapping blue/white faces
- * z-fought: the rails flickered as the camera moved.)
+ * z-fought: the rails flickered as the camera moved.) Rails follow the road's height and reach 0.5 m
+ * below it, so no gap opens under them on slopes.
  */
-function buildWalls({ N, samples, normals, wL, wR }) {
+function buildWalls({ N, samples, normals, wL, wR, wallH }, P) {
   const T = CFG.track;
-  const th = T.wallThickness, h = T.wallHeight, k = T.wallStride;
+  const th = T.wallThickness, k = T.wallStride, sink = 0.5;
   const pos = [], col = [];
   const c = new THREE.Color();
   const quad = (a, b, cc, d) => pos.push(...a, ...b, ...cc, ...cc, ...b, ...d);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), f = new THREE.Vector3(), l = new THREE.Vector3(), u = new THREE.Vector3();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion();
+  const chunks = staticChunks(physMats.wall);
 
   for (const side of [1, -1]) {
-    // corner points at sample i: inner/outer edge at ground and top height
     const w = side > 0 ? wL : wR;
     const off = (i) => w[i] + T.curb + th / 2; // wall centre line
-    // corner points at sample i, `o` metres outward from the wall centre line (+- th/2)
+    const base = (i) => surfaceY(i, off(i) * side);
+    // corner points at sample i, `o` metres outward from the wall centre line (+- th/2), `y` above its base
     const edge = (i, o, y) => {
       const d = (off(i) + o) * side;
-      return [samples[i].x + normals[i].x * d, y, samples[i].z + normals[i].z * d];
+      return [samples[i].x + normals[i].x * d, base(i) + y, samples[i].z + normals[i].z * d];
     };
     for (let i = 0; i < N; i += k) {
       const j = Math.min(i + k, N);
-      const inA = -th / 2, outA = th / 2;
-      quad(edge(i, inA, 0), edge(j, inA, 0), edge(i, inA, h), edge(j, inA, h));     // road-side face
-      quad(edge(i, outA, h), edge(j, outA, h), edge(i, outA, 0), edge(j, outA, 0)); // outside face
-      quad(edge(i, inA, h), edge(j, inA, h), edge(i, outA, h), edge(j, outA, h));   // top
-      c.set(((i / k) | 0) % 2 ? 0xffffff : 0x2f6bff);
+      const inA = -th / 2, outA = th / 2, hi = wallH[i], hj = wallH[j];
+      quad(edge(i, inA, -sink), edge(j, inA, -sink), edge(i, inA, hi), edge(j, inA, hj));     // road-side face
+      quad(edge(i, outA, hi), edge(j, outA, hj), edge(i, outA, -sink), edge(j, outA, -sink)); // outside face
+      quad(edge(i, inA, hi), edge(j, inA, hj), edge(i, outA, hi), edge(j, outA, hj));         // top
+      c.set(P.rail[((i / k) | 0) % 2]);
       for (let v = 0; v < 18; v++) col.push(c.r, c.g, c.b);
 
-      // collider: same box per segment as before (overlap is harmless for physics)
-      const a = samples[i].clone().addScaledVector(normals[i], off(i) * side);
-      const b = samples[j].clone().addScaledVector(normals[j], off(j) * side);
-      const dx = b.x - a.x, dz = b.z - a.z;
-      const len = Math.hypot(dx, dz) + th;
-      const body = new CANNON.Body({
-        mass: 0,
-        material: physMats.wall,
-        shape: new CANNON.Box(new CANNON.Vec3(th / 2, h / 2, len / 2)),
-      });
-      body.position.set((a.x + b.x) / 2, h / 2, (a.z + b.z) / 2);
-      body.quaternion.setFromAxisAngle(AXIS_Y, Math.atan2(dx, dz));
-      body.updateAABB(); // static: bounds must be refreshed after placing it
-      world.addBody(body);
+      // collider: one box per segment (overlap is harmless for physics), from `sink` below to the top,
+      // grouped into bodies of 16
+      const h = Math.max(hi, hj);
+      a.set(...edge(i, 0, 0));
+      b.set(...edge(j, 0, 0));
+      f.subVectors(b, a);
+      const len = f.length() + th;
+      f.normalize();
+      l.set(0, 1, 0).cross(f).normalize(); // walls stand upright, even on banked road
+      u.crossVectors(f, l);
+      a.add(b).multiplyScalar(0.5).addScaledVector(u, (h - sink) / 2);
+      q.setFromRotationMatrix(m.makeBasis(l, u, f));
+      chunks.add(new CANNON.Box(new CANNON.Vec3(th / 2, (h + sink) / 2, len / 2)), a, q);
     }
+    chunks.done(); // one side's rail never shares a body with the other's
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -435,10 +669,10 @@ function buildWalls({ N, samples, normals, wL, wR }) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  scene.add(mesh);
+  trackRoot.add(mesh);
 }
 
-function buildStartLine({ samples, tangents, wL, wR }) {
+function buildStartLine({ samples, tangents, wL, wR }, P) {
   const T = CFG.track;
   const w = wL[0] + wR[0];
 
@@ -457,42 +691,72 @@ function buildStartLine({ samples, tangents, wL, wR }) {
   const geo = new THREE.PlaneGeometry(w, 2);
   geo.rotateX(-Math.PI / 2);
   const line = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
-  const yaw = Math.atan2(tangents[0].x, tangents[0].z);
-  line.position.set(samples[0].x, 0.1, samples[0].z);
-  line.rotation.y = yaw;
+  line.position.copy(roadPoint(0, (wL[0] - wR[0]) / 2, 0.1));
+  line.quaternion.setFromRotationMatrix(roadBasis(0));
   line.receiveShadow = true;
-  scene.add(line);
+  trackRoot.add(line);
 
   // Arch: two posts + banner
+  const yaw = Math.atan2(tangents[0].x, tangents[0].z);
   const arch = new THREE.Group();
   const postOff = Math.max(wL[0], wR[0]) + T.curb + T.wallThickness + 0.6;
-  const postMat = lambert(0xffd23a);
+  const postMat = lambert(P.arch[0]);
   for (const side of [1, -1]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 7, 0.8), postMat);
-    post.position.set(side * postOff, 3.5, 0);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 9, 0.8), postMat);
+    post.position.set(side * postOff, 2.5, 0); // reaches 2 m below the road: fine on a bank or slope
     post.castShadow = true;
     arch.add(post);
   }
-  const banner = new THREE.Mesh(new THREE.BoxGeometry(postOff * 2 + 0.8, 1.4, 0.5), lambert(0xe8322f));
+  const banner = new THREE.Mesh(new THREE.BoxGeometry(postOff * 2 + 0.8, 1.4, 0.5), lambert(P.arch[1]));
   banner.position.y = 7;
   banner.castShadow = true;
   arch.add(banner);
 
   // Arch local X is lateral: align its local Z with the tangent.
-  arch.position.set(samples[0].x, 0, samples[0].z);
+  arch.position.set(samples[0].x, samples[0].y, samples[0].z);
   arch.rotation.y = yaw;
-  scene.add(arch);
+  trackRoot.add(arch);
 }
 
-function buildScenery({ N, samples }) {
-  // Deterministic RNG so the scenery is the same every load
-  let seed = 1337;
-  const rand = () => {
+/** Deterministic RNG, so the scenery is the same every load. */
+function seededRand(seed) {
+  return () => {
     seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+// ---------- 1c-2. Themes: road colours, sky + light, and the scenery around the track ----------
+// build(track) adds the scenery to trackRoot and returns { update(dt) } for anything animated.
+const THEMES = {
+  meadow: {
+    sky: 0x8fd8ff, fog: [0x8fd8ff, 90, 330], hemi: [0xffffff, 0x5c9a3c, 1.3], sun: [0xfff4e0, 2.2], sunOffset: [40, 80, 30],
+    palette: {
+      road: [0x5b5e66, 0x55585f], dash: 0xf2f2f2, curb: [0xe8322f, 0xffffff],
+      rail: [0x2f6bff, 0xffffff], arch: [0xffd23a, 0xe8322f],
+    },
+    build: buildMeadow,
+  },
+  desert: {
+    // sunset: low warm sun from the west, haze the colour of the horizon
+    sky: 0xf4a46e, fog: [0xf0a173, 70, 360], hemi: [0xffd7b0, 0x9a5536, 1.15], sun: [0xffb066, 2.6], sunOffset: [-80, 40, 45],
+    palette: {
+      road: [0x4e4747, 0x534c4b], dash: 0xf5e2b8, curb: [0xd9472b, 0xf3ead8],
+      rail: [0x7a4426, 0xe6c590], arch: [0x7a4a2a, 0xd9472b],
+    },
+    build: buildDesert,
+  },
+};
+
+function buildMeadow({ N, samples }) {
+  const rand = seededRand(1337);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), lambert(0x6cc04a));
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  trackRoot.add(ground);
+
   const distToTrack = (x, z) => {
     let d = Infinity;
     for (let i = 0; i < N; i += 3) {
@@ -526,7 +790,7 @@ function buildScenery({ N, samples }) {
     placed++;
   }
   trunks.count = leaves.count = placed;
-  scene.add(trunks, leaves);
+  trackRoot.add(trunks, leaves);
 
   // Distant low-poly mountains
   const mountainColors = [0x7a8fb8, 0x8aa0c8, 0x6d82ad];
@@ -537,7 +801,7 @@ function buildScenery({ N, samples }) {
     const mtn = new THREE.Mesh(new THREE.ConeGeometry(30 + rand() * 30, h, 5), lambert(mountainColors[i % 3]));
     mtn.position.set(Math.cos(a) * r, h / 2 - 1, Math.sin(a) * r);
     mtn.rotation.y = rand() * Math.PI;
-    scene.add(mtn);
+    trackRoot.add(mtn);
   }
 
   // Clouds
@@ -553,9 +817,507 @@ function buildScenery({ N, samples }) {
       cloud.add(puff);
     }
     cloud.position.set((rand() - 0.5) * 400, 45 + rand() * 25, (rand() - 0.5) * 400);
-    scene.add(cloud);
+    trackRoot.add(cloud);
   }
+  return { update() {} };
 }
+
+/** Smooth 2D value noise in [0, 1] (deterministic). */
+function makeNoise(rand) {
+  const P = 256, grid = new Float32Array(P * P);
+  for (let i = 0; i < grid.length; i++) grid[i] = rand();
+  const at = (x, z) => grid[(((z % P) + P) % P) * P + (((x % P) + P) % P)];
+  return (x, z) => {
+    const x0 = Math.floor(x), z0 = Math.floor(z);
+    let fx = x - x0, fz = z - z0;
+    fx = fx * fx * (3 - 2 * fx);
+    fz = fz * fz * (3 - 2 * fz);
+    return lerp(lerp(at(x0, z0), at(x0 + 1, z0), fx), lerp(at(x0, z0 + 1), at(x0 + 1, z0 + 1), fx), fz);
+  };
+}
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/**
+ * Desert canyon at sunset. The ground is a height field: flat at road height beside the road, then a sandy
+ * slope and red rock walls 13-30 m high. Each point takes the lowest of (nearby road height + rise with
+ * distance), so where two parts of the track are close at different heights the ground follows the lower
+ * one: the lower road runs through a slot under the bridge, and a higher road on a ridge gets a stone
+ * embankment. Life: circling vultures, hot-air balloons, tumbleweeds rolling across the road, dust devils,
+ * flags at the start.
+ */
+function buildDesert(data) {
+  const { N, samples, normals, tangents, wL, wR, wallH, spacing, radius, bank } = data;
+  const T = CFG.track;
+  const rand = seededRand(4242);
+  const noise = makeNoise(rand);
+
+  // ---- Height field ----
+  const flat = new Float32Array(N); // road + rails + 2.5 m of flat floor, from the centre line
+  for (let i = 0; i < N; i++) flat[i] = Math.max(wL[i], wR[i]) + T.curb + T.wallThickness + 2.5;
+  const CELL = 20, REACH = 70, R = Math.ceil(REACH / CELL);
+  const buckets = new Map();
+  const key = (cx, cz) => cx * 4096 + cz;
+  for (let i = 0; i < N; i += 2) {
+    const k = key(Math.floor(samples[i].x / CELL), Math.floor(samples[i].z / CELL));
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(i);
+  }
+  /** Calls fn(i, horizontal distance) for every 2nd sample within REACH of (x, z). */
+  const nearby = (x, z, fn) => {
+    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+    for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) {
+      const list = buckets.get(key(cx + a, cz + b));
+      if (!list) continue;
+      for (const i of list) {
+        const d = Math.hypot(x - samples[i].x, z - samples[i].z);
+        if (d <= REACH) fn(i, d);
+      }
+    }
+  };
+  let maxY = -Infinity;
+  for (const p of samples) maxY = Math.max(maxY, p.y);
+  function heightAt(x, z) {
+    // the wall's shape at this spot: height, where it starts, how steep
+    const cliff = 13 + 17 * noise(x / 110 + 31, z / 110 + 17);
+    const start = 5 + 7 * noise(x / 23, z / 23);
+    const width = 5 + 5 * noise(x / 15 + 50, z / 15);
+    let h = Infinity;
+    nearby(x, z, (i, d) => {
+      // the road's height across from here (banking tilts it), held level beyond the rails
+      const lat = clamp((x - samples[i].x) * normals[i].x + (z - samples[i].z) * normals[i].z, -flat[i], flat[i]);
+      const base = samples[i].y + lat * bank[i];
+      if (base - 0.35 >= h) return;
+      const u = d - flat[i];
+      h = Math.min(h, base + (u <= 0 ? -0.35 : 1.4 * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
+    });
+    return h === Infinity ? maxY + 1.4 + cliff : h;
+  }
+  /** Distance beyond the flat floor of the nearest road part, and that part's sample. */
+  const floorDist = (x, z) => {
+    let best = Infinity, idx = 0;
+    nearby(x, z, (i, d) => { if (d - flat[i] < best) { best = d - flat[i]; idx = i; } });
+    return { u: best, idx };
+  };
+
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const p of samples) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+  }
+  const STEP = 3.5, M = 90;
+  const x0 = minX - M, z0 = minZ - M;
+  const nx = Math.ceil((maxX - minX + 2 * M) / STEP) + 1, nz = Math.ceil((maxZ - minZ + 2 * M) / STEP) + 1;
+  const H = new Float32Array(nx * nz);
+  for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) H[r * nx + c] = heightAt(x0 + c * STEP, z0 + r * STEP);
+
+  // Colours: sand on the flat, talus on gentle slopes, red rock strata on the walls
+  const SAND = [0xe3b27a, 0xd9a46c, 0xe8bd88].map((h) => new THREE.Color(h));
+  const TALUS = new THREE.Color(0xc57a49);
+  const ROCK = [0xb4532e, 0xc8693a, 0x9c4127, 0xd88a52, 0xb85d36, 0xa84a2c].map((h) => new THREE.Color(h));
+  const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3);
+  const cc = new THREE.Color();
+  for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) {
+    const v = r * nx + c, x = x0 + c * STEP, z = z0 + r * STEP, h = H[v];
+    pos.set([x, h, z], v * 3);
+    const gx = (H[r * nx + Math.min(c + 1, nx - 1)] - H[r * nx + Math.max(c - 1, 0)]) / (2 * STEP);
+    const gz = (H[Math.min(r + 1, nz - 1) * nx + c] - H[Math.max(r - 1, 0) * nx + c]) / (2 * STEP);
+    const slope = Math.hypot(gx, gz);
+    if (slope > 0.6) cc.copy(ROCK[(((h + noise(x / 9, z / 9) * 2.5) / 2.3) | 0) % ROCK.length]);
+    else if (slope > 0.22) cc.copy(TALUS).lerp(SAND[0], 0.3 * noise(x / 6, z / 6));
+    else cc.copy(SAND[(noise(x / 12 + 9, z / 12) * 3) | 0]);
+    col.set([cc.r, cc.g, cc.b], v * 3);
+  }
+  const idx = [];
+  for (let r = 0; r < nz - 1; r++) for (let c = 0; c < nx - 1; c++) {
+    const a = r * nx + c, b = a + 1, d = a + nx, e = d + 1;
+    idx.push(a, d, b, b, d, e);
+  }
+  const tgeo = new THREE.BufferGeometry();
+  tgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  tgeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  tgeo.setIndex(idx);
+  tgeo.computeVertexNormals();
+  const terrain = new THREE.Mesh(tgeo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  terrain.receiveShadow = true;
+  trackRoot.add(terrain);
+
+  // ---- Sky: a gradient dome that follows the camera, and the setting sun ----
+  const skyGeo = new THREE.SphereGeometry(450, 32, 16);
+  const skyCol = [];
+  const HORIZON = new THREE.Color(0xf6a76c), PINK = new THREE.Color(0xd9708a), TOP = new THREE.Color(0x3b3a7a);
+  for (let i = 0; i < skyGeo.attributes.position.count; i++) {
+    const t = Math.max(0, skyGeo.attributes.position.getY(i) / 450);
+    cc.copy(HORIZON).lerp(PINK, smoothstep(0.02, 0.25, t)).lerp(TOP, smoothstep(0.2, 0.75, t));
+    skyCol.push(cc.r, cc.g, cc.b);
+  }
+  skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyCol, 3));
+  const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  sky.renderOrder = -1;
+  sky.frustumCulled = false;
+  const sunDir = SUN_OFFSET.clone().normalize();
+  const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(22, 24), new THREE.MeshBasicMaterial({ color: 0xfff1c4, fog: false, depthWrite: false }));
+  const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(70, 24), new THREE.MeshBasicMaterial({
+    color: 0xffb070, transparent: true, opacity: 0.35, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+  sunDisc.renderOrder = sunGlow.renderOrder = -1;
+  trackRoot.add(sky, sunGlow, sunDisc);
+
+  // ---- Bridge: where another part of the track runs > 5 m below within 26 m ----
+  const bridge = new Uint8Array(N + 1);
+  for (let i = 0; i < N; i++) {
+    nearby(samples[i].x, samples[i].z, (j, d) => {
+      const along = Math.min(Math.abs(i - j), N - Math.abs(i - j)) * spacing;
+      if (d < 26 && along > 60 && samples[i].y - samples[j].y > 5) bridge[i] = 1;
+    });
+  }
+  const parts = new THREE.Group();
+  const STEEL = 0xa3402a, STONE = 0xb9774b;
+  const beam = (a, b, t, color) => { // a box from point a to point b, t thick
+    const len = a.distanceTo(b);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(t, t, len), lambert(color));
+    mesh.position.copy(a).add(b).multiplyScalar(0.5);
+    mesh.lookAt(b);
+    parts.add(mesh);
+  };
+  const skirt = []; // stone faces under rails that stand above the ground (embankments, bridge ends)
+  for (const side of [1, -1]) {
+    const w = side > 0 ? wL : wR;
+    const outer = (i) => (w[i] + T.curb + T.wallThickness) * side;
+    let post = 0;
+    for (let i = 0; i < N; i += 2) {
+      const j = Math.min(i + 2, N);
+      if (bridge[i] || bridge[j]) {
+        // deck edge girder under the rail, and a truss above it every 4 samples
+        const a = roadPoint(i, outer(i), -2.2), b = roadPoint(j, outer(j), -2.2);
+        beam(a, b, 1.2, STEEL);
+        if (post++ % 2 === 0) {
+          const top = wallH[i] + 2.6;
+          beam(roadPoint(i, outer(i) - side * 0.3, -0.5), roadPoint(i, outer(i) - side * 0.3, top), 0.35, STEEL);
+          const k = Math.min(i + 4, N);
+          beam(roadPoint(i, outer(i) - side * 0.3, top), roadPoint(k, outer(k) - side * 0.3, top), 0.35, STEEL);
+          beam(roadPoint(i, outer(i) - side * 0.3, wallH[i]), roadPoint(k, outer(k) - side * 0.3, top), 0.25, STEEL);
+        }
+        continue;
+      }
+      post = 0;
+      // stone face from 0.5 m under the rail down to the ground just outside it
+      const pa = roadPoint(i, outer(i), -0.5), pb = roadPoint(j, outer(j), -0.5);
+      const ga = heightAt(pa.x + normals[i].x * side * 1.5, pa.z + normals[i].z * side * 1.5);
+      const gb = heightAt(pb.x + normals[j].x * side * 1.5, pb.z + normals[j].z * side * 1.5);
+      if (pa.y - ga < 0.4 && pb.y - gb < 0.4) continue;
+      skirt.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z, pa.x, ga - 0.5, pa.z, pa.x, ga - 0.5, pa.z, pb.x, pb.y, pb.z, pb.x, gb - 0.5, pb.z);
+    }
+  }
+  if (parts.children.length) {
+    bakeMeshes(parts);
+    trackRoot.add(parts);
+  }
+  // the deck's underside across the bridge
+  for (let i = 0; i < N; i += 2) {
+    const j = Math.min(i + 2, N);
+    if (!(bridge[i] || bridge[j])) continue;
+    const l = (k) => wL[k] + T.curb + T.wallThickness, r = (k) => -(wR[k] + T.curb + T.wallThickness);
+    const a0 = roadPoint(i, r(i), -1.6), a1 = roadPoint(i, l(i), -1.6), b0 = roadPoint(j, r(j), -1.6), b1 = roadPoint(j, l(j), -1.6);
+    skirt.push(...a0.toArray(), ...a1.toArray(), ...b0.toArray(), ...b0.toArray(), ...a1.toArray(), ...b1.toArray());
+  }
+  if (skirt.length) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(skirt, 3));
+    g.computeVertexNormals();
+    const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: STONE, side: THREE.DoubleSide }));
+    mesh.receiveShadow = true;
+    trackRoot.add(mesh);
+  }
+
+  // ---- Chevron boards on the outside of the tight corners ----
+  const chevTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1d1a1a'; g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#ffd23a';
+    for (const x of [14, 54, 94]) {
+      g.beginPath(); g.moveTo(x, 8); g.lineTo(x + 22, 32); g.lineTo(x, 56); g.lineTo(x + 12, 56); g.lineTo(x + 34, 32); g.lineTo(x + 12, 8); g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+  const boards = [];
+  const used = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    if (radius[i] > 22 || used[i]) continue;
+    let lo = i;
+    for (let d = -14; d <= 14; d++) if (radius[(i + d + N) % N] < radius[lo]) lo = (i + d + N) % N;
+    if (lo !== i) continue; // local tightest point only
+    const a = normals[(i - 3 + N) % N], b = tangents[(i + 3) % N];
+    const leftTurn = b.x * a.x + b.z * a.z > 0;
+    for (let d = -14; d <= 14; d += 4) {
+      const k = (i + d + N) % N;
+      used[k] = 1;
+      const lat = leftTurn ? -(wR[k] + T.curb + T.wallThickness / 2) : wL[k] + T.curb + T.wallThickness / 2;
+      boards.push({ k, lat, leftTurn });
+    }
+  }
+  if (boards.length) {
+    const geo = new THREE.PlaneGeometry(1.8, 0.9);
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: chevTex, side: THREE.DoubleSide }), boards.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    boards.forEach(({ k, lat, leftTurn }, n) => {
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(tangents[k].x, tangents[k].z) + Math.PI);
+      sc.set(leftTurn ? -1 : 1, 1, 1); // arrows point the way the corner goes
+      m.compose(roadPoint(k, lat, wallH[k] + 0.55, p), q, sc);
+      mesh.setMatrixAt(n, m);
+    });
+    trackRoot.add(mesh);
+  }
+
+  // ---- Props on the canyon floor: cacti, boulders, dry bushes ----
+  const spot = (uMin, uMax, tries = 40) => {
+    for (let t = 0; t < tries; t++) {
+      const x = minX - 40 + rand() * (maxX - minX + 80), z = minZ - 40 + rand() * (maxZ - minZ + 80);
+      const { u } = floorDist(x, z);
+      if (u < uMin || u > uMax) continue;
+      const y = heightAt(x, z);
+      if (Math.abs(heightAt(x + 1.5, z) - y) > 0.8 || Math.abs(heightAt(x, z + 1.5) - y) > 0.8) continue;
+      return new THREE.Vector3(x, y, z);
+    }
+    return null;
+  };
+  const scatter = (mesh, count, uMin, uMax, place) => {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    let n = 0;
+    for (let t = 0; t < count; t++) {
+      const p = spot(uMin, uMax);
+      if (!p) continue;
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI * 2);
+      place(s, p);
+      mesh.setMatrixAt(n, m.compose(p, q, s));
+      if (mesh.userData.colors) mesh.setColorAt(n, cc.set(mesh.userData.colors[(rand() * mesh.userData.colors.length) | 0]));
+      n++;
+    }
+    mesh.count = n;
+    mesh.castShadow = true;
+    trackRoot.add(mesh);
+  };
+  const cactusGroup = new THREE.Group();
+  const cactusPart = (geo, x, y, z, rz = 0) => {
+    const mesh = new THREE.Mesh(geo, lambert(0x4f8a3c));
+    mesh.position.set(x, y, z);
+    mesh.rotation.z = rz;
+    cactusGroup.add(mesh);
+  };
+  cactusPart(new THREE.CylinderGeometry(0.32, 0.38, 4.2, 7), 0, 2.1, 0);
+  cactusPart(new THREE.SphereGeometry(0.32, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0, 4.2, 0);
+  cactusPart(new THREE.CylinderGeometry(0.2, 0.2, 0.8, 6), 0.5, 1.9, 0, Math.PI / 2);
+  cactusPart(new THREE.CylinderGeometry(0.22, 0.24, 1.5, 6), 0.9, 2.6, 0);
+  cactusPart(new THREE.CylinderGeometry(0.18, 0.18, 0.7, 6), -0.45, 1.5, 0, Math.PI / 2);
+  cactusPart(new THREE.CylinderGeometry(0.2, 0.22, 1.1, 6), -0.8, 2.0, 0);
+  const cactusMesh = bakeMeshes(cactusGroup);
+  const cacti = new THREE.InstancedMesh(cactusMesh.geometry, cactusMesh.material, 70);
+  scatter(cacti, 70, 0.5, 9, (s) => s.setScalar(0.75 + rand() * 0.6));
+
+  const rocks = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), lambert(0xffffff), 90);
+  rocks.userData.colors = [0xa9532f, 0xbf6a3f, 0x8f4a2c, 0xc98a5a];
+  scatter(rocks, 90, 0, 14, (s) => s.set(0.7 + rand() * 2.6, 0.5 + rand() * 1.6, 0.7 + rand() * 2.6));
+
+  const bushes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.6, 0), lambert(0xffffff), 80);
+  bushes.userData.colors = [0x8d8248, 0x9e8f55, 0x7a6f3e];
+  scatter(bushes, 80, 0, 7, (s) => s.set(1 + rand() * 0.8, 0.6 + rand() * 0.4, 1 + rand() * 0.8));
+
+  // ---- Flags on poles along the start straight, waving ----
+  const flagSpots = [];
+  for (let d = -60; d <= 50; d += 14) {
+    const k = (d + N) % N;
+    for (const side of [1, -1]) flagSpots.push({ k, side, lat: side > 0 ? wL[k] + T.curb + T.wallThickness + 0.8 : -(wR[k] + T.curb + T.wallThickness + 0.8) });
+  }
+  const poleGeo = new THREE.CylinderGeometry(0.07, 0.09, 6, 5);
+  poleGeo.translate(0, 3, 0);
+  const poles = new THREE.InstancedMesh(poleGeo, lambert(0xdddddd), flagSpots.length);
+  const flagGeo = new THREE.PlaneGeometry(1.6, 1);
+  flagGeo.translate(0.8, 0, 0); // hinged on the pole
+  const flags = new THREE.InstancedMesh(flagGeo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), flagSpots.length);
+  const flagColors = [0xe8322f, 0xffd23a, 0x2f6bff, 0x2fbf4a, 0xff5fb0, 0xffffff];
+  const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fs = new THREE.Vector3(1, 1, 1), fp = new THREE.Vector3();
+  flagSpots.forEach((f, n) => {
+    f.base = roadPoint(f.k, f.lat, -0.3);
+    poles.setMatrixAt(n, fm.compose(f.base, fq.identity(), fs));
+    flags.setColorAt(n, cc.set(flagColors[n % flagColors.length]));
+    f.phase = rand() * 6;
+  });
+  poles.castShadow = true;
+  trackRoot.add(poles, flags);
+
+  // ---- Vultures circling over the canyon ----
+  const birdMat = lambert(0x2b2220);
+  const birds = [];
+  const birdSpots = [[0, 0], [-160, 80], [170, -60], [-120, -40], [100, 90]];
+  for (const [bx, bz] of birdSpots) {
+    const g = new THREE.Group();
+    const bodyGeo = new THREE.ConeGeometry(0.3, 1.5, 5);
+    bodyGeo.rotateX(Math.PI / 2);
+    g.add(new THREE.Mesh(bodyGeo, birdMat));
+    const wings = [1, -1].map((side) => {
+      const wg = new THREE.BoxGeometry(2.1, 0.05, 0.75);
+      wg.translate(side * 1.05, 0, 0);
+      const w = new THREE.Mesh(wg, birdMat);
+      g.add(w);
+      return w;
+    });
+    trackRoot.add(g);
+    birds.push({ g, wings, cx: bx + (rand() - 0.5) * 40, cz: bz + (rand() - 0.5) * 40, r: 18 + rand() * 30,
+      y: maxY + 22 + rand() * 22, w: (0.18 + rand() * 0.15) * (rand() < 0.5 ? -1 : 1), a: rand() * 6, t: rand() * 10 });
+  }
+
+  // ---- Hot-air balloons drifting far off ----
+  const balloons = [];
+  const stripes = [[0xe8322f, 0xffd23a], [0x2f6bff, 0xffffff], [0x9b4dff, 0xff8a00]];
+  const profile = [[0.6, -4.4], [1.7, -3.6], [3.2, -1.9], [4.1, 0.3], [4.2, 2], [3.7, 3.7], [2.6, 5], [1, 5.7], [0, 5.8]].map(([r, y]) => new THREE.Vector2(r, y));
+  stripes.forEach((pair, n) => {
+    const g = new THREE.Group();
+    for (let k = 0; k < 12; k++) {
+      g.add(new THREE.Mesh(new THREE.LatheGeometry(profile, 2, (k / 12) * Math.PI * 2, Math.PI / 6), lambert(pair[k % 2])));
+    }
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1, 1.2), lambert(0x7a4a2a));
+    basket.position.y = -6.4;
+    g.add(basket);
+    for (const [x, z] of [[0.5, 0.5], [-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5]]) {
+      const rope = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.6, 0.05), lambert(0x3a2a1a));
+      rope.position.set(x, -5.3, z);
+      g.add(rope);
+    }
+    bakeMeshes(g);
+    g.scale.setScalar(1.6);
+    trackRoot.add(g);
+    const a = (n / 3) * Math.PI * 2 + 0.6;
+    balloons.push({ g, cx: (minX + maxX) / 2 + Math.cos(a) * 190, cz: (minZ + maxZ) / 2 + Math.sin(a) * 150,
+      y: 55 + n * 14, a: rand() * 6, t: rand() * 10 });
+  });
+
+  // ---- Tumbleweeds rolling across the road ahead of the player ----
+  const weedMat = new THREE.MeshLambertMaterial({ color: 0xb48c58, wireframe: true });
+  const weedCore = lambert(0x8a6a3c);
+  const weeds = [];
+  for (let n = 0; n < 5; n++) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 1), weedMat));
+    g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), weedCore));
+    g.visible = false;
+    trackRoot.add(g);
+    weeds.push({ g, wait: 1 + n * 2.5, t: 0, life: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3(), axis: new THREE.Vector3() });
+  }
+  const spawnWeed = (w) => {
+    const k = (kart.trackIdx + 45 + ((rand() * 90) | 0)) % N;
+    const side = rand() < 0.5 ? 1 : -1;
+    const lat = side * ((side > 0 ? wL[k] : wR[k]) + 7);
+    const speed = 3.5 + rand() * 3;
+    w.pos.copy(roadPoint(k, lat));
+    w.vel.set(-normals[k].x * side, 0, -normals[k].z * side).multiplyScalar(speed)
+      .addScaledVector(tangents[k], (rand() - 0.5) * 2);
+    w.axis.set(w.vel.z, 0, -w.vel.x).normalize();
+    w.k = k;
+    w.life = (Math.abs(lat) * 2) / speed;
+    w.t = 0;
+    w.g.visible = true;
+  };
+
+  // ---- Dust devils: spiralling columns of sand on the canyon floor ----
+  const DEVILS = 2, PER = 60;
+  const dPos = new Float32Array(DEVILS * PER * 3), dCol = new Float32Array(DEVILS * PER * 3);
+  const dAlpha = new Float32Array(DEVILS * PER), dSize = new Float32Array(DEVILS * PER);
+  const dGeo = new THREE.BufferGeometry();
+  const dyn = (a, n) => new THREE.BufferAttribute(a, n).setUsage(THREE.DynamicDrawUsage);
+  dGeo.setAttribute('position', dyn(dPos, 3));
+  dGeo.setAttribute('color', dyn(dCol, 3));
+  dGeo.setAttribute('alpha', dyn(dAlpha, 1));
+  dGeo.setAttribute('size', dyn(dSize, 1));
+  const dMat = particleMaterial();
+  const devilPoints = new THREE.Points(dGeo, dMat);
+  devilPoints.frustumCulled = false;
+  trackRoot.add(devilPoints);
+  const devils = Array.from({ length: DEVILS }, () => ({ p: null, t: 0, life: 0, drift: new THREE.Vector3(),
+    h: Float32Array.from({ length: PER }, () => rand() * 9), th: Float32Array.from({ length: PER }, () => rand() * 6.3) }));
+  for (let i = 0; i < DEVILS * PER; i++) dCol.set([0.86, 0.66, 0.44], i * 3);
+  const placeDevil = (dv) => {
+    // somewhere on the floor beside the road ahead of the player
+    const k = (kart.trackIdx + 30 + ((rand() * 120) | 0)) % N;
+    const side = rand() < 0.5 ? 1 : -1;
+    dv.p = roadPoint(k, side * ((side > 0 ? wL[k] : wR[k]) + T.curb + T.wallThickness + 2 + rand() * 3));
+    dv.drift.set((rand() - 0.5) * 1.2, 0, (rand() - 0.5) * 1.2);
+    dv.t = 0;
+    dv.life = 10 + rand() * 8;
+  };
+
+  let clock = 0;
+  const tq = new THREE.Quaternion();
+  return {
+    update(dt) {
+      clock += dt;
+      sky.position.copy(camera.position);
+      sunDisc.position.copy(camera.position).addScaledVector(sunDir, 420);
+      sunGlow.position.copy(camera.position).addScaledVector(sunDir, 425);
+      sunDisc.lookAt(camera.position);
+      sunGlow.lookAt(camera.position);
+
+      flagSpots.forEach((f, n) => {
+        const yaw = Math.atan2(tangents[f.k].x, tangents[f.k].z) + Math.PI + Math.sin(clock * 3 + f.phase) * 0.35;
+        fq.setFromAxisAngle(_up, yaw);
+        fp.copy(f.base).y += 5.4;
+        flags.setMatrixAt(n, fm.compose(fp, fq, fs));
+      });
+      flags.instanceMatrix.needsUpdate = true;
+
+      for (const b of birds) {
+        b.a += b.w * dt;
+        b.t += dt;
+        b.g.position.set(b.cx + Math.cos(b.a) * b.r, b.y + Math.sin(b.t * 0.5) * 1.5, b.cz + Math.sin(b.a) * b.r);
+        b.g.rotation.set(0, Math.atan2(-Math.sin(b.a) * b.w, Math.cos(b.a) * b.w), 0);
+        b.g.rotateZ(-Math.sign(b.w) * 0.35); // lean into the circle
+        const flap = Math.sin(b.t * 0.35) > 0.4 ? Math.sin(b.t * 7) * 0.5 : 0.08; // glide most of the time
+        b.wings[0].rotation.z = flap;
+        b.wings[1].rotation.z = -flap;
+      }
+      for (const b of balloons) {
+        b.a += dt * 0.012;
+        b.t += dt;
+        b.g.position.set(b.cx + Math.cos(b.a) * 40, b.y + Math.sin(b.t * 0.3) * 2, b.cz + Math.sin(b.a) * 40);
+      }
+      for (const w of weeds) {
+        if (!w.g.visible) {
+          w.wait -= dt;
+          if (w.wait <= 0 && state.phase !== 'menu') spawnWeed(w);
+          continue;
+        }
+        w.t += dt;
+        w.pos.addScaledVector(w.vel, dt);
+        const k = nearestTrackIndex(w.pos, w.k);
+        w.k = k;
+        w.g.position.set(w.pos.x, surfaceY(k, clampLane(k, lateral(k, w.pos), 0)) + 0.85 + Math.abs(Math.sin(w.t * 2.6)) * 1.1, w.pos.z);
+        tq.setFromAxisAngle(w.axis, (w.vel.length() / 0.85) * dt);
+        w.g.quaternion.premultiply(tq);
+        if (w.t > w.life) { w.g.visible = false; w.wait = 1.5 + rand() * 4; }
+      }
+      dMat.uniforms.scale.value = fx.points.material.uniforms.scale.value;
+      devils.forEach((dv, d) => {
+        if (!dv.p || dv.t > dv.life) placeDevil(dv);
+        dv.t += dt;
+        dv.p.addScaledVector(dv.drift, dt);
+        const fade = Math.min(1, dv.t / 2, (dv.life - dv.t) / 2);
+        for (let n = 0; n < PER; n++) {
+          const i = d * PER + n;
+          dv.h[n] += dt * 1.6;
+          if (dv.h[n] > 9) dv.h[n] = 0;
+          const h = dv.h[n], r = 0.35 + h * 0.22;
+          dv.th[n] += dt * (4.5 - h * 0.25);
+          dPos.set([dv.p.x + Math.cos(dv.th[n]) * r, dv.p.y + h, dv.p.z + Math.sin(dv.th[n]) * r], i * 3);
+          dAlpha[i] = 0.3 * fade * Math.min(1, h) * (1 - h / 9);
+          dSize[i] = 0.8 + h * 0.15;
+        }
+      });
+      for (const a of ['position', 'alpha', 'size']) dGeo.attributes[a].needsUpdate = true;
+    },
+  };
+}
+const _up = new THREE.Vector3(0, 1, 0);
 
 // ---------- 1d. Karts (physics + visuals). karts[0] is the player. ----------
 // shared by every kart's dizzy stars (see buildKart)
@@ -577,7 +1339,7 @@ for (const k of karts) {
 
 function makeRacer({ name, colors }, isPlayer) {
   return Object.assign(buildKart(colors), {
-    skid: [{ x: 0, z: 0, on: false }, { x: 0, z: 0, on: false }], // last skid-mark point per rear wheel
+    skid: [{ x: 0, y: 0, z: 0, on: false }, { x: 0, y: 0, z: 0, on: false }], // last skid-mark point per rear wheel
     name, isPlayer,
     color: '#' + colors[0].toString(16).padStart(6, '0'),
     ctl: { steer: 0, gas: false, brake: false }, // steer -1..1, positive = right
@@ -591,7 +1353,7 @@ function makeRacer({ name, colors }, isPlayer) {
 function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
-    boost: 0, flipTimer: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
+    boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
     item: null, itemRoll: 0, spin: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
   };
@@ -759,26 +1521,14 @@ function bakeMeshes(group, keep = []) {
   return mesh;
 }
 
-// ---------- 1f. Item boxes, boost pads, banana + shell models ----------
-const itemVis = buildItemVisuals();
+// ---------- 1f. Item boxes, boost pads, banana + shell models (built per track by loadTrack) ----------
 
 // ---------- 1g. Effects: smoke / dust / hit bursts (one particle system) + skid marks ----------
 const fx = buildEffects();
 
-function buildEffects() {
-  // Particles: one THREE.Points with a soft round sprite, per-particle colour, alpha and size.
-  const MAX = 220;
-  const pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3);
-  const alpha = new Float32Array(MAX), size = new Float32Array(MAX);
-  const vel = new Float32Array(MAX * 3), life = new Float32Array(MAX), maxLife = new Float32Array(MAX);
-  const size0 = new Float32Array(MAX), grow = new Float32Array(MAX), alpha0 = new Float32Array(MAX);
-  const geo = new THREE.BufferGeometry();
-  const attr = (a, n) => new THREE.BufferAttribute(a, n).setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute('position', attr(pos, 3));
-  geo.setAttribute('color', attr(col, 3));
-  geo.setAttribute('alpha', attr(alpha, 1));
-  geo.setAttribute('size', attr(size, 1));
-  const mat = new THREE.ShaderMaterial({
+/** Soft round sprites with per-particle colour, alpha and size (attributes: color, alpha, size). */
+function particleMaterial() {
+  return new THREE.ShaderMaterial({
     uniforms: { scale: { value: 300 } },
     vertexShader: `
       attribute float alpha; attribute float size; attribute vec3 color;
@@ -799,6 +1549,22 @@ function buildEffects() {
     transparent: true,
     depthWrite: false,
   });
+}
+
+function buildEffects() {
+  // Particles: one THREE.Points with a soft round sprite, per-particle colour, alpha and size.
+  const MAX = 220;
+  const pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3);
+  const alpha = new Float32Array(MAX), size = new Float32Array(MAX);
+  const vel = new Float32Array(MAX * 3), life = new Float32Array(MAX), maxLife = new Float32Array(MAX);
+  const size0 = new Float32Array(MAX), grow = new Float32Array(MAX), alpha0 = new Float32Array(MAX);
+  const geo = new THREE.BufferGeometry();
+  const attr = (a, n) => new THREE.BufferAttribute(a, n).setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', attr(pos, 3));
+  geo.setAttribute('color', attr(col, 3));
+  geo.setAttribute('alpha', attr(alpha, 1));
+  geo.setAttribute('size', attr(size, 1));
+  const mat = particleMaterial();
   const points = new THREE.Points(geo, mat);
   points.frustumCulled = false;
   scene.add(points);
@@ -829,10 +1595,11 @@ function buildEffects() {
   scene.add(skidMesh);
   let skidNext = 0, skidDirty = false;
 
+  // a, b: points on the road surface (+0.05: between curbs at 0.04 and dashes at 0.06)
   function skid(a, b, halfW) {
     const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
-    const nx = (-dz / len) * halfW, nz = (dx / len) * halfW, y = 0.05; // between curbs (0.04) and dashes (0.06)
-    skidPos.set([a.x + nx, y, a.z + nz, a.x - nx, y, a.z - nz, b.x + nx, y, b.z + nz, b.x - nx, y, b.z - nz], skidNext * 12);
+    const nx = (-dz / len) * halfW, nz = (dx / len) * halfW;
+    skidPos.set([a.x + nx, a.y, a.z + nz, a.x - nx, a.y, a.z - nz, b.x + nx, b.y, b.z + nz, b.x - nx, b.y, b.z - nz], skidNext * 12);
     skidNext = (skidNext + 1) % SKIDS;
     skidDirty = true;
   }
@@ -871,11 +1638,7 @@ function buildEffects() {
 
 function buildItemVisuals() {
   const I = CFG.items;
-  const { samples, tangents, normals } = track;
-  const onTrack = (idx, lane, y) => {
-    const s = samples[idx], n = normals[idx];
-    return new THREE.Vector3(s.x + n.x * lane, y, s.z + n.z * lane);
-  };
+  const { boxRows, pads: padSpots } = track.def;
   const canvasTex = (w, h, draw) => {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
@@ -895,9 +1658,10 @@ function buildItemVisuals() {
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 32, 35);
   });
   const boxes = [];
-  for (const idx of I.boxRows) for (const lane of I.boxLanes) {
+  for (const idx of boxRows) for (const lane of I.boxLanes) {
     const l = clampLane(idx, lane, 1.2); // rows on narrower bits squeeze in
-    boxes.push({ pos: onTrack(idx, l, 1.0), idx, lane: l, hidden: 0 });
+    const pos = roadPoint(idx, l, 1.0);
+    boxes.push({ pos, baseY: pos.y, idx, lane: l, hidden: 0 });
   }
   const boxMesh = new THREE.InstancedMesh(
     new THREE.BoxGeometry(1.1, 1.1, 1.1),
@@ -906,7 +1670,7 @@ function buildItemVisuals() {
   // Its bounding sphere is computed once, from whatever the instances are at the first draw (the boot
   // warm-up, all at the origin), so culling would hide every box away from there. 1 draw call: never cull.
   boxMesh.frustumCulled = false;
-  scene.add(boxMesh);
+  trackRoot.add(boxMesh);
 
   // Boost pads: chevrons scrolling toward the driving direction
   const padTex = canvasTex(64, 128, (g) => {
@@ -917,13 +1681,14 @@ function buildItemVisuals() {
   padTex.wrapS = padTex.wrapT = THREE.RepeatWrapping;
   padTex.repeat.set(1, 2);
   const padMat = new THREE.MeshBasicMaterial({ map: padTex });
-  const pads = I.pads.map(([idx, lane]) => {
+  const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+  const pads = padSpots.map(([idx, lane]) => {
     const geo = new THREE.PlaneGeometry(I.padWidth, I.padLength);
     geo.rotateX(-Math.PI / 2);
     const mesh = new THREE.Mesh(geo, padMat);
-    mesh.position.copy(onTrack(idx, lane, 0.08));
-    mesh.rotation.y = Math.atan2(tangents[idx].x, tangents[idx].z) + Math.PI; // chevrons point forward
-    scene.add(mesh);
+    mesh.position.copy(roadPoint(idx, lane, 0.08));
+    mesh.quaternion.setFromRotationMatrix(roadBasis(idx)).multiply(flip); // on the slope; chevrons point forward
+    trackRoot.add(mesh);
     return { idx, lane, len: Math.ceil(I.padLength / track.spacing) };
   });
 
@@ -984,15 +1749,17 @@ const minimap = buildMinimap();
 function buildMinimap() {
   const el = $('minimap');
   const ctx = el.getContext('2d');
-  const path = new Path2D();
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (const s of track.samples) {
-    minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
-    minZ = Math.min(minZ, s.z); maxZ = Math.max(maxZ, s.z);
-  }
-  const map = { el, ctx, path, size: 0, scale: 1, ox: 0, oz: 0, minX, maxX, minZ, maxZ };
+  const map = { el, ctx, path: new Path2D(), size: 0, scale: 1, ox: 0, oz: 0, minX: 0, minZ: 0 };
 
+  // on resize and on every track change
   map.layout = () => {
+    if (!track) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const s of track.samples) {
+      minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
+      minZ = Math.min(minZ, s.z); maxZ = Math.max(maxZ, s.z);
+    }
+    Object.assign(map, { minX, minZ });
     const dpr = Math.min(window.devicePixelRatio, 2);
     const cssSize = el.clientWidth || 110;
     el.width = el.height = cssSize * dpr;
@@ -1008,8 +1775,7 @@ function buildMinimap() {
     });
     map.path.closePath();
   };
-  map.project = (x, z) => [map.ox + (x - minX) * map.scale, map.oz + (z - minZ) * map.scale];
-  map.layout();
+  map.project = (x, z) => [map.ox + (x - map.minX) * map.scale, map.oz + (z - map.minZ) * map.scale];
   return map;
 }
 
@@ -1076,6 +1842,14 @@ function initControls() {
     el.addEventListener('pointercancel', () => { down = null; });
     el.addEventListener('click', (e) => { if (e.detail === 0) fn(); });
   };
+  for (const [id, t] of Object.entries(CFG.tracks)) {
+    const b = document.createElement('button');
+    b.className = 'trk';
+    b.dataset.track = id;
+    b.innerHTML = `<i>${t.icon}</i>${t.name}`;
+    onTap(b, () => { sound.click(); selectTrack(id); });
+    $('track-pick').append(b);
+  }
   onTap($('btn-start'), startRace);
   onTap($('btn-again'), startRace);
   onTap($('btn-menu'), () => { sound.click(); showMenu(); });
@@ -1198,11 +1972,11 @@ function placeOnGrid() {
 
 /** Puts a kart on the track at sample idx, `lane` metres left of the centre line, facing forward. */
 function resetKart(k, idx, lane = 0) {
-  const { samples, tangents, normals } = track;
-  const s = samples[idx], t = tangents[idx], n = normals[idx];
   const body = k.body;
-  body.position.set(s.x + n.x * lane, 1.2, s.z + n.z * lane);
-  body.quaternion.setFromAxisAngle(AXIS_Y, Math.atan2(t.x, t.z));
+  const p = roadPoint(idx, lane, 1.2, resetP);
+  body.position.set(p.x, p.y, p.z);
+  resetQ.setFromRotationMatrix(roadBasis(idx, resetM)); // level with the road: slope and banking
+  body.quaternion.set(resetQ.x, resetQ.y, resetQ.z, resetQ.w);
   body.velocity.setZero();
   body.angularVelocity.setZero();
   // teleport: no interpolating from the old spot
@@ -1210,8 +1984,10 @@ function resetKart(k, idx, lane = 0) {
   body.interpolatedPosition.copy(body.position);
   body.previousQuaternion.copy(body.quaternion);
   body.interpolatedQuaternion.copy(body.quaternion);
-  Object.assign(k, { trackIdx: idx, flipTimer: 0, driftCharge: 0, boost: 0, steerSmooth: 0, spin: 0 });
+  Object.assign(k, { trackIdx: idx, flipTimer: 0, fallT: 0, driftCharge: 0, boost: 0, steerSmooth: 0, spin: 0 });
 }
+
+const resetP = new THREE.Vector3(), resetQ = new THREE.Quaternion(), resetM = new THREE.Matrix4();
 
 function updateGameFlow(dt) {
   updateWrongWay(dt);
@@ -1264,9 +2040,12 @@ function updateKartProgress(k, dt, racing) {
   // Fewer than 3 wheels down for a while = beached (e.g. perched on a wall with the rear in the air)
   const wheelsDown = k.vehicle.wheelInfos.filter((w) => w.raycastResult.hasHit).length;
   k.flipTimer = up.y < 0.3 || wheelsDown < 3 ? k.flipTimer + dt : 0;
-  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.ai?.resetNow;
+  // Off the road (over a rail, off a jump): well below the road surface for a moment
+  const below = surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
+  k.fallT = below ? k.fallT + dt : 0;
+  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.fallT > 0.6 || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
-    k.lastReset = k.ai?.resetNow || (k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : 'button');
+    k.lastReset = k.ai?.resetNow || (k.fallT > 0.6 ? 'fell' : k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : 'button');
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     resetKart(k, k.trackIdx, lane);
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
@@ -1317,13 +2096,32 @@ function updatePlaces() {
   if (state.phase === 'race' && kart.place < before) sound.overtake();
 }
 
-// Personal bests survive restarts (per device). Storage can be unavailable (private mode): never required.
+// Personal bests survive restarts (per device), one { race, lap } per track. Storage can be unavailable
+// (private mode): never required.
 const RECORD_KEY = 'kartrush.records';
 function loadRecords() {
-  try { return JSON.parse(localStorage.getItem(RECORD_KEY)) || {}; } catch { return {}; }
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem(RECORD_KEY)) || {}; } catch { /* storage blocked */ }
+  if (typeof all.race === 'number') all = { meadow: { race: all.race, lap: all.lap } }; // from before tracks
+  return all;
 }
-function saveRecords(r) {
-  try { localStorage.setItem(RECORD_KEY, JSON.stringify(r)); } catch { /* storage blocked */ }
+function saveRecords(all) {
+  try { localStorage.setItem(RECORD_KEY, JSON.stringify(all)); } catch { /* storage blocked */ }
+}
+
+// The track picked on the title screen, remembered per device. ?track=<id> in the URL wins (tests).
+const TRACK_KEY = 'kartrush.track';
+function savedTrack() {
+  let id = new URLSearchParams(location.search).get('track');
+  if (!CFG.tracks[id]) try { id = localStorage.getItem(TRACK_KEY); } catch { /* storage blocked */ }
+  return CFG.tracks[id] ? id : 'meadow';
+}
+function selectTrack(id) {
+  if (track.id === id) return;
+  try { localStorage.setItem(TRACK_KEY, id); } catch { /* storage blocked */ }
+  loadTrack(id);
+  showMenu();
+  warmUpShaders(); // the new track's materials, before the race needs them
 }
 
 /** Title screen. The karts sit on the grid behind it. */
@@ -1334,10 +2132,11 @@ function showMenu() {
   fx.reset();
   placeOnGrid();
   camState.snap = true;
-  const rec = loadRecords();
+  const rec = loadRecords()[track.id] || {};
   hud.menuRecord.hidden = !rec.race;
   if (rec.race) hud.menuRecord.textContent = `Your record ${fmtTime(rec.race)} · best lap ${fmtTime(rec.lap)}`;
   hud.confetti.replaceChildren();
+  for (const b of $('track-pick').children) b.classList.toggle('on', b.dataset.track === track.id);
   showOverlay(hud.menuScreen);
 }
 
@@ -1418,11 +2217,12 @@ function showResults() {
   hud.resTime.textContent = fmtTime(kart.finishTime);
   hud.resLap.textContent = fmtTime(state.bestLap);
 
-  const rec = loadRecords();
+  const all = loadRecords();
+  const rec = (all[track.id] ||= {});
   const newRace = !(rec.race <= kart.finishTime), newLap = !(rec.lap <= state.bestLap);
   if (newRace) rec.race = kart.finishTime;
   if (newLap) rec.lap = state.bestLap;
-  saveRecords(rec);
+  saveRecords(all);
   hud.resRecord.innerHTML = newRace || newLap
     ? `<span class="new">&#9733; NEW ${newRace ? 'RECORD' : 'BEST LAP'}</span>`
     : `Record ${fmtTime(rec.race)} &middot; best lap ${fmtTime(rec.lap)}`;
@@ -1439,7 +2239,10 @@ function showResults() {
   showOverlay(hud.resultsScreen);
 }
 
-/** Nearest centre-line sample, searched locally around the previous index. */
+/**
+ * Nearest centre-line sample, searched locally around the previous index. Height counts double, so where
+ * the track crosses itself the road you're on wins over the one 9 m above or below.
+ */
 function nearestTrackIndex(pos, hint) {
   const { N, samples } = track;
   let best = hint, bestD = Infinity;
@@ -1447,7 +2250,7 @@ function nearestTrackIndex(pos, hint) {
     for (let k = from; k <= to; k += step) {
       const i = ((k % N) + N) % N;
       const s = samples[i];
-      const d = (s.x - pos.x) ** 2 + (s.z - pos.z) ** 2;
+      const d = (s.x - pos.x) ** 2 + (s.z - pos.z) ** 2 + 4 * (s.y - pos.y) ** 2;
       if (d < bestD) { bestD = d; best = i; }
     }
   };
@@ -1507,7 +2310,7 @@ function updateAI(k, dt, canDrive) {
   const stepsTo = (i) => (i - idx + N) % N;
   for (const pad of itemVis.pads) if (stepsTo(pad.idx) * spacing < 35 && stepsTo(pad.idx) > 2) goal = pad.lane;
   if (!k.item) {
-    for (const row of CFG.items.boxRows) {
+    for (const row of track.def.boxRows) {
       const dist = stepsTo(row) * spacing;
       if (dist > 4 && dist < 30) {
         const open = itemVis.boxes.filter((bx) => bx.idx === row && bx.hidden < dist / Math.max(k.speed, 5));
@@ -1564,7 +2367,7 @@ function updateAI(k, dt, canDrive) {
   for (let s = 2; s * spacing < 45; s += 2) {
     // this AI's own path is somewhere between the centre line and the racing line: blend the curvatures
     const c = (idx + s) % N, curv = lerp(1 / radius[c], 1 / track.lineRadius[c], ai.lineUse);
-    const vCorner = Math.sqrt(ai.grip / Math.max(curv, 1e-4));
+    const vCorner = Math.sqrt((ai.grip - CFG.gravity * Math.abs(track.bank[c])) / Math.max(curv, 1e-4)); // banks help
     corner = Math.min(corner, Math.sqrt(vCorner * vCorner + 2 * brakeDecel * s * spacing));
   }
   const target = Math.min(pace, corner);
@@ -1666,13 +2469,15 @@ function useItem(k) {
     if (k.isPlayer) sound.boost();
   } else if (item === 'banana') {
     const pos = new THREE.Vector3(b.position.x - fx * 2.4, 0, b.position.z - fz * 2.4);
+    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)); // on the road, even mid-air
     drops.push({ mesh: spawnModel('banana', pos), pos, owner: k, age: 0 });
     if (k.isPlayer) sound.drop();
   } else {
     const red = item === 'red';
     const ahead = red ? redShellTarget(k) : null;
     const speed = red ? I.redSpeed : I.shellSpeed;
-    const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0.15, b.position.z + fz * 2.4);
+    const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0, b.position.z + fz * 2.4);
+    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.15;
     shells.push({
       kind: item, mesh: spawnModel(item, pos), pos,
       vel: new THREE.Vector3(fx * speed, 0, fz * speed), idx: k.trackIdx,
@@ -1725,7 +2530,8 @@ function spinOut(k, by, what) {
 function updateItems(dt, racing) {
   const I = CFG.items;
   const { N, samples, normals } = track;
-  const flat2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+  // distance on the map, but nothing more than 2.5 m above or below counts (over a jump, on the bridge)
+  const flat2 = (a, b) => (Math.abs(a.y - b.y) > 2.5 ? Infinity : (a.x - b.x) ** 2 + (a.z - b.z) ** 2);
 
   // --- Boxes: pick up, respawn
   for (const box of itemVis.boxes) {
@@ -1808,6 +2614,7 @@ function updateItems(dt, racing) {
         if (s.kind === 'green') s.bounces++;
       }
     }
+    s.pos.y = surfaceY(s.idx, clampLane(s.idx, lateral(s.idx, s.pos), 0)) + 0.15; // shells hug the road
     s.mesh.position.copy(s.pos);
     s.mesh.rotation.y += dt * 12;
 
@@ -1961,14 +2768,33 @@ function driveKart(k, dt, canDrive) {
       brake = k.ai ? CFG.ai.coast : K.playerCoast;
     }
   } else {
-    brake = K.brakeForce; // hold still during menu / countdown
+    brake = K.wheelBrake; // held still on the grid (menu / countdown): see applyStabilityAssist
   }
+  k.held = !canDrive;
   // cannon-es pushes along -forward for positive force with this axle setup, hence the negation
   vehicle.applyEngineForce(-engine, 2);
   vehicle.applyEngineForce(-engine, 3);
   for (let i = 0; i < 4; i++) vehicle.setBrake(brake, i);
 
   k.steerAngle = steerAngle;
+}
+
+/**
+ * In the air (jumps, crests), turn the kart gently toward the road's tilt under it and damp any tumbling,
+ * so it lands on its wheels. Yaw (about the kart's own up) is left alone.
+ */
+const airUp = new CANNON.Vec3(), airAxis = new CANNON.Vec3(), airSpin = new CANNON.Vec3();
+const airM = new THREE.Matrix4();
+function airLevel(k) {
+  const K = CFG.kart, body = k.body, dt = CFG.physicsStep;
+  const up = body.quaternion.vmult(LOCAL_UP, airUp);
+  const e = roadBasis(k.trackIdx, airM).elements; // column 1 = the road's up
+  up.cross(airAxis.set(e[4], e[5], e[6]), airAxis); // axis * sin(angle) toward the road's up
+  const av = body.angularVelocity;
+  const spin = up.scale(av.dot(up), airSpin);      // keep the yaw part
+  av.x += (spin.x - av.x) * K.airDamp * dt + airAxis.x * K.airLevel * dt;
+  av.y += (spin.y - av.y) * K.airDamp * dt + airAxis.y * K.airLevel * dt;
+  av.z += (spin.z - av.z) * K.airDamp * dt + airAxis.z * K.airLevel * dt;
 }
 
 /**
@@ -1979,6 +2805,14 @@ function driveKart(k, dt, canDrive) {
 function applyStabilityAssist(k) {
   const K = CFG.kart;
   const { body, vehicle } = k;
+  if (k.held) {
+    // On the grid: pinned, except for settling onto the suspension. Holding karts with the brakes
+    // (brakeForce, an impulse cap) twisted them ~9 deg on the canyon grid's slight slope: the left and
+    // right wheels' brake impulses fought each other. The flat meadow never loaded the brakes.
+    body.velocity.x = body.velocity.z = 0;
+    body.angularVelocity.y = 0;
+    return;
+  }
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
 
   // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
@@ -1993,9 +2827,10 @@ function applyStabilityAssist(k) {
 
   const fwd = body.quaternion.vmult(LOCAL_FWD, tmpFwd);
   const speed = body.velocity.dot(fwd);
+  const onGround = vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
+  if (!onGround) airLevel(k);
   // Boost: extra push through the centre of mass. Doing it with more wheel torque popped wheelies
   // and flipped karts that hit a boost pad at low speed.
-  const onGround = vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
   if (k.boost > 0 && k.spin <= 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed && onGround) {
     const dv = K.boostAccel * CFG.physicsStep;
     body.velocity.x += fwd.x * dv;
@@ -2010,7 +2845,9 @@ function applyStabilityAssist(k) {
 
   if (speed < 3 || !vehicle.wheelInfos.every((w) => w.raycastResult.hasHit)) return;
 
-  const gripLimit = K.maxLateralAccel / speed;
+  // a bank tilted into the turn adds g * tan(bank) of cornering (bank > 0 raises the left: helps right turns)
+  const bankHelp = Math.max(0, Math.sign(k.steerSmooth) * track.bank[k.trackIdx]) * -CFG.gravity;
+  const gripLimit = (K.maxLateralAccel + bankHelp) / speed;
   const targetYaw = clamp((speed * Math.tan(k.steerAngle)) / K.wheelBase, -gripLimit, gripLimit);
   const slack = K.yawSlack + K.steerYawSlack * Math.abs(k.steerSmooth) + K.driftYawSlack * k.driftAmt;
   const yaw = body.angularVelocity.y;
@@ -2074,7 +2911,7 @@ function updateItemVisuals(dt) {
     // Taken boxes are hidden, then pop back in over the last 0.3 s
     const sc = bx.hidden > 0.3 ? 0 : 1 - bx.hidden / 0.3;
     boxScale.setScalar(sc);
-    bx.pos.y = 1.0 + Math.sin(itemClock * 2 + i) * 0.15;
+    bx.pos.y = bx.baseY + Math.sin(itemClock * 2 + i) * 0.15;
     boxMesh.setMatrixAt(i, boxMatrix.compose(bx.pos, boxQuat, boxScale));
   });
   boxMesh.instanceMatrix.needsUpdate = true;
@@ -2124,7 +2961,7 @@ function updateCamera(dt) {
   } else {
     camState.pos.lerp(desiredCam, 1 - Math.exp(-dt * C.posLag));
   }
-  camState.pos.y = Math.max(camState.pos.y, 1.0);
+  camState.pos.y = Math.max(camState.pos.y, track.samples[kart.trackIdx].y + 1.0);
   camera.position.copy(camState.pos);
 
   camState.look.set(
@@ -2153,7 +2990,7 @@ function updateCamera(dt) {
 }
 
 const SMOKE = [0.86, 0.86, 0.9], DUST = [0.6, 0.5, 0.32];
-const emitP = new THREE.Vector3(), emitV = new THREE.Vector3();
+const emitP = new THREE.Vector3(), emitV = new THREE.Vector3(), skidTo = new THREE.Vector3();
 
 function updateEffects(dt) {
   const driving = state.phase === 'race' || state.phase === 'finished';
@@ -2173,18 +3010,20 @@ function updateEffects(dt) {
       if (!driving || !near || !down) { mark.on = false; continue; }
       if (k.drifting) {
         if (Math.random() < dt * 26) {
-          emitP.set(w.position.x, 0.25, w.position.z);
+          emitP.set(w.position.x, w.position.y - 0.15, w.position.z);
           emitV.set((Math.random() - 0.5) * 1.2, 0.7 + Math.random() * 0.7, (Math.random() - 0.5) * 1.2);
           fx.emit(emitP, emitV, SMOKE, { life: 0.8, size: 0.55, grow: 2.2, alpha: 0.42 });
         }
         const dx = w.position.x - mark.x, dz = w.position.z - mark.z;
         if (!mark.on || dx * dx + dz * dz > 0.35 * 0.35) {
-          if (mark.on && !grass) fx.skid(mark, w.position, 0.13);
-          mark.x = w.position.x; mark.z = w.position.z; mark.on = true;
+          const ground = k.vehicle.wheelInfos[2 + j].raycastResult.hitPointWorld.y + 0.05;
+          skidTo.set(w.position.x, ground, w.position.z);
+          if (mark.on && !grass) fx.skid(mark, skidTo, 0.13);
+          mark.x = skidTo.x; mark.y = ground; mark.z = skidTo.z; mark.on = true;
         }
       } else mark.on = false;
       if (grass && Math.random() < dt * 20) {
-        emitP.set(w.position.x, 0.2, w.position.z);
+        emitP.set(w.position.x, w.position.y - 0.2, w.position.z);
         emitV.set((Math.random() - 0.5) * 1.5, 0.9 + Math.random() * 0.8, (Math.random() - 0.5) * 1.5);
         fx.emit(emitP, emitV, DUST, { life: 0.6, size: 0.45, grow: 1.6, alpha: 0.5 });
       }
@@ -2288,6 +3127,7 @@ function render(dt) {
   updateEffects(dt);
   fx.update(dt);
   updateItemVisuals(dt);
+  theme.update(dt);
   updateHUD();
   renderer.render(scene, camera);
   updateSound(dt);
@@ -2396,7 +3236,8 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 19 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 21 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+loadTrack(savedTrack());
 onResize();
 showMenu();
 warmUpShaders();
