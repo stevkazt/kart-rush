@@ -148,7 +148,9 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fd8ff);
 scene.fog = new THREE.Fog(0x8fd8ff, 90, 330);
 
-const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 600);
+// near 0.5 (was 0.1): the camera never gets that close to anything, and depth precision is ~5x better,
+// which the flat road markings layered a few cm apart need to not shimmer far down the track
+const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.5, 600);
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x5c9a3c, 1.3));
 const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
@@ -228,10 +230,11 @@ function buildTrack() {
   // Road surface, centre dashes and curbs
   const hw = T.halfWidth;
   scene.add(makeRibbon(data, -hw, hw, 0.02, (i) => ((i / 10) | 0) % 2 ? 0x55585f : 0x5b5e66));
-  scene.add(makeRibbon(data, -0.18, 0.18, 0.03, (i) => (i % 12 < 6 ? 0xf2f2f2 : null)));
+  // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
+  scene.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? 0xf2f2f2 : null)));
   const curbColor = (i) => ((i / 3) | 0) % 2 ? 0xffffff : 0xe8322f;
-  scene.add(makeRibbon(data, hw, hw + T.curb, 0.025, curbColor));
-  scene.add(makeRibbon(data, -hw - T.curb, -hw, 0.025, curbColor));
+  scene.add(makeRibbon(data, hw, hw + T.curb, 0.04, curbColor));
+  scene.add(makeRibbon(data, -hw - T.curb, -hw, 0.04, curbColor));
 
   buildWalls(data);
   buildStartLine(data);
@@ -334,7 +337,7 @@ function buildStartLine({ samples, tangents }) {
   geo.rotateX(-Math.PI / 2);
   const line = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
   const yaw = Math.atan2(tangents[0].x, tangents[0].z);
-  line.position.set(samples[0].x, 0.04, samples[0].z);
+  line.position.set(samples[0].x, 0.1, samples[0].z);
   line.rotation.y = yaw;
   line.receiveShadow = true;
   scene.add(line);
@@ -663,7 +666,7 @@ function buildItemVisuals() {
     const geo = new THREE.PlaneGeometry(I.padWidth, I.padLength);
     geo.rotateX(-Math.PI / 2);
     const mesh = new THREE.Mesh(geo, padMat);
-    mesh.position.copy(onTrack(idx, lane, 0.035));
+    mesh.position.copy(onTrack(idx, lane, 0.08));
     mesh.rotation.y = Math.atan2(tangents[idx].x, tangents[idx].z) + Math.PI; // chevrons point forward
     scene.add(mesh);
     return { idx, lane, len: Math.ceil(I.padLength / track.spacing) };
@@ -703,6 +706,8 @@ const state = {
   bestLap: Infinity,
   finishedCount: 0,
   resultsShown: false,
+  paused: false,
+  wrongT: 0,             // seconds spent driving the wrong way
 };
 
 const input = { left: false, right: false, gas: false, brake: false, reset: false, item: false };
@@ -715,7 +720,8 @@ const hud = {
   menuScreen: $('menu-screen'), resultsScreen: $('results-screen'), menuRecord: $('menu-record'),
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
-  item: $('btn-item'), warn: $('warn'), perf: $('perf'),
+  item: $('btn-item'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'),
+  pauseScreen: $('pause-screen'),
 };
 
 const minimap = buildMinimap();
@@ -803,18 +809,22 @@ function initControls() {
   $('btn-start').addEventListener('click', startRace);
   $('btn-again').addEventListener('click', startRace);
   $('btn-menu').addEventListener('click', () => { sound.click(); showMenu(); });
+  $('btn-pause').addEventListener('pointerdown', (e) => { e.preventDefault(); pauseGame(); });
+  $('btn-resume').addEventListener('click', resumeGame);
+  $('btn-restart').addEventListener('click', () => { state.paused = false; startRace(); });
+  $('btn-quit').addEventListener('click', () => { state.paused = false; sound.unlock(); showMenu(); });
 
   // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
   const muteBtn = $('btn-mute');
   const showMute = () => { muteBtn.classList.toggle('off', sound.muted); muteBtn.setAttribute('aria-pressed', sound.muted); };
   muteBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    sound.unlock();
+    if (!state.paused) sound.unlock();
     sound.setMuted(!sound.muted);
     showMute();
   });
   showMute();
-  document.addEventListener('pointerdown', () => { if (state.phase !== 'menu') sound.unlock(); });
+  document.addEventListener('pointerdown', () => { if (state.phase !== 'menu' && !state.paused) sound.unlock(); });
 
   // --- Block browser gestures (scroll, pinch, double-tap zoom, long-press menu) ---
   const block = (e) => e.preventDefault();
@@ -841,6 +851,7 @@ function initControls() {
     keys.add(e.code); updateKeys();
     if (e.code === 'KeyR') input.reset = true;
     if (e.code === 'Space' || e.code === 'KeyE') input.item = true;
+    if (e.code === 'Escape' || e.code === 'KeyP') (state.paused ? resumeGame : pauseGame)();
   });
   window.addEventListener('keyup', (e) => { keys.delete(e.code); updateKeys(); });
 
@@ -889,6 +900,7 @@ function startRace() {
 
   Object.assign(state, {
     phase: 'countdown', countdown: 3, raceTime: 0, lapStart: 0, finishedCount: 0, resultsShown: false,
+    paused: false, wrongT: 0,
   });
   clearItems();
   placeOnGrid();
@@ -929,6 +941,7 @@ function resetKart(k, idx, lane = 0) {
 }
 
 function updateGameFlow(dt) {
+  updateWrongWay(dt);
   if (state.phase === 'countdown') {
     const prev = Math.ceil(state.countdown);
     state.countdown -= dt;
@@ -987,11 +1000,12 @@ function completeLap(k) {
   k.halfway = false;
   if (k.isPlayer) {
     const lapTime = state.raceTime - state.lapStart;
+    showSplit(lapTime, state.bestLap);
     state.bestLap = Math.min(state.bestLap, lapTime);
     state.lapStart = state.raceTime;
     if (k.lap < CFG.laps) {
       const final = k.lap + 1 === CFG.laps;
-      showMessage(final ? 'FINAL LAP!' : `LAP ${k.lap + 1}  ${fmtTime(lapTime)}`);
+      showMessage(final ? 'FINAL LAP!' : `LAP ${k.lap + 1}`);
       final ? sound.finalLap() : sound.lap();
     }
   }
@@ -1043,11 +1057,46 @@ function showMenu() {
   const rec = loadRecords();
   hud.menuRecord.hidden = !rec.race;
   if (rec.race) hud.menuRecord.textContent = `Your record ${fmtTime(rec.race)} · best lap ${fmtTime(rec.lap)}`;
-  hud.menuScreen.hidden = false;
-  hud.resultsScreen.hidden = true;
   hud.confetti.replaceChildren();
+  showOverlay(hud.menuScreen);
+}
+
+/** WRONG WAY after 1 s of facing and moving backwards along the track (reversing is fine). */
+function updateWrongWay(dt) {
+  const t = track.tangents[kart.trackIdx];
+  const fwd = kart.body.quaternion.vmult(LOCAL_FWD, wrongFwd), v = kart.body.velocity;
+  const backwards = state.phase === 'race' && !kart.finished && kart.spin <= 0 &&
+    fwd.x * t.x + fwd.z * t.z < -0.5 && v.x * t.x + v.z * t.z < -2;
+  state.wrongT = backwards ? state.wrongT + dt : 0;
+  const show = state.wrongT > 1;
+  if (hud.wrongway.hidden === show) hud.wrongway.hidden = !show;
+}
+const wrongFwd = new CANNON.Vec3();
+
+/** Shows one overlay screen (menu / results / pause) and hides the HUD behind it. */
+function showOverlay(screen) {
+  for (const el of [hud.menuScreen, hud.resultsScreen, hud.pauseScreen]) el.hidden = el !== screen;
+  hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
   hud.overlay.classList.remove('hidden');
+}
+
+function pauseGame() {
+  if (state.paused || !(state.phase === 'race' || state.phase === 'countdown')) return;
+  state.paused = true;
+  for (const key of Object.keys(input)) input[key] = false; // held buttons would stay held otherwise
+  document.querySelectorAll('.ctl.pressed').forEach((el) => el.classList.remove('pressed'));
+  sound.suspend();
+  showOverlay(hud.pauseScreen);
+}
+
+function resumeGame() {
+  if (!state.paused) return;
+  state.paused = false;
+  lastTime = performance.now(); // no catch-up jump
+  hud.overlay.classList.add('hidden');
+  app.classList.remove('overlay-on');
+  sound.unlock();
 }
 
 /** Results screen; called again as each AI finishes, to fill in the table. */
@@ -1091,10 +1140,7 @@ function showResults() {
       return c;
     }));
   }
-  hud.menuScreen.hidden = true;
-  hud.resultsScreen.hidden = false;
-  app.classList.add('overlay-on');
-  hud.overlay.classList.remove('hidden');
+  showOverlay(hud.resultsScreen);
 }
 
 /** Nearest centre-line sample, searched locally around the previous index. */
@@ -1905,12 +1951,17 @@ function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
+  if (state.paused) return; // the canvas keeps showing the last frame
   stepPhysics(dt);      // 4. physics (AI decides its controls here too)
   updateGameFlow(dt);   // 3. laps / positions / countdown / recovery
   render(dt);           // 5. sync + draw
 }
 
-document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
+// Leaving the app (call, app switch, lock) pauses the race instead of dropping you back into it
+document.addEventListener('visibilitychange', () => {
+  lastTime = performance.now();
+  if (document.hidden) pauseGame();
+});
 
 /**
  * iOS compiles a GPU program the first time each material is drawn (and again for its shadow pass),
@@ -1933,6 +1984,15 @@ function warmUpShaders() {
  * UI helpers
  * ========================================================================== */
 function showCountdown(text) { retrigger(hud.countdown, text); }
+/** Lap time under the LAP message, with the gap to the best lap so far (green = faster). */
+function showSplit(lapTime, best) {
+  const d = lapTime - best;
+  hud.split.innerHTML = fmtTime(lapTime) +
+    (Number.isFinite(best) ? ` <b class="${d < 0 ? 'faster' : 'slower'}">${d < 0 ? '&minus;' : '+'}${Math.abs(d).toFixed(2)}</b>` : '');
+  hud.split.classList.remove('pop-long');
+  void hud.split.offsetWidth; // restart CSS animation
+  hud.split.classList.add('pop-long');
+}
 function showMessage(text) { retrigger(hud.message, text); }
 function retrigger(el, text) {
   el.textContent = text;
@@ -1956,7 +2016,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 11 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 12 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 onResize();
 showMenu();
 warmUpShaders();

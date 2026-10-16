@@ -42,6 +42,8 @@
       <div id="place" hidden><span id="place-num">6</span><span id="place-suffix">th</span><small id="place-of">/6</small></div>
 
       <div id="message"></div>
+      <div id="split"></div>
+      <div id="wrongway" hidden>WRONG WAY</div>
       <div id="warn" hidden>!</div>
       <div id="perf" hidden></div>
       <div id="countdown"></div>
@@ -68,6 +70,7 @@
 
       <button id="btn-reset" aria-label="Reset kart">&#x21BB;</button>
       <button id="btn-mute" class="round-btn" aria-label="Mute sound"></button>
+      <button id="btn-pause" class="round-btn" aria-label="Pause"></button>
     </div>
 
     <!-- ===== Menu / results overlay ===== -->
@@ -80,6 +83,7 @@
           <button id="btn-start" class="btn-primary">START RACE</button>
           <p class="record" id="menu-record" hidden></p>
         </div>
+        <p id="build"></p>
         <div class="card howto">
           <h2>HOW TO PLAY</h2>
           <ul>
@@ -109,8 +113,18 @@
         </div>
         <div class="card"><table id="standings" class="standings"></table></div>
       </div>
+      <!-- Paused -->
+      <div id="pause-screen" class="screen" hidden>
+        <div class="side">
+          <div class="paused">PAUSED</div>
+          <button id="btn-resume" class="btn-primary">RESUME</button>
+          <div class="btn-row">
+            <button id="btn-restart" class="btn-secondary">RESTART</button>
+            <button id="btn-quit" class="btn-secondary">MENU</button>
+          </div>
+        </div>
+      </div>
       <div id="confetti" aria-hidden="true"></div>
-      <p id="build"></p>
     </div>
   </div>
 

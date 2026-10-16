@@ -222,7 +222,7 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
 }
 #btn-brake small { font-size: 0.75em; opacity: 0.85; }
 
-#btn-reset, #btn-mute {
+#btn-reset, #btn-mute, #btn-pause {
   position: absolute;
   top: 10px;
   right: var(--edge-r);
@@ -235,7 +235,7 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   border: 2px solid rgba(255, 255, 255, 0.35);
   pointer-events: auto;
 }
-#btn-reset:active, #btn-mute:active { filter: brightness(1.4); }
+#btn-reset:active, #btn-mute:active, #btn-pause:active { filter: brightness(1.4); }
 #btn-mute { right: calc(var(--edge-r) + 56px); font-size: 20px; }
 #btn-mute::before { content: "\1F50A"; }
 #btn-mute.off::before { content: "\1F507"; }
@@ -521,3 +521,50 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   white-space: pre;
 }
 #perf[hidden] { display: none; }
+
+/* ============ Pause, lap split, wrong way ============ */
+#btn-pause { right: calc(var(--edge-r) + 112px); font-size: 16px; }
+#btn-pause::before { content: ""; width: 5px; height: 17px; margin-left: -9px; background: #fff; border-radius: 1px; box-shadow: 9px 0 #fff; }
+#btn-pause { display: flex; align-items: center; justify-content: center; }
+.paused {
+  margin-bottom: 18px;
+  font-size: clamp(40px, calc(var(--app-h) * 0.15), 64px);
+  font-weight: 900;
+  font-style: italic;
+  color: #fff;
+  text-shadow: 0 5px 0 #2f3a8f, 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+#split {
+  position: absolute;
+  left: 50%;
+  top: calc(30% + clamp(26px, calc(var(--app-h) * 0.09), 40px) * 0.8);
+  transform: translate(-50%, -50%);
+  font-size: clamp(16px, calc(var(--app-h) * 0.05), 22px);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  opacity: 0;
+}
+#split b { margin-left: 8px; padding: 1px 8px; border-radius: 8px; }
+#split .faster { background: #1f9d48; }
+#split .slower { background: #c62f3a; }
+.pop-long { animation: pop 1.8s ease-out forwards; }
+
+#wrongway {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 6px 18px;
+  border-radius: 12px;
+  background: #e8322f;
+  border: 3px solid #fff;
+  font-size: clamp(22px, calc(var(--app-h) * 0.08), 34px);
+  font-weight: 900;
+  font-style: italic;
+  white-space: nowrap;
+  animation: warn-blink 0.5s steps(2) infinite;
+}
+#wrongway[hidden] { display: none; }

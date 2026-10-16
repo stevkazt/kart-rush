@@ -20,6 +20,12 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - Overlay = `#menu-screen` (title + how to play) and `#results-screen` (place, time, best lap, standings with gaps,
   RACE AGAIN / MENU, confetti on a win). `showMenu()` / `showResults()`; `#app.overlay-on` hides HUD + controls
   (mute stays). Records in localStorage `kartrush.records` `{race, lap}`. Engines duck (`soundMix.duck`) behind menus.
+  `#pause-screen` (RESUME / RESTART / MENU): `pauseGame()` from the pause button, Esc/P, or the app going to the
+  background; the loop skips physics + render while `state.paused`, audio is suspended. All screens go through
+  `showOverlay(screen)`. HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
+  split under the LAP message (`showSplit`, green/red vs best lap so far).
+- Flat track layers are >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10) and the
+  camera near plane is 0.5: closer layers / near 0.1 shimmered far down the track (depth precision).
 - **iOS portrait strip (2026-10-16):** with rotation lock on, the installed app got a viewport of 797 of 844pt
   (short by `safe-area-inset-top`, 47pt) and clipped the page there: an empty band at the home-indicator edge.
   Tried and failed (iOS clips the web view itself): `html, body` height + env(safe-area-inset-top), and sizing

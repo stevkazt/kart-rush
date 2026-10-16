@@ -278,4 +278,7 @@ document.addEventListener('visibilitychange', () => {
   else ctx.resume().catch(() => {});
 });
 
-export const sound = { unlock, update, music, setMuted, get muted() { return muted; }, get context() { return ctx; }, ...sfx };
+/** Pause: freeze all audio (unlock() resumes it). */
+function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }
+
+export const sound = { unlock, suspend, update, music, setMuted, get muted() { return muted; }, get context() { return ctx; }, ...sfx };
