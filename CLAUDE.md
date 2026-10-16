@@ -170,14 +170,19 @@ table, rubber-banding. AI pace knobs if ever needed: `CFG.ai.skill`, `cornerGrip
   like is while we add extra functionality that could make it harder". So AI pace is unchanged; items are the lever.
   With items, an autopilot that never dodges finishes anywhere from 1st (by ~1–5 s) to 5th.
 
-**Next**, roughly in order:
-- Await the user's feedback on items, difficulty and frame rate. Sound: the engine was "really annoying" at high
-  speed (bright saw whine); it's now lower, darker and quieter at top speed (`setEngine` in sound.js).
-- Hop-to-drift button with mini-turbo levels (changes controls: ask the user first; steering feel is sensitive).
-- Visual polish: tyre smoke, skid marks, grass dust, grandstands/flags/tyre stacks, sky gradient,
-  WRONG WAY warning, lap split vs best.
-- Structure: title screen, kart colour picker, more tracks (just new `points`), best times in
-  localStorage, ghost of the best lap, pause menu with a steering sensitivity slider.
+**Done 2026-10-16 (local commits 3f17746..62385b3, NOT pushed; GitHub Pages still has the 6109dca diagnostic build):**
+menus + results screen, pause, coasting + slide GAS->ITEM, smooth rendering (interpolation, shader warm-up,
+continuous rails, shadow snapping), WRONG WAY, lap splits, rocket start, smoke/skids/dust/hit effects, title
+music, wider road, racing-line AI with personalities. The user plays with rotation unlocked (real landscape).
+
+**Next**, roughly in order (agreed 2026-10-16):
+- Tighter corners: build the inner rail properly on tight bends (no fold-over) and allow the road to narrow
+  locally, so hairpins down to ~12 m work. Then 2 new themed tracks (ideas: desert canyon at sunset, snowy
+  night with falling snow + an icy section), track data with a theme, track picker, best times per track.
+- Kart colour picker (body / trim / driver).
+- Maybe later: stronger drift as its own experiment (steering feel: ask first), hills/jumps (engine change),
+  track editor with shareable links, ghost of the best lap, steering-sensitivity setting.
+- Push to GitHub only when the user asks.
 
 **Deferred by the user ("ignore for now"):** the speed-feel item. That means a lower/closer camera, speed
 lines, camera shake, close trackside objects and a higher top speed.
