@@ -1,11 +1,11 @@
 # Kart Rush — handoff notes
 
 Mobile-first 3D kart racer (Mario Kart style). Vanilla JS + Three.js 0.160 + cannon-es 0.20, both from
-jsDelivr via the import map in `index.html`. No build step. The user plays it on an iPhone, installed from GitHub Pages (see Run).
+jsDelivr via the import map in `index.html`. No build step. The user plays it on an iPhone as a home-screen app **served from the Mac's LAN server** (`http://<LAN IP>:8000`), so local edits are live on the phone after a relaunch; don't push to GitHub unless asked (see Run).
 
 ## Run
 ```bash
-cd kart-racer && python3 -m http.server 8000 --bind 0.0.0.0
+cd kart-racer && python3 dev/serve.py 8000   # http.server + Cache-Control: no-store (plain http.server let iOS keep stale copies)
 # phone (same Wi-Fi): http://<mac LAN IP>:8000   ->  ipconfig getifaddr en0
 ```
 **Hosted (2026-10-15):** public repo `github.com/stevkazt/kart-rush`, GitHub Pages from `main` /,
@@ -17,6 +17,15 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 
 ## Files
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
+- Overlay = `#menu-screen` (title + how to play) and `#results-screen` (place, time, best lap, standings with gaps,
+  RACE AGAIN / MENU, confetti on a win). `showMenu()` / `showResults()`; `#app.overlay-on` hides HUD + controls
+  (mute stays). Records in localStorage `kartrush.records` `{race, lap}`. Engines duck (`soundMix.duck`) behind menus.
+- **iOS portrait strip (2026-10-16):** with rotation lock on, the installed app got a viewport of 797 of 844pt
+  (short by `safe-area-inset-top`, 47pt) and clipped the page there: an empty band at the home-indicator edge.
+  Tried and failed (iOS clips the web view itself): `html, body` height + env(safe-area-inset-top), and sizing
+  #app from `screen.*`. Now testing status-bar-style `black` instead of `black-translucent` (the page starts below
+  the status bar). Real landscape (rotation unlocked) never had the bug. The title screen shows `build N · host · app` (bump N with `sw.js` VERSION): if the
+  phone shows an old N, it is running a stored copy (the home-screen app once never contacted the server at all).
 - `style.css`: `#app` is always laid out landscape; `.rotated` turns it 90deg in portrait. Sizes use `--app-h`
   and safe-area vars `--edge-l/--edge-r`, which map to the top/bottom insets when rotated.
 - `main.js` sections: 0 CONFIG (`CFG`; all tuning lives here, incl. `racers`, `grid`, `ai`, `items`) · 1 INITIALIZATION
@@ -34,7 +43,9 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   AI green shells go at the player (other AIs only after holding it a while). This is the difficulty lever the
   user asked for instead of faster AI. Bananas/shells are not physics bodies (distance checks on the plane).
   A hit = `spinOut`: speed halved, ~1.1 s with no power, visual-only spin of body + wheels. ITEM button sits
-  above BRAKE (Space/E on desktop). Red shell incoming shows a blinking `!` + alarm.
+  above BRAKE (Space/E on desktop). Sliding a thumb from GAS onto ITEM fires it while GAS stays held
+  (`slideToItem`). User feedback: lifting GAS to tap ITEM felt "like a pro battle royale", so the player's kart
+  now coasts (`playerCoast: 3`, ~5 km/h lost per 0.3 s lift) while AIs keep `coastBrake: 12`. Red shell incoming shows a blinking `!` + alarm.
 - **Karts are baked**: `bakeMeshes` merges each kart body into one vertex-coloured mesh (plus one per wheel).
   Before that, ~28 meshes per kart (x2 for the shadow pass) = 195 draw calls on the grid and stutter on the
   phone when karts were close. Now 75. Add new kart parts before the `bakeMeshes` call.
@@ -82,6 +93,15 @@ launcher repo later. The LAN server above still works for quick testing (no offl
     popped wheelies on boost pads. Braking cancels a boost, and AIs don't brake while boosting.
 11. Auto-recovery triggers on `up.y < 0.3` or **fewer than 3 wheels down** for 1.5 s (a kart once sat perched on
     a wall with its rear wheels in the air). Resets record `k.lastReset` (AI reason or flip/button) for debugging.
+12. **Draw from `body.interpolatedPosition/Quaternion`**, never the raw pose (karts, wheels, camera, sun).
+    Raw poses advance 0 or 2 fixed steps on some frames and cause hitches at a steady fps. Teleports must also
+    set `previous*`/`interpolated*` (see `resetKart`). `warmUpShaders()` at boot renders every item/flame/spark
+    once, so no GPU program compiles mid-race (`__r.info.programs.length` stays 12 through a race).
+    The warm-up runs before item boxes are placed, so `boxMesh.frustumCulled = false` (else boxes vanished
+    when close: InstancedMesh caches its bounding sphere from the first draw). Rails are one continuous
+    vertex-coloured strip (per-segment boxes overlapped and z-fought, the "laggy rails"); colliders unchanged.
+    The sun's shadow camera snaps to texels in light space (`lightQ`) so shadow edges don't crawl.
+    Frame meter: tap the build label on the title screen (fps, frames > 33 ms, worst frame; `kartrush.perf`).
 
 ## Testing
 ```bash
@@ -107,6 +127,8 @@ check touch and feel.
 - Physics stuck bug: fixed. Wants landscape only (done), buttons instead of a joystick (done), PWA (done).
 - Steering: "feels slow but much better, let's leave it like that for now". Don't retune unless asked.
 - Wants it to feel like a finished game rather than a demo.
+- 2026-10-16: new menu/results screens "look good"; player coasting + slide GAS->ITEM "really improved the game
+  experience". Plays with rotation unlocked (real landscape), which avoids the iOS portrait strip.
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results

@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- not black-translucent: in portrait iOS then sizes the app a status bar short and leaves an empty band at the bottom -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Kart Rush">
   <meta name="theme-color" content="#1b1f3a">
   <title>Kart Rush</title>
@@ -42,6 +43,7 @@
 
       <div id="message"></div>
       <div id="warn" hidden>!</div>
+      <div id="perf" hidden></div>
       <div id="countdown"></div>
 
       <div id="speedo">
@@ -70,16 +72,45 @@
 
     <!-- ===== Menu / results overlay ===== -->
     <div id="overlay">
-      <div class="panel">
-        <h1>KART<span>RUSH</span></h1>
-        <div id="overlay-text">3 laps against 5 rivals &mdash; you start at the back. Grab <b>?</b> boxes for items, hit the orange pads for a boost, and hold a hard turn at speed to drift until the sparks turn orange for a mini-turbo!</div>
-        <ul class="howto" id="howto">
-          <li><b>&#9664; &#9654;</b> &mdash; steer</li>
-          <li><b>GAS</b> &mdash; accelerate &middot; <b>BRAKE</b> &mdash; brake / reverse</li>
-          <li><b>ITEM</b> &mdash; fire it! &#127812; boost &middot; &#127820; drop behind &middot; shells fly ahead (red ones home in)</li>
-        </ul>
-        <button id="btn-start">START RACE</button>
+      <!-- Title screen -->
+      <div id="menu-screen" class="screen">
+        <div class="side">
+          <h1>KART<span>RUSH</span></h1>
+          <p class="tagline">3 laps &middot; 5 rivals &middot; you start last</p>
+          <button id="btn-start" class="btn-primary">START RACE</button>
+          <p class="record" id="menu-record" hidden></p>
+        </div>
+        <div class="card howto">
+          <h2>HOW TO PLAY</h2>
+          <ul>
+            <li><span class="key">&#9664; &#9654;</span><span>Steer</span></li>
+            <li><span class="key key-gas">GAS</span><span>Go &middot; <b>BRAKE</b> stops, then reverses</span></li>
+            <li><span class="key">?</span><span>Drive through boxes, then tap <b>ITEM</b></span></li>
+            <li><span class="key">&#127812; &#127820;</span><span>Boost &middot; banana drops behind &middot; shells fly ahead (red ones home in)</span></li>
+            <li><span class="key key-orange">&#9650;</span><span>Orange pads give a boost</span></li>
+            <li><span class="key key-orange">&#10022;</span><span>Hold a hard turn at speed: orange sparks = mini-turbo</span></li>
+          </ul>
+        </div>
       </div>
+
+      <!-- After the race -->
+      <div id="results-screen" class="screen" hidden>
+        <div class="side">
+          <div id="res-place" class="big-place"></div>
+          <div class="stats">
+            <div><span>TIME</span><b id="res-time"></b></div>
+            <div><span>BEST LAP</span><b id="res-lap"></b></div>
+          </div>
+          <p id="res-record" class="record"></p>
+          <div class="btn-row">
+            <button id="btn-again" class="btn-primary">RACE AGAIN</button>
+            <button id="btn-menu" class="btn-secondary">MENU</button>
+          </div>
+        </div>
+        <div class="card"><table id="standings" class="standings"></table></div>
+      </div>
+      <div id="confetti" aria-hidden="true"></div>
+      <p id="build"></p>
     </div>
   </div>
 

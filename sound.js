@@ -118,12 +118,13 @@ function makeDrift() {
 
 /**
  * Per-frame mix.
- * mix = { live, player: {ratio, throttle}, drift: 0..1, charged, rivals: [{ratio, throttle, dist, pan}] }
+ * mix = { live, duck, player: {ratio, throttle}, drift: 0..1, charged, rivals: [{ratio, throttle, dist, pan}] }
  */
 function update(dt, mix) {
   if (!ctx || ctx.state !== 'running') return;
   const t = ctx.currentTime;
   setEngine(player, { ...mix.player, vol: mix.live ? 1 : 0.6 });
+  engineBus.gain.setTargetAtTime(mix.duck ? 0.12 : 1, t, mix.duck ? 0.5 : 0.15); // engines fade behind menus
 
   while (rivals.length < mix.rivals.length) rivals.push(makeEngine(VOL.rivals, (rivals.length + 1) * 23));
   mix.rivals.forEach((r, i) => {

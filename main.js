@@ -39,7 +39,8 @@ const CFG = {
     brakeForce: 600,        // per wheel, only used to hold karts still before the start
     wheelBrake: 1.5,        // per wheel while braking (cannon-es: an impulse cap per step, not a force)
     brakeDecel: 22,         // m/s^2 through the centre of mass (big wheel brakes flipped the kart)
-    coastBrake: 12,         // rolling resistance when no pedal is held
+    coastBrake: 12,         // rolling resistance when no pedal is held (AI; its cornering relies on it)
+    playerCoast: 3,         // the player's kart rolls on when GAS is released (~5 km/h lost per 0.3 s lift)
     maxSpeed: 26,           // m/s
     maxReverse: 8,
 
@@ -157,6 +158,11 @@ Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, n
 sun.shadow.bias = -0.0005;
 scene.add(sun, sun.target);
 const SUN_OFFSET = new THREE.Vector3(40, 80, 30);
+// The shadow camera's orientation (it looks along -SUN_OFFSET), for snapping it to texels in updateCamera
+const lightQ = new THREE.Quaternion().setFromRotationMatrix(
+  new THREE.Matrix4().lookAt(SUN_OFFSET, new THREE.Vector3(), new THREE.Vector3(0, 1, 0)));
+const lightQInv = lightQ.clone().invert();
+const shadowSnap = new THREE.Vector3();
 
 const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
 
@@ -257,54 +263,55 @@ function makeRibbon({ N, samples, normals }, inner, outer, y, colorAt) {
   return mesh;
 }
 
-/** Static box colliders along both track edges + one instanced mesh for visuals. */
+/**
+ * Static box colliders along both track edges, drawn as one continuous striped strip. (Drawing each
+ * segment as its own box needed overlaps to close gaps on curves, and the overlapping blue/white faces
+ * z-fought: the rails flickered as the camera moved.)
+ */
 function buildWalls({ N, samples, normals }) {
   const T = CFG.track;
   const th = T.wallThickness, h = T.wallHeight, k = T.wallStride;
   const off = T.halfWidth + T.curb + th / 2;
-  const maxCount = Math.ceil(N / k) * 2;
-
-  const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lambert(0xffffff), maxCount);
-  inst.castShadow = true;
-  inst.receiveShadow = true;
-
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3();
-  const mid = new THREE.Vector3(), color = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
-  let idx = 0;
+  const pos = [], col = [];
+  const c = new THREE.Color();
+  const quad = (a, b, cc, d) => pos.push(...a, ...b, ...cc, ...cc, ...b, ...d);
 
   for (const side of [1, -1]) {
+    // corner points at sample i: inner/outer edge at ground and top height
+    const edge = (i, o, y) => [samples[i].x + normals[i].x * o * side, y, samples[i].z + normals[i].z * o * side];
     for (let i = 0; i < N; i += k) {
       const j = Math.min(i + k, N);
+      const inA = off - th / 2, outA = off + th / 2;
+      quad(edge(i, inA, 0), edge(j, inA, 0), edge(i, inA, h), edge(j, inA, h));     // road-side face
+      quad(edge(i, outA, h), edge(j, outA, h), edge(i, outA, 0), edge(j, outA, 0)); // outside face
+      quad(edge(i, inA, h), edge(j, inA, h), edge(i, outA, h), edge(j, outA, h));   // top
+      c.set(((i / k) | 0) % 2 ? 0xffffff : 0x2f6bff);
+      for (let v = 0; v < 18; v++) col.push(c.r, c.g, c.b);
+
+      // collider: same box per segment as before (overlap is harmless for physics)
       const a = samples[i].clone().addScaledVector(normals[i], off * side);
       const b = samples[j].clone().addScaledVector(normals[j], off * side);
       const dx = b.x - a.x, dz = b.z - a.z;
-      const len = Math.hypot(dx, dz) + th; // small overlap closes gaps on curves
-      const yaw = Math.atan2(dx, dz);
-
-      mid.addVectors(a, b).multiplyScalar(0.5);
-      mid.y = h / 2;
-      q.setFromAxisAngle(up, yaw);
-      s.set(th, h, len);
-      m.compose(mid, q, s);
-      inst.setMatrixAt(idx, m);
-      inst.setColorAt(idx, color.set(((i / k) | 0) % 2 ? 0xffffff : 0x2f6bff));
-      idx++;
-
+      const len = Math.hypot(dx, dz) + th;
       const body = new CANNON.Body({
         mass: 0,
         material: physMats.wall,
         shape: new CANNON.Box(new CANNON.Vec3(th / 2, h / 2, len / 2)),
       });
-      body.position.set(mid.x, mid.y, mid.z);
-      body.quaternion.setFromAxisAngle(AXIS_Y, yaw);
+      body.position.set((a.x + b.x) / 2, h / 2, (a.z + b.z) / 2);
+      body.quaternion.setFromAxisAngle(AXIS_Y, Math.atan2(dx, dz));
       body.updateAABB(); // static: bounds must be refreshed after placing it
       world.addBody(body);
     }
   }
-  inst.count = idx;
-  inst.instanceMatrix.needsUpdate = true;
-  if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-  scene.add(inst);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals(); // non-indexed: flat normal per face
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
 }
 
 function buildStartLine({ samples, tangents }) {
@@ -638,6 +645,9 @@ function buildItemVisuals() {
     new THREE.BoxGeometry(1.1, 1.1, 1.1),
     new THREE.MeshLambertMaterial({ map: boxTex, transparent: true, opacity: 0.9 }),
     boxes.length);
+  // Its bounding sphere is computed once, from whatever the instances are at the first draw (the boot
+  // warm-up, all at the origin), so culling would hide every box away from there. 1 draw call: never cull.
+  boxMesh.frustumCulled = false;
   scene.add(boxMesh);
 
   // Boost pads: chevrons scrolling toward the driving direction
@@ -702,8 +712,10 @@ const hud = {
   place: $('place'), placeNum: $('place-num'), placeSuffix: $('place-suffix'), placeOf: $('place-of'),
   countdown: $('countdown'), message: $('message'),
   driftFill: $('drift-fill'), overlay: $('overlay'),
-  overlayText: $('overlay-text'), howto: $('howto'), startBtn: $('btn-start'),
-  item: $('btn-item'), warn: $('warn'),
+  menuScreen: $('menu-screen'), resultsScreen: $('results-screen'), menuRecord: $('menu-record'),
+  resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
+  standings: $('standings'), confetti: $('confetti'),
+  item: $('btn-item'), warn: $('warn'), perf: $('perf'),
 };
 
 const minimap = buildMinimap();
@@ -746,6 +758,22 @@ function buildMinimap() {
 initControls();
 
 function initControls() {
+  // --- Slide from GAS onto ITEM: fires the item while the gas stays held (GAS keeps the captured pointer) ---
+  function slideToItem(el) {
+    const over = new Set(); // pointers currently over ITEM, so each slide-on fires once
+    el.addEventListener('pointermove', (e) => {
+      const r = hud.item.getBoundingClientRect(), pad = 8;
+      const inside = e.clientX > r.left - pad && e.clientX < r.right + pad && e.clientY > r.top - pad && e.clientY < r.bottom + pad;
+      if (inside && !over.has(e.pointerId)) {
+        over.add(e.pointerId);
+        input.item = true;
+        hud.item.classList.add('pressed');
+        setTimeout(() => hud.item.classList.remove('pressed'), 120);
+      } else if (!inside) over.delete(e.pointerId);
+    });
+    ['pointerup', 'pointercancel'].forEach((t) => el.addEventListener(t, (e) => over.delete(e.pointerId)));
+  }
+
   // --- Hold buttons (each tracks its own set of pointers, so multi-touch works) ---
   const bindHold = (el, key) => {
     const ids = new Set();
@@ -765,13 +793,16 @@ function initControls() {
   bindHold($('btn-left'), 'left');
   bindHold($('btn-right'), 'right');
   bindHold($('btn-gas'), 'gas');
+  slideToItem($('btn-gas'));
   bindHold($('btn-brake'), 'brake');
 
   $('btn-reset').addEventListener('pointerdown', (e) => { e.preventDefault(); input.reset = true; });
   hud.item.addEventListener('pointerdown', (e) => { e.preventDefault(); input.item = true; hud.item.classList.add('pressed'); });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.item.addEventListener(t, () => hud.item.classList.remove('pressed')));
 
-  hud.startBtn.addEventListener('click', startRace);
+  $('btn-start').addEventListener('click', startRace);
+  $('btn-again').addEventListener('click', startRace);
+  $('btn-menu').addEventListener('click', () => { sound.click(); showMenu(); });
 
   // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
   const muteBtn = $('btn-mute');
@@ -828,16 +859,7 @@ function initControls() {
 
 /** The game is always laid out landscape; in portrait the #app container is rotated 90deg. */
 function onResize() {
-  let vw = window.innerWidth, vh = window.innerHeight;
-  // iOS home-screen apps can report innerHeight a status bar short, leaving an empty band at the
-  // home-indicator edge. Installed apps always own the whole screen, so trust screen.* there.
-  const installed = navigator.standalone ||
-    matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
-  if (installed) {
-    const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
-    if (vh > vw) { vw = Math.max(vw, short); vh = Math.max(vh, long); }
-    else { vw = Math.max(vw, long); vh = Math.max(vh, short); }
-  }
+  const vw = window.innerWidth, vh = window.innerHeight;
   const rotated = vh > vw;
   const w = rotated ? vh : vw;
   const h = rotated ? vw : vh;
@@ -860,6 +882,8 @@ function startRace() {
     el.requestFullscreen().then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
   }
   hud.overlay.classList.add('hidden');
+  app.classList.remove('overlay-on');
+  hud.confetti.replaceChildren();
   sound.unlock();
   sound.music(false);
 
@@ -896,6 +920,11 @@ function resetKart(k, idx, lane = 0) {
   body.quaternion.setFromAxisAngle(AXIS_Y, Math.atan2(t.x, t.z));
   body.velocity.setZero();
   body.angularVelocity.setZero();
+  // teleport: no interpolating from the old spot
+  body.previousPosition.copy(body.position);
+  body.interpolatedPosition.copy(body.position);
+  body.previousQuaternion.copy(body.quaternion);
+  body.interpolatedQuaternion.copy(body.quaternion);
   Object.assign(k, { trackIdx: idx, flipTimer: 0, driftCharge: 0, boost: 0, steerSmooth: 0, spin: 0 });
 }
 
@@ -995,20 +1024,76 @@ function updatePlaces() {
   if (state.phase === 'race' && kart.place < before) sound.overtake();
 }
 
+// Personal bests survive restarts (per device). Storage can be unavailable (private mode): never required.
+const RECORD_KEY = 'kartrush.records';
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem(RECORD_KEY)) || {}; } catch { return {}; }
+}
+function saveRecords(r) {
+  try { localStorage.setItem(RECORD_KEY, JSON.stringify(r)); } catch { /* storage blocked */ }
+}
+
+/** Title screen. The karts sit on the grid behind it. */
+function showMenu() {
+  Object.assign(state, { phase: 'menu', resultsShown: false });
+  sound.music(false);
+  clearItems();
+  placeOnGrid();
+  camState.snap = true;
+  const rec = loadRecords();
+  hud.menuRecord.hidden = !rec.race;
+  if (rec.race) hud.menuRecord.textContent = `Your record ${fmtTime(rec.race)} · best lap ${fmtTime(rec.lap)}`;
+  hud.menuScreen.hidden = false;
+  hud.resultsScreen.hidden = true;
+  hud.confetti.replaceChildren();
+  app.classList.add('overlay-on');
+  hud.overlay.classList.remove('hidden');
+}
+
+/** Results screen; called again as each AI finishes, to fill in the table. */
 function showResults() {
+  const first = !state.resultsShown;
   state.resultsShown = true;
-  const rows = [...karts].sort((a, b) => a.place - b.place).map((k) => `
-    <tr class="${k.isPlayer ? 'me' : ''}">
-      <td>${ordinal(k.place)}</td>
-      <td><i class="swatch" style="background:${k.color}"></i>${k.name}</td>
-      <td>${k.finished ? fmtTime(k.finishTime) : 'racing&hellip;'}</td>
-    </tr>`).join('');
-  hud.overlayText.innerHTML =
-    `<span class="result-head">${ordinal(kart.place)} place!</span> Best lap <b>${fmtTime(state.bestLap)}</b>` +
-    `<table class="results">${rows}</table>`;
-  hud.howto.hidden = true;
-  hud.overlay.classList.add('results');
-  hud.startBtn.textContent = 'RACE AGAIN';
+  const winner = karts.find((k) => k.place === 1);
+  const medal = ['g', 's', 'b'];
+  hud.standings.innerHTML = [...karts].sort((a, b) => a.place - b.place).map((k, i) => {
+    const gap = !k.finished ? 'racing&hellip;' : k === winner ? fmtTime(k.finishTime) : `+${(k.finishTime - winner.finishTime).toFixed(2)}`;
+    // rows only animate the first time, not on every refresh
+    return `<tr class="${k.isPlayer ? 'me' : ''}" style="${first ? `animation-delay:${0.15 + i * 0.07}s` : 'animation:none'}">
+      <td class="pos ${medal[k.place - 1] || ''}"><i>${k.place}</i></td>
+      <td class="name"><i class="swatch" style="background:${k.color}"></i>${k.isPlayer ? 'YOU' : k.name}</td>
+      <td class="gap ${k.finished ? '' : 'wait'}">${gap}</td>
+    </tr>`;
+  }).join('');
+  if (!first) return;
+
+  const p = kart.place;
+  hud.resPlace.className = `big-place p${p}`;
+  hud.resPlace.innerHTML = `${p}<sup>${ordinal(p).slice(-2)}</sup>`;
+  hud.resTime.textContent = fmtTime(kart.finishTime);
+  hud.resLap.textContent = fmtTime(state.bestLap);
+
+  const rec = loadRecords();
+  const newRace = !(rec.race <= kart.finishTime), newLap = !(rec.lap <= state.bestLap);
+  if (newRace) rec.race = kart.finishTime;
+  if (newLap) rec.lap = state.bestLap;
+  saveRecords(rec);
+  hud.resRecord.innerHTML = newRace || newLap
+    ? `<span class="new">&#9733; NEW ${newRace ? 'RECORD' : 'BEST LAP'}</span>`
+    : `Record ${fmtTime(rec.race)} &middot; best lap ${fmtTime(rec.lap)}`;
+
+  if (p === 1) {
+    const colors = ['#ffe14a', '#5cc8ff', '#ff5fa2', '#7dff9b', '#ffffff'];
+    hud.confetti.replaceChildren(...Array.from({ length: 36 }, (_, i) => {
+      const c = document.createElement('i');
+      c.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % colors.length]};` +
+        `animation-duration:${2.2 + Math.random() * 1.8}s;animation-delay:${Math.random() * 1.2}s`;
+      return c;
+    }));
+  }
+  hud.menuScreen.hidden = true;
+  hud.resultsScreen.hidden = false;
+  app.classList.add('overlay-on');
   hud.overlay.classList.remove('hidden');
 }
 
@@ -1500,7 +1585,7 @@ function driveKart(k, dt, canDrive) {
     } else if (ctl.gas || boosting) {
       if (speed < top) engine = K.engineForce;
     } else {
-      brake = K.coastBrake;
+      brake = k.ai ? K.coastBrake : K.playerCoast;
     }
   } else {
     brake = K.brakeForce; // hold still during menu / countdown
@@ -1558,11 +1643,20 @@ const desiredCam = new THREE.Vector3();
 
 const spinQ = new THREE.Quaternion();
 const spinAxis = new THREE.Vector3();
+const interpQ = new THREE.Quaternion(), bodyP = new THREE.Vector3();
 
+/**
+ * Meshes are drawn at the body's *interpolated* pose (between the last two fixed physics steps), not
+ * its raw one. Frame times wobble around the 1/60 s step, so raw poses advance 0 or 2 steps on some
+ * frames: the kart and camera visibly hitch even at a steady frame rate.
+ */
 function syncMeshes() {
   for (const { body, vehicle, group, wheelMeshes, spin } of karts) {
-    group.position.copy(body.position);
-    group.quaternion.copy(body.quaternion);
+    group.position.copy(body.interpolatedPosition);
+    group.quaternion.copy(body.interpolatedQuaternion);
+    // wheel transforms come from the raw pose: move them by (interpolated pose) * (raw pose)^-1
+    bodyP.copy(body.position);
+    interpQ.copy(body.quaternion).invert().premultiply(group.quaternion);
     // Spin-out is visual only: turn the body and wheels about the kart's up axis (two full turns)
     const spinning = spin > 0;
     if (spinning) {
@@ -1574,8 +1668,8 @@ function syncMeshes() {
       vehicle.updateWheelTransform(i);
       const t = vehicle.wheelInfos[i].worldTransform;
       const w = wheelMeshes[i];
-      w.position.copy(t.position);
-      w.quaternion.copy(t.quaternion);
+      w.position.copy(t.position).sub(bodyP).applyQuaternion(interpQ).add(group.position);
+      w.quaternion.copy(t.quaternion).premultiply(interpQ);
       if (spinning) {
         w.position.sub(group.position).applyQuaternion(spinQ).add(group.position);
         w.quaternion.premultiply(spinQ);
@@ -1623,8 +1717,9 @@ function updateItemVisuals(dt) {
 function updateCamera(dt) {
   const C = CFG.camera;
   const b = kart.body;
-  const fwd = b.quaternion.vmult(LOCAL_FWD, tmpVec);
+  const fwd = b.interpolatedQuaternion.vmult(LOCAL_FWD, tmpVec);
   const yaw = Math.atan2(fwd.x, fwd.z);
+  const bp = b.interpolatedPosition; // match the drawn kart (see syncMeshes)
   const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
 
   if (camState.snap) {
@@ -1635,9 +1730,9 @@ function updateCamera(dt) {
 
   const dist = C.distance + speedRatio * 1.5;
   desiredCam.set(
-    b.position.x - Math.sin(camState.yaw) * dist,
-    b.position.y + C.height,
-    b.position.z - Math.cos(camState.yaw) * dist,
+    bp.x - Math.sin(camState.yaw) * dist,
+    bp.y + C.height,
+    bp.z - Math.cos(camState.yaw) * dist,
   );
 
   if (camState.snap) {
@@ -1650,9 +1745,9 @@ function updateCamera(dt) {
   camera.position.copy(camState.pos);
 
   camState.look.set(
-    b.position.x + Math.sin(camState.yaw) * C.lookAhead,
-    b.position.y + 1.0,
-    b.position.z + Math.cos(camState.yaw) * C.lookAhead,
+    bp.x + Math.sin(camState.yaw) * C.lookAhead,
+    bp.y + 1.0,
+    bp.z + Math.cos(camState.yaw) * C.lookAhead,
   );
   camera.lookAt(camState.look);
 
@@ -1664,8 +1759,14 @@ function updateCamera(dt) {
   }
 
   // Shadow camera follows the kart
-  sun.target.position.copy(b.position);
-  sun.position.copy(b.position).add(SUN_OFFSET);
+  // ...snapped to whole shadow-map texels in the light's view, or shadow edges crawl as the kart moves
+  shadowSnap.copy(bp).applyQuaternion(lightQInv);
+  const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+  shadowSnap.x = Math.round(shadowSnap.x / texel) * texel;
+  shadowSnap.y = Math.round(shadowSnap.y / texel) * texel;
+  shadowSnap.applyQuaternion(lightQ);
+  sun.target.position.copy(shadowSnap);
+  sun.position.copy(shadowSnap).add(SUN_OFFSET);
 }
 
 function updateEffects() {
@@ -1737,7 +1838,7 @@ function updateHUD() {
 }
 
 const camRight = new THREE.Vector3();
-const soundMix = { live: false, player: { ratio: 0, throttle: 0 }, drift: 0, charged: false, rivals: [] };
+const soundMix = { live: false, duck: true, player: { ratio: 0, throttle: 0 }, drift: 0, charged: false, rivals: [] };
 
 /** Feeds the engine / drift sounds: the player's kart plus every rival, panned and faded by distance. */
 function updateSound(dt) {
@@ -1746,6 +1847,7 @@ function updateSound(dt) {
   const throttle = (k) => (live && (k.ctl.gas || k.boost > 0) ? 1 : 0);
   camRight.setFromMatrixColumn(camera.matrixWorld, 0);
   soundMix.live = live;
+  soundMix.duck = state.phase === 'menu' || state.resultsShown;
   soundMix.player.ratio = clamp(Math.abs(kart.speed) / top, 0, 1.3);
   soundMix.player.throttle = throttle(kart);
   soundMix.drift = kart.drifting ? 1 : 0;
@@ -1774,8 +1876,32 @@ function render(dt) {
 // ---------- Main loop ----------
 let lastTime = performance.now();
 
+// Frame meter: fps over the last second, plus frames slower than 33 ms (a visible hitch) and the
+// worst frame since the race started. Toggled by tapping the build label; remembered per device.
+const perf = { on: false, frames: 0, acc: 0, slow: 0, worst: 0 };
+try { perf.on = localStorage.getItem('kartrush.perf') === '1'; } catch { /* storage blocked */ }
+$('build').addEventListener('click', () => {
+  perf.on = !perf.on;
+  try { localStorage.setItem('kartrush.perf', perf.on ? '1' : '0'); } catch { /* storage blocked */ }
+  $('build').textContent = $('build').textContent.replace(/ · meter.*$/, '') + (perf.on ? ' · meter on' : '');
+});
+function updatePerf(ms) {
+  if (!perf.on) { hud.perf.hidden = true; return; }
+  if (state.phase === 'countdown') { perf.slow = 0; perf.worst = 0; }
+  else if (state.phase === 'race') { if (ms > 33) perf.slow++; perf.worst = Math.max(perf.worst, ms); }
+  perf.frames++;
+  perf.acc += ms;
+  if (perf.acc >= 1000) {
+    hud.perf.hidden = false;
+    hud.perf.textContent = `${Math.round(perf.frames * 1000 / perf.acc)} fps\nslow ${perf.slow}\nworst ${Math.round(perf.worst)}ms`;
+    perf.frames = 0;
+    perf.acc = 0;
+  }
+}
+
 function loop(now) {
   requestAnimationFrame(loop);
+  updatePerf(now - lastTime);
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
@@ -1785,6 +1911,23 @@ function loop(now) {
 }
 
 document.addEventListener('visibilitychange', () => { lastTime = performance.now(); });
+
+/**
+ * iOS compiles a GPU program the first time each material is drawn (and again for its shadow pass),
+ * which froze the game for a moment the first time a shell, banana, flame or spark showed up mid-race.
+ * Draw one throwaway frame with all of them in view, behind the title screen.
+ */
+function warmUpShaders() {
+  const extras = Object.keys(itemVis.models).map((kind) => spawnModel(kind, kart.body.position));
+  const fx = [...kart.sparks, ...kart.flames];
+  fx.forEach((o) => { o.visible = true; });
+  syncMeshes();
+  updateCamera(0);
+  renderer.compile(scene, camera); // everything, even what's off screen (item boxes, pads)
+  renderer.render(scene, camera);  // + the shadow-pass programs
+  extras.forEach((m) => scene.remove(m));
+  fx.forEach((o) => { o.visible = false; });
+}
 
 /* ==========================================================================
  * UI helpers
@@ -1812,37 +1955,11 @@ function ordinal(n) {
 
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
-// TEMP DIAGNOSTIC (iOS home-screen strip): remove once the cause is known.
-// html = magenta, body = cyan: the strip's colour tells which layer stops short (navy = outside the page).
-if (navigator.standalone || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) {
-  document.documentElement.style.background = '#ff00ff';
-  document.body.style.background = '#00ffff';
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;inset:0;pointer-events:none;visibility:hidden;' +
-    'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
-  document.body.appendChild(probe);
-  const box = document.createElement('pre');
-  box.style.cssText = 'position:absolute;left:50%;top:38%;transform:translateX(-50%);z-index:20;margin:0;' +
-    'padding:8px 10px;background:rgba(0,0,0,0.8);font:12px/1.35 ui-monospace,monospace;pointer-events:none';
-  app.appendChild(box);
-  const r = (el) => { const b = el.getBoundingClientRect(); return `${b.left|0},${b.top|0} ${b.width|0}x${b.height|0}`; };
-  const show = () => {
-    const cs = getComputedStyle(probe), vv = window.visualViewport;
-    box.textContent = [
-      `inner ${innerWidth}x${innerHeight}  screen ${screen.width}x${screen.height}  dpr ${devicePixelRatio}`,
-      `visualVP ${vv ? `${vv.width|0}x${vv.height|0} @${vv.offsetTop|0}` : '-'}  docEl ${document.documentElement.clientWidth}x${document.documentElement.clientHeight}`,
-      `fixed probe ${r(probe)}  body ${r(document.body)}`,
-      `app ${r(app)}  safe t${cs.paddingTop} r${cs.paddingRight} b${cs.paddingBottom} l${cs.paddingLeft}`,
-      `standalone ${navigator.standalone}  ${navigator.userAgent.match(/OS [\d_]+/)?.[0] || ''}`,
-    ].join('\n');
-  };
-  addEventListener('resize', () => setTimeout(show, 50));
-  setTimeout(show, 300);
-}
-
 // ---------- Boot ----------
+$('build').textContent = `build 11 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 onResize();
-placeOnGrid();
+showMenu();
+warmUpShaders();
 
 // PWA: offline cache (service workers need a secure context: https or localhost)
 if ('serviceWorker' in navigator && window.isSecureContext) {
