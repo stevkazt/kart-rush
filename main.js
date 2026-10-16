@@ -828,7 +828,16 @@ function initControls() {
 
 /** The game is always laid out landscape; in portrait the #app container is rotated 90deg. */
 function onResize() {
-  const vw = window.innerWidth, vh = window.innerHeight;
+  let vw = window.innerWidth, vh = window.innerHeight;
+  // iOS home-screen apps can report innerHeight a status bar short, leaving an empty band at the
+  // home-indicator edge. Installed apps always own the whole screen, so trust screen.* there.
+  const installed = navigator.standalone ||
+    matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+  if (installed) {
+    const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
+    if (vh > vw) { vw = Math.max(vw, short); vh = Math.max(vh, long); }
+    else { vw = Math.max(vw, long); vh = Math.max(vh, short); }
+  }
   const rotated = vh > vw;
   const w = rotated ? vh : vw;
   const h = rotated ? vw : vh;
@@ -1802,6 +1811,34 @@ function ordinal(n) {
 }
 
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
+
+// TEMP DIAGNOSTIC (iOS home-screen strip): remove once the cause is known.
+// html = magenta, body = cyan: the strip's colour tells which layer stops short (navy = outside the page).
+if (navigator.standalone || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) {
+  document.documentElement.style.background = '#ff00ff';
+  document.body.style.background = '#00ffff';
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;inset:0;pointer-events:none;visibility:hidden;' +
+    'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+  document.body.appendChild(probe);
+  const box = document.createElement('pre');
+  box.style.cssText = 'position:absolute;left:50%;top:38%;transform:translateX(-50%);z-index:20;margin:0;' +
+    'padding:8px 10px;background:rgba(0,0,0,0.8);font:12px/1.35 ui-monospace,monospace;pointer-events:none';
+  app.appendChild(box);
+  const r = (el) => { const b = el.getBoundingClientRect(); return `${b.left|0},${b.top|0} ${b.width|0}x${b.height|0}`; };
+  const show = () => {
+    const cs = getComputedStyle(probe), vv = window.visualViewport;
+    box.textContent = [
+      `inner ${innerWidth}x${innerHeight}  screen ${screen.width}x${screen.height}  dpr ${devicePixelRatio}`,
+      `visualVP ${vv ? `${vv.width|0}x${vv.height|0} @${vv.offsetTop|0}` : '-'}  docEl ${document.documentElement.clientWidth}x${document.documentElement.clientHeight}`,
+      `fixed probe ${r(probe)}  body ${r(document.body)}`,
+      `app ${r(app)}  safe t${cs.paddingTop} r${cs.paddingRight} b${cs.paddingBottom} l${cs.paddingLeft}`,
+      `standalone ${navigator.standalone}  ${navigator.userAgent.match(/OS [\d_]+/)?.[0] || ''}`,
+    ].join('\n');
+  };
+  addEventListener('resize', () => setTimeout(show, 50));
+  setTimeout(show, 300);
+}
 
 // ---------- Boot ----------
 onResize();
