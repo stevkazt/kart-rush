@@ -2217,6 +2217,7 @@ function updateHUD() {
     lastHud = key;
     hud.speed.textContent = kmh;
     hud.lap.textContent = lapTxt;
+    hud.lap.parentElement.classList.toggle('final', kart.lap >= CFG.laps && state.phase !== 'menu');
     hud.time.textContent = timeTxt;
     hud.best.textContent = bestTxt;
     hud.place.hidden = !showPlace;
@@ -2395,7 +2396,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 18 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 19 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 onResize();
 showMenu();
 warmUpShaders();

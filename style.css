@@ -96,15 +96,41 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
 }
 
 #minimap {
+  --map: clamp(80px, calc(var(--app-h) * 0.26), 120px);
   position: absolute;
   top: 10px;
   left: var(--edge-l);
-  width: clamp(80px, calc(var(--app-h) * 0.26), 120px);
-  height: clamp(80px, calc(var(--app-h) * 0.26), 120px);
+  width: var(--map);
+  height: var(--map);
   border-radius: 16px;
   background: rgba(20, 24, 60, 0.45);
   border: 2px solid rgba(255, 255, 255, 0.25);
 }
+
+/* Lap counter sits right under the minimap, same width */
+#lapbox {
+  --map: clamp(80px, calc(var(--app-h) * 0.26), 120px);
+  position: absolute;
+  top: calc(10px + var(--map) + 6px);
+  left: var(--edge-l);
+  width: var(--map);
+  box-sizing: border-box;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(20, 24, 60, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(18px, calc(var(--app-h) * 0.06), 24px);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+#lapbox .label { font-size: 11px; font-style: normal; letter-spacing: 2px; opacity: 0.75; }
+#lapbox.final { color: #ffe14a; border-color: rgba(255, 225, 74, 0.6); }
 
 #speedo {
   position: absolute;

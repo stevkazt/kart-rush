@@ -22,7 +22,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   (mute stays). Records in localStorage `kartrush.records` `{race, lap}`. Engines duck (`soundMix.duck`) behind menus.
   `#pause-screen` (RESUME / RESTART / MENU): `pauseGame()` from the pause button, Esc/P, or the app going to the
   background; the loop skips physics + render while `state.paused`, audio is suspended. All screens go through
-  `showOverlay(screen)`. HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
+  `showOverlay(screen)`. Lap counter `#lapbox` sits under the minimap (build 19; turns yellow on the final lap). HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
   split under the LAP message (`showSplit`, green/red vs best lap so far).
 - **Track (2026-10-16, ~852 m, N 916 samples at `spacing` 0.93):** main straight, fast right, boost straight,
   12-13 m hairpin, chicane, middle S, sweeper, 16 m kink. Road width is per sample per side (`track.wL/wR`,
@@ -204,6 +204,13 @@ speeds". Keep. Nothing open before expansion.
 - Maybe later: stronger drift as its own experiment (steering feel: ask first), hills/jumps (engine change),
   track editor with shareable links, ghost of the best lap, steering-sensitivity setting.
 - Push to GitHub only when the user asks.
+
+**Someday maybe (user 2026-10-16: "may never come to life"): online multiplayer.** Sketch discussed: WebRTC via
+PeerJS (works from GitHub Pages, no server; some mobile networks need a paid TURN relay) or a small WebSocket
+relay. Sync state, not inputs (physics isn't deterministic): each phone sends its kart pose/velocity ~20 Hz,
+remote karts are kinematic bodies drawn interpolated ~100 ms in the past. One phone hosts: countdown start time
+(clock offset), item box pickups, shell hits, places, and runs the AI filling the grid. Lobby with room codes.
+Collisions under 50-150 ms lag are the hard part. Remote player = another driver filling `k.ctl`-style slot.
 
 **Deferred by the user ("ignore for now"):** the speed-feel item. That means a lower/closer camera, speed
 lines, camera shake, close trackside objects and a higher top speed.
