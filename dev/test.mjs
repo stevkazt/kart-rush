@@ -41,8 +41,8 @@ if (mode === 'autopilot' || mode === 'trace') {
   console.log(await ev(`(() => { try { return String(${arg}); } catch (e) { return 'ERR ' + e.stack; } })()`));
 } else if (mode === 'tap') {
   while ((await ev('__s.phase')) !== 'race') await sleep(100);
-  // Teleport onto open infield grass heading +X at ~90 km/h, so no wall can interfere.
-  await ev(`(() => { const b = __k.body; b.position.set(-60, 0.65, -15);
+  // Teleport onto open grass outside the track heading +X at ~90 km/h, so no wall can interfere.
+  await ev(`(() => { const b = __k.body; b.position.set(-60, 0.65, -200);
     b.quaternion.setFromAxisAngle({x:0,y:1,z:0}, Math.PI/2); b.velocity.set(25,0,0); b.angularVelocity.set(0,0,0);
     __in.gas = true; window.__m = {maxSlip:0, maxYaw:0}; window.__h0 = null;
     setInterval(() => { const f = b.quaternion.vmult({x:0,y:0,z:1}), v = b.velocity;

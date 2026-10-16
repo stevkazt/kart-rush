@@ -24,6 +24,13 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   background; the loop skips physics + render while `state.paused`, audio is suspended. All screens go through
   `showOverlay(screen)`. HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
   split under the LAP message (`showSplit`, green/red vs best lap so far).
+- **Track (2026-10-16, ~852 m, N 916 samples at `spacing` 0.93):** main straight, fast right, boost straight,
+  12-13 m hairpin, chicane, middle S, sweeper, 16 m kink. Road width is per sample per side (`track.wL/wR`,
+  `roadWidths`): `halfWidth` (or a 3rd value on a control point) capped on the inside of bends so the inner
+  rail keeps `innerWallRadius` of curve. Use `clampLane(i, x)` for anything lateral. Item rows / pads are
+  sample indices: move them when the layout changes. Design new layouts with `dev/track-check.py` (same
+  centripetal Catmull-Rom as three.js: corner radii as the game measures them, closest approach between
+  different parts (need >= 26 m), ASCII map). Put several points along tight arcs: one apex point = cusp.
 - **Rocket start:** GAS first pressed within `rocketWindow` (1 s) before GO and held = `rocketBoost`; held since
   before `rocketEarly` (1.8 s) = `stall` (no power). A tip shows at the countdown (`#tip`). AIs don't rocket.
 - **Effects (`fx`, section 1g):** one `THREE.Points` ShaderMaterial pool (220) for drift smoke, grass dust and hit
@@ -107,8 +114,8 @@ launcher repo later. The LAN server above still works for quick testing (no offl
    `preventDefault` on `touchstart`/`touchend` on `#controls`. Pointer Events still fire.
    Don't attach that to `#overlay`, because it would kill the Start button's click.
 7. Corner radius limit is geometric: the walls sit `halfWidth + curb` (+ thickness) from the centre line, so the
-   inner wall folds over itself once a corner is tighter than that (~10.6 m now). Keep corners >= ~20 m (the
-   tightest is 20 m). A 9 m hairpin was unplayable. The kart itself turns 8 m at 36 km/h, 17 m at 93 km/h. The track is the `CFG.track.points` Catmull-Rom loop.
+   inner wall folds over itself once a corner is tighter than that (~10.6 m now). Inner widths now cap themselves (`roadWidths`), so
+   corners down to ~12 m work (the hairpin). A 9 m hairpin was unplayable. The kart itself turns 8 m at 36 km/h, 17 m at 93 km/h. The track is the `CFG.track.points` Catmull-Rom loop.
 8. AI pile-ups: braking hard for corners made trailing AIs rear-end the leaders. AIs now take corners with
    high `cornerGrip`, mostly just lift (brake only when 5 m/s over target), and lift when right behind a kart.
 9. **cannon-es `setBrake(x)` is an impulse cap per sub-step, not a force.** `brakeForce: 600` (or even 80) locks
@@ -132,6 +139,14 @@ launcher repo later. The LAN server above still works for quick testing (no offl
     The sun's shadow camera snaps to texels in light space (`lightQ`) so shadow edges don't crawl.
     Frame meter: tap the build label on the title screen (fps, frames > 33 ms, worst frame; `kartrush.perf`).
 
+13. **Cornering grip / rails (2026-10-16).** The assist's `maxLateralAccel` + yaw slacks, not the tyres, set how hard
+    a kart corners; the auto-drift (full lock above 54 km/h) added most of it. At 22 / drift slack 0.4 the kart pulled
+    ~2.8 g and took the 12 m hairpin flat. Now 14 / 0.2: full lock at top speed = ~30 m circle, ~14 m at 65 km/h, so the
+    hairpin needs a brake or lift. Rails cost speed (`wallHitLoss/wallHitMax/wallScrape`, applied in
+    `applyStabilityAssist` from each kart's `collide` hits). The scrape is a share of speed: a fixed 8 m/s^2 nearly
+    cancelled the engine and pinned karts to the rail. AI `cornerGrip` dropped to 20-25 to match (24-30 hit the hairpin rail).
+    Menu buttons fire on pointerup (`onTap`), not click: iOS dropped some synthesised clicks (START needed 2 taps).
+
 ## Testing
 ```bash
 dev/test.sh autopilot 80        # full race with button-style autopilot; prints lap log + STUCK events
@@ -146,7 +161,7 @@ trace probe. Spin-outs record `k.hitBy` ("red from Mako").
 Current baseline: autopilot laps of about 21–23 s with 0 STUCK events. The autopilot log lists every kart each
 5 s (place, lap/idx, speed, AI `resets=`). With AIs, the autopilot finishes 1st by ~2 s; the whole field
 finishes within ~10 s, with 0 AI resets in a clean run. `tap 0.6` gives about 35 degrees at
-release, slip under 2 degrees, and 95 km/h kept. `dev/test.sh` injects debug globals (`__k` kart, `__s` state,
+release, slip under 2 degrees, and 95 km/h kept (before the 2026-10-16 grip cut; now 0.25 s = 9 deg, 0.6 s = 25 deg, 1.0 s = 51 deg). `dev/test.sh` injects debug globals (`__k` kart, `__s` state,
 `__t` track, `__w` world, `__in` input) into a temp copy by replacing the `// ---------- Boot ----------` marker
 line in `main.js` (also `__karts`). Keep that line. `test.sh` refuses to run if port 8765 is already taken:
 an orphaned test server once served a stale copy and made every test lie. The page can't be tested on a real phone from here: ask the user to
@@ -175,9 +190,15 @@ menus + results screen, pause, coasting + slide GAS->ITEM, smooth rendering (int
 continuous rails, shadow snapping), WRONG WAY, lap splits, rocket start, smoke/skids/dust/hit effects, title
 music, wider road, racing-line AI with personalities. The user plays with rotation unlocked (real landscape).
 
+**Done 2026-10-16 (uncommitted at time of writing, build 18):** variable road width + new 852 m track with a
+12 m hairpin (`dev/track-check.py`), grip cut + rails cost speed (gotcha 13), START fires on pointerup.
+User: hairpin "feels more realistic now". AI pace after the grip cut looked weak in one race, but the user then
+ended last after item hits: they judged it fine (variance comes from items), no change needed.
+Lane changes at top speed after the cut (0.25 s tap 14 -> 9 deg): user says "feels ok... hard but normal at high
+speeds". Keep. Open before expansion: these build 16-18 changes are not committed yet; commit when the user says so.
+
 **Next**, roughly in order (agreed 2026-10-16):
-- Tighter corners: build the inner rail properly on tight bends (no fold-over) and allow the road to narrow
-  locally, so hairpins down to ~12 m work. Then 2 new themed tracks (ideas: desert canyon at sunset, snowy
+- 2 new themed tracks (ideas: desert canyon at sunset, snowy
   night with falling snow + an icy section), track data with a theme, track picker, best times per track.
 - Kart colour picker (body / trim / driver).
 - Maybe later: stronger drift as its own experiment (steering feel: ask first), hills/jumps (engine change),

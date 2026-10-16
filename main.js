@@ -12,13 +12,24 @@ const CFG = {
   laps: 3,
 
   track: {
-    // Control points (x, z) of a closed Catmull-Rom loop
+    // Control points (x, z[, halfWidth]) of a closed Catmull-Rom loop. ~850 m: main straight, fast right,
+    // boost straight, a 12-13 m hairpin (several points along it: a single apex point makes a cusp),
+    // flowing chicane, middle S-bends, fast sweeper, a 16 m kink on the left, back to the line.
+    // Designed with an offline checker: corner radii, >= 26 m between different parts of the loop.
     points: [
-      [0, -70], [60, -70], [95, -42], [100, 0], [92, 35], [65, 48],
-      [35, 52], [0, 72], [-45, 72], [-85, 42], [-88, -20], [-55, -62],
+      [-20, -95], [50, -95], [95, -88], [118, -60], [126, -25], [126, 10],
+      [124.1, 35.1], [121.5, 39.6], [117.5, 43], [112.6, 44.8], [107.4, 44.8], [102.5, 43],
+      [98.5, 39.6], [95.9, 35.1], [95, 30], [92, 10], [84, -8], [62, -22],
+      [38, -18], [20, -2], [4, 16], [-6, 36], [-4, 56], [-2, 71.4],
+      [-2.9, 78.3], [-6, 84.6], [-10.9, 89.6], [-17.1, 92.9], [-24, 94], [-60, 96],
+      [-85, 88], [-105, 62], [-112, 28], [-100, -3], [-112, -35], [-102, -75],
+      [-70, -93],
     ],
-    samples: 600,      // spaced points along the centre line
-    halfWidth: 9,      // road half width (was 7: too tight to avoid other karts)
+    spacing: 0.93,     // metres between centre-line samples (their count follows from the length)
+    halfWidth: 9,      // road half width (was 7: too tight to avoid other karts); a 3rd value on a control
+                       // point overrides it there. Narrowed automatically on the inside of tight bends.
+    innerWallRadius: 3, // the inside rail of a bend never curves tighter than this (m), so it can't fold over
+    minHalfWidth: 5,
     curb: 1,           // curb width (between road and wall)
     wallThickness: 0.6,
     wallHeight: 1.2,
@@ -55,11 +66,15 @@ const CFG = {
     driftGrip: 1.7,         // rear grip while drifting -> tail slides out a little
     driftMinSpeed: 15,
     driftYawAssist: 0.5,
-    maxLateralAccel: 22,    // stability assist: caps the requested turn rate at this grip (m/s^2)
+    maxLateralAccel: 14,    // stability assist: caps the requested turn rate at this grip (m/s^2)
     yawSlack: 0.1,          // stability assist: allowed yaw rate above what steering asks for
     steerYawSlack: 0.15,    // ...plus this much at full lock
-    driftYawSlack: 0.4,     // ...plus this much while drifting
+    driftYawSlack: 0.2,     // ...plus this much while drifting
     maxYawRate: 3.0,
+    wallHitLoss: 0.02,      // rails: share of speed lost per m/s of impact into the rail...
+    wallHitMax: 0.35,       // ...capped here (a 30deg hit at top speed costs ~25% on top of the bounce)
+    wallScrape: 0.35,       // share of speed lost per second sliding along a rail (~9 m/s^2 at top speed,
+                            // little when crawling off it; rails had no friction: free to lean on)
 
     miniTurboTime: 1.1,     // seconds of drift needed for a boost
     boostDuration: 1.0,
@@ -89,7 +104,7 @@ const CFG = {
 
   ai: {
     skill: [0.88, 0.98],    // fraction of top speed each AI aims for (rolled per race)
-    cornerGrip: [24, 30],   // lateral accel (m/s^2) each AI dares in corners (rolled per race)
+    cornerGrip: [20, 25],   // lateral accel (m/s^2) each AI dares in corners (rolled per race; kart limit ~22 at speed)
     laneRange: 2.5,         // how far an AI wanders either side of its own line (m)
     lineUse: [0.15, 0.85],  // how much of the racing line each AI takes (rolled per race; 0 = centre line)
     bias: 4,                // +- m: each AI's preferred side of the road, re-rolled every lap (Mario Kart
@@ -108,11 +123,11 @@ const CFG = {
   },
 
   items: {
-    boxRows: [100, 300, 490],         // track sample index of each row of item boxes
+    boxRows: [95, 450, 670],          // track sample index of each row of item boxes
     boxLanes: [-6, -2, 2, 6],         // lateral offsets of the boxes in a row (m)
     boxRespawn: 3,                    // seconds until a taken box comes back
     pickupRadius: 1.8,
-    pads: [[150, 3], [440, -2.5], [565, 0]], // boost pads: [sample index, lane]
+    pads: [[200, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]
     padLength: 4, padWidth: 3.2,
     rollTime: 0.9,                    // item roulette before an item can be used
     spinTime: 1.1,                    // spin-out after a banana / shell hit
@@ -199,9 +214,9 @@ const track = buildTrack();
 
 function buildTrack() {
   const T = CFG.track;
-  const N = T.samples;
   const curve = new THREE.CatmullRomCurve3(
     T.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+  const N = Math.round(curve.getLength() / T.spacing);
 
   const samples = curve.getSpacedPoints(N); // N + 1 points, last == first
   const tangents = [];
@@ -223,7 +238,8 @@ function buildTrack() {
     const ang = Math.acos(clamp(a.dot(b), -1, 1));
     radius.push(ang > 1e-4 ? (K * spacing) / ang : Infinity);
   }
-  const line = racingLine(samples, normals, N);
+  const { wL, wR } = roadWidths(T, curve, tangents, normals, N, spacing);
+  const line = racingLine(samples, normals, N, wL, wR);
   // Corner radius along the racing line too: an AI on it takes corners much wider than the centre line
   const lineRadius = [];
   const lp = samples.slice(0, N).map((p, i) => [p.x + normals[i].x * line[i], p.z + normals[i].z * line[i]]);
@@ -233,7 +249,7 @@ function buildTrack() {
     const ang = Math.abs(wrapAngle(h2 - h1));
     lineRadius.push(ang > 1e-4 ? Math.hypot(cx - ax, cz - az) / ang : Infinity); // arc / turn
   }
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius };
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR };
 
   // Ground (visual + physics)
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), lambert(0x6cc04a));
@@ -248,19 +264,67 @@ function buildTrack() {
   groundBody.updateAABB();
   world.addBody(groundBody);
 
-  // Road surface, centre dashes and curbs
-  const hw = T.halfWidth;
-  scene.add(makeRibbon(data, -hw, hw, 0.02, (i) => ((i / 10) | 0) % 2 ? 0x55585f : 0x5b5e66));
+  // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
+  scene.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02, (i) => ((i / 10) | 0) % 2 ? 0x55585f : 0x5b5e66));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
   scene.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? 0xf2f2f2 : null)));
   const curbColor = (i) => ((i / 3) | 0) % 2 ? 0xffffff : 0xe8322f;
-  scene.add(makeRibbon(data, hw, hw + T.curb, 0.04, curbColor));
-  scene.add(makeRibbon(data, -hw - T.curb, -hw, 0.04, curbColor));
+  scene.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, curbColor));
+  scene.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, curbColor));
 
   buildWalls(data);
   buildStartLine(data);
   buildScenery(data);
   return data;
+}
+
+/**
+ * Road half-width on each side of the centre line, per sample (wL = left, the +normal side; wR = right).
+ * Starts from halfWidth (or a control point's own width), then on the inside of a bend is capped so the
+ * inner rail keeps at least innerWallRadius of curve: otherwise the offset points cross over and the rail
+ * folds back into the road (why a 9 m hairpin was unplayable). The cap is spread over the neighbouring
+ * samples so the road narrows and widens smoothly.
+ */
+function roadWidths(T, curve, tangents, normals, N, spacing) {
+  // width from the control points (3rd value), interpolated along the loop by the curve parameter
+  const P = T.points.length;
+  const base = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const u = (i / N) * P, a = Math.floor(u) % P, b = (a + 1) % P, f = u - Math.floor(u);
+    base[i] = lerp(T.points[a][2] ?? T.halfWidth, T.points[b][2] ?? T.halfWidth, f);
+  }
+  const inner = (sign) => {
+    const cap = new Float32Array(N);
+    const H = 3; // heading change measured over 2H samples (as track.radius)
+    for (let i = 0; i < N; i++) {
+      const a = tangents[(i - H + N) % N], b = tangents[(i + H) % N], n = normals[(i - H + N) % N];
+      const ang = Math.acos(clamp(a.dot(b), -1, 1));
+      const turnsThisWay = (b.x * n.x + b.z * n.z) * sign > 0; // left turn: b leans toward the left normal
+      const R = ang > 1e-4 ? (2 * H * spacing) / ang : Infinity;
+      cap[i] = turnsThisWay ? R - T.curb - T.wallThickness - T.innerWallRadius : Infinity;
+    }
+    // spread: min over a window, then a moving average
+    const W = 14, out = new Float32Array(N + 1);
+    const m = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      let v = Infinity;
+      for (let d = -W; d <= W; d++) v = Math.min(v, cap[(i + d + N) % N]);
+      m[i] = Math.max(T.minHalfWidth, Math.min(base[i], v));
+    }
+    for (let i = 0; i < N; i++) {
+      let sum = 0;
+      for (let d = -W; d <= W; d++) sum += m[(i + d + N) % N];
+      out[i] = Math.min(m[i], sum / (2 * W + 1)); // smooth, but never wider than the cap
+    }
+    out[N] = out[0];
+    return out;
+  };
+  return { wL: inner(1), wR: inner(-1) };
+}
+
+/** Clamp a lateral offset at sample i to the road, `margin` metres inside each edge. */
+function clampLane(i, x, margin = 1.5) {
+  return clamp(x, -track.wR[i] + margin, track.wL[i] - margin);
 }
 
 /**
@@ -270,8 +334,8 @@ function buildTrack() {
  * the classic line: wide on entry, the inside at the apex, wide on the exit. (Pulling the path tight
  * instead gives the shortest path, which just hugs the inside of the whole loop.)
  */
-function racingLine(samples, normals, N) {
-  const lim = CFG.track.halfWidth - CFG.ai.lineMargin;
+function racingLine(samples, normals, N, wL, wR) {
+  const M = CFG.ai.lineMargin;
   const off = new Float32Array(N);
   const px = new Float32Array(N), pz = new Float32Array(N);
   // coarse stencil first (bends over ~30 m, converges fast), then a finer one to settle the details
@@ -285,7 +349,7 @@ function racingLine(samples, normals, N) {
       const i1 = (i - h + N) % N, i2 = (i - 2 * h + N) % N, j1 = (i + h) % N, j2 = (i + 2 * h) % N;
       const dx = px[i2] - 4 * px[i1] + 6 * px[i] - 4 * px[j1] + px[j2];
       const dz = pz[i2] - 4 * pz[i1] + 6 * pz[i] - 4 * pz[j1] + pz[j2];
-      off[i] = clamp(off[i] - 0.1 * (dx * normals[i].x + dz * normals[i].z), -lim, lim);
+      off[i] = clamp(off[i] - 0.1 * (dx * normals[i].x + dz * normals[i].z), -wR[i] + M, wL[i] - M);
     }
   }
   return off;
@@ -293,6 +357,9 @@ function racingLine(samples, normals, N) {
 
 /** Builds a flat strip between two signed lateral offsets along the centre line. */
 function makeRibbon({ N, samples, normals }, inner, outer, y, colorAt) {
+  // inner / outer: a lateral offset, or a function of the sample index
+  const lo = typeof inner === 'function' ? inner : () => inner;
+  const hi = typeof outer === 'function' ? outer : () => outer;
   const pos = [];
   const col = [];
   const c = new THREE.Color();
@@ -301,7 +368,7 @@ function makeRibbon({ N, samples, normals }, inner, outer, y, colorAt) {
   for (let i = 0; i < N; i++) {
     const color = colorAt(i);
     if (color === null) continue;
-    const a0 = p(i, inner), a1 = p(i, outer), b0 = p(i + 1, inner), b1 = p(i + 1, outer);
+    const a0 = p(i, lo(i)), a1 = p(i, hi(i)), b0 = p(i + 1, lo(i + 1)), b1 = p(i + 1, hi(i + 1));
     pos.push(...a0, ...b0, ...a1, ...a1, ...b0, ...b1);
     c.set(color);
     for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b);
@@ -320,20 +387,25 @@ function makeRibbon({ N, samples, normals }, inner, outer, y, colorAt) {
  * segment as its own box needed overlaps to close gaps on curves, and the overlapping blue/white faces
  * z-fought: the rails flickered as the camera moved.)
  */
-function buildWalls({ N, samples, normals }) {
+function buildWalls({ N, samples, normals, wL, wR }) {
   const T = CFG.track;
   const th = T.wallThickness, h = T.wallHeight, k = T.wallStride;
-  const off = T.halfWidth + T.curb + th / 2;
   const pos = [], col = [];
   const c = new THREE.Color();
   const quad = (a, b, cc, d) => pos.push(...a, ...b, ...cc, ...cc, ...b, ...d);
 
   for (const side of [1, -1]) {
     // corner points at sample i: inner/outer edge at ground and top height
-    const edge = (i, o, y) => [samples[i].x + normals[i].x * o * side, y, samples[i].z + normals[i].z * o * side];
+    const w = side > 0 ? wL : wR;
+    const off = (i) => w[i] + T.curb + th / 2; // wall centre line
+    // corner points at sample i, `o` metres outward from the wall centre line (+- th/2)
+    const edge = (i, o, y) => {
+      const d = (off(i) + o) * side;
+      return [samples[i].x + normals[i].x * d, y, samples[i].z + normals[i].z * d];
+    };
     for (let i = 0; i < N; i += k) {
       const j = Math.min(i + k, N);
-      const inA = off - th / 2, outA = off + th / 2;
+      const inA = -th / 2, outA = th / 2;
       quad(edge(i, inA, 0), edge(j, inA, 0), edge(i, inA, h), edge(j, inA, h));     // road-side face
       quad(edge(i, outA, h), edge(j, outA, h), edge(i, outA, 0), edge(j, outA, 0)); // outside face
       quad(edge(i, inA, h), edge(j, inA, h), edge(i, outA, h), edge(j, outA, h));   // top
@@ -341,8 +413,8 @@ function buildWalls({ N, samples, normals }) {
       for (let v = 0; v < 18; v++) col.push(c.r, c.g, c.b);
 
       // collider: same box per segment as before (overlap is harmless for physics)
-      const a = samples[i].clone().addScaledVector(normals[i], off * side);
-      const b = samples[j].clone().addScaledVector(normals[j], off * side);
+      const a = samples[i].clone().addScaledVector(normals[i], off(i) * side);
+      const b = samples[j].clone().addScaledVector(normals[j], off(j) * side);
       const dx = b.x - a.x, dz = b.z - a.z;
       const len = Math.hypot(dx, dz) + th;
       const body = new CANNON.Body({
@@ -366,9 +438,9 @@ function buildWalls({ N, samples, normals }) {
   scene.add(mesh);
 }
 
-function buildStartLine({ samples, tangents }) {
+function buildStartLine({ samples, tangents, wL, wR }) {
   const T = CFG.track;
-  const w = T.halfWidth * 2;
+  const w = wL[0] + wR[0];
 
   // Checkered strip
   const c = document.createElement('canvas');
@@ -393,7 +465,7 @@ function buildStartLine({ samples, tangents }) {
 
   // Arch: two posts + banner
   const arch = new THREE.Group();
-  const postOff = T.halfWidth + T.curb + T.wallThickness + 0.6;
+  const postOff = Math.max(wL[0], wR[0]) + T.curb + T.wallThickness + 0.6;
   const postMat = lambert(0xffd23a);
   for (const side of [1, -1]) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 7, 0.8), postMat);
@@ -493,6 +565,15 @@ const STAR_MAT = new THREE.MeshBasicMaterial({ color: 0xffe14a });
 const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0));
 const kart = karts[0];
 world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
+// Rails cost speed. 'collide' fires per contact point, before the solver (true impact speed); keep the
+// hardest one and let applyStabilityAssist apply it once, right after the solver in the same step.
+for (const k of karts) {
+  k.body.addEventListener('collide', (e) => {
+    if (e.body.material !== physMats.wall) return;
+    k.wallTouch = true;
+    k.wallHit = Math.max(k.wallHit, Math.abs(e.contact.getImpactVelocityAlongNormal()));
+  });
+}
 
 function makeRacer({ name, colors }, isPlayer) {
   return Object.assign(buildKart(colors), {
@@ -510,7 +591,7 @@ function makeRacer({ name, colors }, isPlayer) {
 function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
-    boost: 0, flipTimer: 0, padT: 0, stall: 0,
+    boost: 0, flipTimer: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
     item: null, itemRoll: 0, spin: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
   };
@@ -815,7 +896,8 @@ function buildItemVisuals() {
   });
   const boxes = [];
   for (const idx of I.boxRows) for (const lane of I.boxLanes) {
-    boxes.push({ pos: onTrack(idx, lane, 1.0), idx, lane, hidden: 0 });
+    const l = clampLane(idx, lane, 1.2); // rows on narrower bits squeeze in
+    boxes.push({ pos: onTrack(idx, l, 1.0), idx, lane: l, hidden: 0 });
   }
   const boxMesh = new THREE.InstancedMesh(
     new THREE.BoxGeometry(1.1, 1.1, 1.1),
@@ -979,13 +1061,28 @@ function initControls() {
   hud.item.addEventListener('pointerdown', (e) => { e.preventDefault(); input.item = true; hud.item.classList.add('pressed'); });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.item.addEventListener(t, () => hud.item.classList.remove('pressed')));
 
-  $('btn-start').addEventListener('click', startRace);
-  $('btn-again').addEventListener('click', startRace);
-  $('btn-menu').addEventListener('click', () => { sound.click(); showMenu(); });
+  // Menu buttons fire on pointer release over the button, not on 'click': iOS sometimes drops the
+  // click it synthesises from a tap (slight finger roll, page busy, hover heuristics), so START
+  // needed a second tap. detail === 0 clicks (keyboard, tests calling .click()) still work.
+  const onTap = (el, fn) => {
+    let down = null;
+    el.addEventListener('pointerdown', (e) => { down = e.pointerId; });
+    el.addEventListener('pointerup', (e) => {
+      if (down !== e.pointerId) return;
+      down = null;
+      const r = el.getBoundingClientRect();
+      if (e.clientX >= r.left - 12 && e.clientX <= r.right + 12 && e.clientY >= r.top - 12 && e.clientY <= r.bottom + 12) fn();
+    });
+    el.addEventListener('pointercancel', () => { down = null; });
+    el.addEventListener('click', (e) => { if (e.detail === 0) fn(); });
+  };
+  onTap($('btn-start'), startRace);
+  onTap($('btn-again'), startRace);
+  onTap($('btn-menu'), () => { sound.click(); showMenu(); });
   $('btn-pause').addEventListener('pointerdown', (e) => { e.preventDefault(); pauseGame(); });
-  $('btn-resume').addEventListener('click', resumeGame);
-  $('btn-restart').addEventListener('click', () => { state.paused = false; startRace(); });
-  $('btn-quit').addEventListener('click', () => { state.paused = false; sound.unlock(); showMenu(); });
+  onTap($('btn-resume'), resumeGame);
+  onTap($('btn-restart'), () => { state.paused = false; startRace(); });
+  onTap($('btn-quit'), () => { state.paused = false; sound.unlock(); showMenu(); });
 
   // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
   const muteBtn = $('btn-mute');
@@ -1170,7 +1267,7 @@ function updateKartProgress(k, dt, racing) {
   const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
     k.lastReset = k.ai?.resetNow || (k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : 'button');
-    const lane = k.ai ? clamp(track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane, -CFG.track.halfWidth + 1.5, CFG.track.halfWidth - 1.5) : 0;
+    const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     resetKart(k, k.trackIdx, lane);
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
     if (k.isPlayer) camState.snap = true;
@@ -1399,7 +1496,6 @@ function updateAI(k, dt, canDrive) {
   // --- Lateral plan. Each AI follows its own share of the racing line (`base`), wandering a little
   // either side of it. Pads, boxes, bananas and slower karts ahead set an absolute goal instead,
   // and a kart right alongside pushes it away so it doesn't side-swipe.
-  const edge = CFG.track.halfWidth - 1.5;
   const base = (i) => track.line[i] * ai.lineUse + ai.bias;
   ai.laneTimer -= dt;
   if (ai.laneTimer <= 0) {
@@ -1426,7 +1522,7 @@ function updateAI(k, dt, canDrive) {
     const side = dx * n.x + dz * n.z;
     const heading = goal ?? base(idx) + ai.lane;
     if (dAhead > 0 && dAhead < 18 && Math.abs(myLane + side - heading) < 2.2) {
-      goal = clamp(myLane + side + (myLane + side > 0 ? -2.8 : 2.8), -edge, edge);
+      goal = clampLane(idx, myLane + side + (myLane + side > 0 ? -2.8 : 2.8));
     }
   }
   let blocked = false, push = 0;
@@ -1438,12 +1534,12 @@ function updateAI(k, dt, canDrive) {
     const closing = k.speed - o.speed;
     if (ahead > 2 && ahead < Math.max(10, closing * 1.2) && Math.abs(side) < 2.6 && closing > -1) {
       const dir = myLane + side > 0 ? -1 : 1; // pass on the roomier side of them
-      goal = clamp(myLane + side + dir * 3.2, -edge, edge);
+      goal = clampLane(idx, myLane + side + dir * 3.2);
       if (ahead < 5 && Math.abs(side) < 1.8) blocked = true; // right on their bumper: ease off
     } else if (Math.abs(ahead) <= 2.5 && Math.abs(side) < 3.2) {
       // side by side: keep ~3 m apart (unless that would put us into the wall)
       const away = side > 0 ? -1 : 1;
-      if (Math.abs(myLane + away) < edge) push += away * (3.2 - Math.abs(side));
+      if (clampLane(idx, myLane + away) === myLane + away) push += away * (3.2 - Math.abs(side));
     }
   }
   const relGoal = (goal === null ? ai.laneTarget : goal - base(idx)) + push;
@@ -1452,7 +1548,7 @@ function updateAI(k, dt, canDrive) {
   // --- Steering: pure pursuit toward a look-ahead point on the lane
   const speedRatio = clamp(k.speed / K.maxSpeed, 0, 1);
   const j = (idx + Math.round(lerp(A.lookAhead[0], A.lookAhead[1], speedRatio) / spacing)) % N;
-  const lat = clamp(base(j) + ai.lane, -edge, edge);
+  const lat = clampLane(j, base(j) + ai.lane);
   const tx = samples[j].x + normals[j].x * lat;
   const tz = samples[j].z + normals[j].z * lat;
   const d = wrapAngle(Math.atan2(tx - b.position.x, tz - b.position.z) - Math.atan2(fwd.x, fwd.z));
@@ -1679,7 +1775,6 @@ function updateItems(dt, racing) {
 
   // --- Shells: green ones fly straight and bounce off the walls; red ones follow the track
   // and home in on their target once close
-  const wallLat = CFG.track.halfWidth + CFG.track.curb - 0.35;
   for (let i = shells.length - 1; i >= 0; i--) {
     const s = shells[i];
     s.age += dt;
@@ -1702,6 +1797,7 @@ function updateItems(dt, racing) {
     s.idx = nearestTrackIndex(s.pos, s.idx);
     const c = samples[s.idx], n = normals[s.idx];
     const lat = (s.pos.x - c.x) * n.x + (s.pos.z - c.z) * n.z;
+    const wallLat = (lat > 0 ? track.wL[s.idx] : track.wR[s.idx]) + CFG.track.curb - 0.35;
     if (Math.abs(lat) > wallLat) {
       const side = Math.sign(lat);
       s.pos.addScaledVector(n, (side * wallLat - lat) * 1.01);
@@ -1885,6 +1981,16 @@ function applyStabilityAssist(k) {
   const { body, vehicle } = k;
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
 
+  // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
+  if (k.wallTouch) {
+    const hit = clamp((k.wallHit - 1.5) * K.wallHitLoss, 0, K.wallHitMax);
+    const scale = (1 - hit) * (1 - K.wallScrape * CFG.physicsStep);
+    body.velocity.x *= scale;
+    body.velocity.z *= scale;
+    k.wallTouch = false;
+    k.wallHit = 0;
+  }
+
   const fwd = body.quaternion.vmult(LOCAL_FWD, tmpFwd);
   const speed = body.velocity.dot(fwd);
   // Boost: extra push through the centre of mass. Doing it with more wheel torque popped wheelies
@@ -2051,15 +2157,16 @@ const emitP = new THREE.Vector3(), emitV = new THREE.Vector3();
 
 function updateEffects(dt) {
   const driving = state.phase === 'race' || state.phase === 'finished';
-  const T = CFG.track, offRoad = T.halfWidth + T.curb;
+  const T = CFG.track;
   for (const k of karts) {
     k.stars.visible = k.spin > 0;
     if (k.stars.visible) k.stars.rotation.y += dt * 7;
 
     // Smoke + skid marks while drifting, dust on the grass; only near the camera (it's all small stuff)
     const near = k.group.position.distanceToSquared(camera.position) < 45 * 45;
-    const s = track.samples[k.trackIdx];
-    const grass = Math.hypot(k.body.position.x - s.x, k.body.position.z - s.z) > offRoad && Math.abs(k.speed) > 5;
+    const s = track.samples[k.trackIdx], n = track.normals[k.trackIdx];
+    const lat = (k.body.position.x - s.x) * n.x + (k.body.position.z - s.z) * n.z;
+    const grass = (lat > 0 ? lat - track.wL[k.trackIdx] : -lat - track.wR[k.trackIdx]) > T.curb && Math.abs(k.speed) > 5;
     for (let j = 0; j < 2; j++) {
       const w = k.wheelMeshes[2 + j], mark = k.skid[j];
       const down = k.vehicle.wheelInfos[2 + j].raycastResult.hasHit;
@@ -2288,7 +2395,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 15 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 18 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 onResize();
 showMenu();
 warmUpShaders();
