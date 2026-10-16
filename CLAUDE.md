@@ -24,6 +24,14 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   background; the loop skips physics + render while `state.paused`, audio is suspended. All screens go through
   `showOverlay(screen)`. HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
   split under the LAP message (`showSplit`, green/red vs best lap so far).
+- **Rocket start:** GAS first pressed within `rocketWindow` (1 s) before GO and held = `rocketBoost`; held since
+  before `rocketEarly` (1.8 s) = `stall` (no power). A tip shows at the countdown (`#tip`). AIs don't rocket.
+- **Effects (`fx`, section 1g):** one `THREE.Points` ShaderMaterial pool (220) for drift smoke, grass dust and hit
+  bursts (`hitBurst` in `spinOut`), plus a 360-quad ring buffer of skid marks at y 0.05; emitted only for karts
+  within 45 m with rear wheels down. Dizzy stars (`k.stars`) while spun out. `fx.reset()` on race start / menu.
+  GPU programs: 16, all compiled by `warmUpShaders`.
+- **Music:** `sound.music('race' | 'menu' | false)`; menu loop on the title + results screens, starts on the first
+  tap (iOS). sound.js only suspends on visibility change; the game resumes audio (so a paused race stays silent).
 - Flat track layers are >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10) and the
   camera near plane is 0.5: closer layers / near 0.1 shimmered far down the track (depth precision).
 - **iOS portrait strip (2026-10-16):** with rotation lock on, the installed app got a viewport of 797 of 844pt

@@ -568,3 +568,20 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   animation: warn-blink 0.5s steps(2) infinite;
 }
 #wrongway[hidden] { display: none; }
+
+/* Countdown tip (rocket start), under the countdown number */
+#tip {
+  position: absolute;
+  left: 50%;
+  top: 66%;
+  transform: translateX(-50%);
+  padding: 5px 14px;
+  border-radius: 12px;
+  background: rgba(10, 12, 36, 0.7);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+  opacity: 0;
+}
+.pop-tip { animation: tip 3s ease-out forwards; }
+@keyframes tip { 0%, 100% { opacity: 0; } 8%, 85% { opacity: 1; } }

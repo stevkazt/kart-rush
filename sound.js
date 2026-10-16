@@ -3,7 +3,7 @@
  *   sound.unlock()            call from a user gesture (Start button); creates/resumes the context
  *   sound.update(dt, mix)     every frame: engines, drift screech
  *   sound.<sfx>()             one-shots: beep, go, bump, boost, charged, lap, finalLap, finish, ...
- *   sound.music(on)           start/stop the race music loop
+ *   sound.music(mode)         'race' / 'menu' music loop, or false to stop
  *   sound.setMuted(bool)      remembered in localStorage
  * ========================================================================== */
 
@@ -36,6 +36,7 @@ function unlock() {
     noiseBuf = makeNoise();
     player = makeEngine(VOL.engine, 0);
     drift = makeDrift();
+    if (musicMode) music(musicMode); // e.g. the title music, asked for before the first tap
   }
   if (ctx.state !== 'running') ctx.resume().catch(() => {});
 }
@@ -174,6 +175,7 @@ let lastBump = 0;
 const sfx = {
   beep() { if (ready()) tone(440, now(), 0.18, { vol: 0.25 }); },
   go() { if (ready()) tone(880, now(), 0.5, { vol: 0.3 }); },
+  stall() { if (ready()) notes([98, 0, 82, 0, 73], 0.07, { type: 'square', vol: 0.2, slide: 0.7 }); },
   bump(strength = 1) {
     if (!ready() || ctx.currentTime - lastBump < 0.12) return;
     lastBump = ctx.currentTime;
@@ -219,10 +221,10 @@ const sfx = {
   warn() { if (ready()) tone(1400, now(), 0.12, { type: 'square', vol: 0.12 }); },
 };
 
-// ---------- Music: a little step-sequenced chiptune loop ----------
+// ---------- Music: little step-sequenced chiptune loops ----------
 // 16 steps per bar, 4 bars (C - G - Am - F). Scheduled slightly ahead with a timer.
-const BPM = 148;
-const STEP = 60 / BPM / 4;
+// 'race': driving bass, lead and drums. 'menu': slower and softer (arpeggios, light kick), for the title
+// and results screens.
 const CHORDS = [[48, 52, 55], [43, 47, 50], [45, 48, 52], [41, 45, 48]]; // MIDI roots + triads
 const LEAD = [ // scale degrees in semitones above the chord root (+12), -1 = rest
   [12, -1, 16, -1, 19, -1, 16, 19, 24, -1, 19, -1, 16, -1, 19, -1],
@@ -230,14 +232,18 @@ const LEAD = [ // scale degrees in semitones above the chord root (+12), -1 = re
   [12, -1, 15, -1, 19, -1, 15, 19, 24, -1, 22, -1, 19, -1, 15, -1],
   [12, -1, 16, -1, 19, 21, 19, -1, 16, -1, 14, -1, 12, -1, 11, -1],
 ];
+const MENU_ARP = [0, 12, 7, 12, 4, 12, 7, 12]; // offsets from the chord root, eighth notes
+const BPM = { race: 148, menu: 96 };
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
-let musicTimer = 0, musicStep = 0, musicNext = 0;
+let musicTimer = 0, musicStep = 0, musicNext = 0, musicMode = null;
 
-function music(on) {
+/** music('race' | 'menu' | false). Before the first tap (no audio yet) the wish is kept for unlock(). */
+function music(mode) {
+  musicMode = mode || null;
   if (!ctx) return;
   clearInterval(musicTimer);
   musicTimer = 0;
-  if (!on) return;
+  if (!musicMode) return;
   musicStep = 0;
   musicNext = ctx.currentTime + 0.1;
   musicTimer = setInterval(scheduleMusic, 25);
@@ -245,21 +251,32 @@ function music(on) {
 
 function scheduleMusic() {
   if (ctx.state !== 'running') { musicNext = ctx.currentTime + 0.1; return; }
+  const STEP = 60 / BPM[musicMode] / 4;
   while (musicNext < ctx.currentTime + 0.12) {
     const bar = (musicStep >> 4) % 4, s = musicStep % 16, t = musicNext;
     const [root, third, fifth] = CHORDS[bar];
     const opt = { bus: musicBus };
-    // Bass: driving eighths, octave jump on the off-beat
-    if (s % 2 === 0) tone(midi(root - 12 + (s % 4 === 2 ? 12 : 0)), t, STEP * 1.8, { ...opt, type: 'square', vol: 0.35 });
-    // Lead
-    const l = LEAD[bar][s];
-    if (l >= 0) tone(midi(root + l + 12), t, STEP * 1.9, { ...opt, type: 'triangle', vol: 0.45 });
-    // Chord stabs on the off-beats
-    if (s % 4 === 2) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 0.9, { ...opt, type: 'square', vol: 0.08 }));
-    // Drums: kick on the beat, snare on 2 and 4, hats on eighths
-    if (s % 4 === 0) tone(150, t, 0.12, { ...opt, type: 'sine', vol: 0.8, slide: 0.3 });
-    if (s % 8 === 4) noiseHit(t, 0.12, { ...opt, freq: 1800, type: 'bandpass', vol: 0.5 });
-    if (s % 2 === 0) noiseHit(t, 0.03, { ...opt, freq: 7000, type: 'highpass', vol: 0.2 });
+    if (musicMode === 'menu') {
+      // Arpeggio on eighths, a soft bass note per half bar, the lead every other bar, a gentle kick
+      if (s % 2 === 0) tone(midi(root + 12 + MENU_ARP[(s >> 1) % 8]), t, STEP * 1.6, { ...opt, type: 'triangle', vol: 0.22 });
+      if (s % 8 === 0) tone(midi(root - 12), t, STEP * 7, { ...opt, type: 'triangle', vol: 0.4 });
+      const l = LEAD[bar][s];
+      if ((musicStep >> 6) % 2 === 1 && l >= 0 && s % 4 === 0) tone(midi(root + l + 12), t, STEP * 3.5, { ...opt, type: 'square', vol: 0.06 });
+      if (s % 8 === 0) tone(120, t, 0.1, { ...opt, type: 'sine', vol: 0.35, slide: 0.4 });
+      if (s % 8 === 4) [third, fifth].forEach((n) => tone(midi(n), t, STEP * 3, { ...opt, type: 'sine', vol: 0.12 }));
+    } else {
+      // Bass: driving eighths, octave jump on the off-beat
+      if (s % 2 === 0) tone(midi(root - 12 + (s % 4 === 2 ? 12 : 0)), t, STEP * 1.8, { ...opt, type: 'square', vol: 0.35 });
+      // Lead
+      const l = LEAD[bar][s];
+      if (l >= 0) tone(midi(root + l + 12), t, STEP * 1.9, { ...opt, type: 'triangle', vol: 0.45 });
+      // Chord stabs on the off-beats
+      if (s % 4 === 2) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 0.9, { ...opt, type: 'square', vol: 0.08 }));
+      // Drums: kick on the beat, snare on 2 and 4, hats on eighths
+      if (s % 4 === 0) tone(150, t, 0.12, { ...opt, type: 'sine', vol: 0.8, slide: 0.3 });
+      if (s % 8 === 4) noiseHit(t, 0.12, { ...opt, freq: 1800, type: 'bandpass', vol: 0.5 });
+      if (s % 2 === 0) noiseHit(t, 0.03, { ...opt, freq: 7000, type: 'highpass', vol: 0.2 });
+    }
     musicNext += STEP;
     musicStep++;
   }
@@ -271,11 +288,11 @@ function setMuted(m) {
   if (ctx) out.gain.setTargetAtTime(m ? 0 : VOL.master, ctx.currentTime, 0.03);
 }
 
-// Pause audio when the app is backgrounded; iOS can also leave the context "interrupted".
+// Pause audio when the app is backgrounded.
 document.addEventListener('visibilitychange', () => {
   if (!ctx) return;
+  // Only suspend here: the game resumes audio itself (it stays off while the race is paused)
   if (document.hidden) ctx.suspend().catch(() => {});
-  else ctx.resume().catch(() => {});
 });
 
 /** Pause: freeze all audio (unlock() resumes it). */
