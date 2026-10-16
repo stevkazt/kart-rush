@@ -18,7 +18,7 @@ const CFG = {
       [35, 52], [0, 72], [-45, 72], [-85, 42], [-88, -20], [-55, -62],
     ],
     samples: 600,      // spaced points along the centre line
-    halfWidth: 7,      // road half width
+    halfWidth: 9,      // road half width (was 7: too tight to avoid other karts)
     curb: 1,           // curb width (between road and wall)
     wallThickness: 0.6,
     wallHeight: 1.2,
@@ -39,7 +39,7 @@ const CFG = {
     brakeForce: 600,        // per wheel, only used to hold karts still before the start
     wheelBrake: 1.5,        // per wheel while braking (cannon-es: an impulse cap per step, not a force)
     brakeDecel: 22,         // m/s^2 through the centre of mass (big wheel brakes flipped the kart)
-    coastBrake: 12,         // rolling resistance when no pedal is held (AI; its cornering relies on it)
+    coastBrake: 12,         // rolling resistance when no pedal is held (unused while driving now: see playerCoast, ai.coast)
     playerCoast: 3,         // the player's kart rolls on when GAS is released (~5 km/h lost per 0.3 s lift)
     maxSpeed: 26,           // m/s
     maxReverse: 8,
@@ -84,13 +84,20 @@ const CFG = {
   grid: {
     firstRow: 8,            // metres behind the start line
     rowGap: 6,
-    colOffset: 3.2,         // lateral offset of the two columns
+    colOffset: 4,           // lateral offset of the two columns
   },
 
   ai: {
     skill: [0.88, 0.98],    // fraction of top speed each AI aims for (rolled per race)
     cornerGrip: [24, 30],   // lateral accel (m/s^2) each AI dares in corners (rolled per race)
-    laneRange: 3.5,         // max distance of an AI's racing lane from the centre line (m)
+    laneRange: 2.5,         // how far an AI wanders either side of its own line (m)
+    lineUse: [0.15, 0.85],  // how much of the racing line each AI takes (rolled per race; 0 = centre line)
+    bias: 4,                // +- m: each AI's preferred side of the road, re-rolled every lap (Mario Kart
+                            // chaos instead of an F1 train on one line)
+    coast: 4,               // rolling resistance when an AI lifts (the player's coastBrake 12 is ~18 m/s^2:
+                            // every small lift looked like slamming the brakes)
+    brakeOver: 2.5,         // brake only when this many m/s over the corner speed it wants
+    lineMargin: 2.2,        // racing line stays this far inside the road edge (m)
     lookAhead: [8, 15],     // pure-pursuit look-ahead (m), at standstill -> top speed
     steerGain: 2.2,
     mistakeEvery: [6, 15],  // seconds between mistakes (wobble or lift)
@@ -102,7 +109,7 @@ const CFG = {
 
   items: {
     boxRows: [100, 300, 490],         // track sample index of each row of item boxes
-    boxLanes: [-4.5, -1.5, 1.5, 4.5], // lateral offsets of the boxes in a row (m)
+    boxLanes: [-6, -2, 2, 6],         // lateral offsets of the boxes in a row (m)
     boxRespawn: 3,                    // seconds until a taken box comes back
     pickupRadius: 1.8,
     pads: [[150, 3], [440, -2.5], [565, 0]], // boost pads: [sample index, lane]
@@ -216,7 +223,17 @@ function buildTrack() {
     const ang = Math.acos(clamp(a.dot(b), -1, 1));
     radius.push(ang > 1e-4 ? (K * spacing) / ang : Infinity);
   }
-  const data = { N, samples, tangents, normals, spacing, radius };
+  const line = racingLine(samples, normals, N);
+  // Corner radius along the racing line too: an AI on it takes corners much wider than the centre line
+  const lineRadius = [];
+  const lp = samples.slice(0, N).map((p, i) => [p.x + normals[i].x * line[i], p.z + normals[i].z * line[i]]);
+  for (let i = 0; i < N; i++) {
+    const [ax, az] = lp[(i - K + N) % N], [bx, bz] = lp[i], [cx, cz] = lp[(i + K) % N];
+    const h1 = Math.atan2(bx - ax, bz - az), h2 = Math.atan2(cx - bx, cz - bz);
+    const ang = Math.abs(wrapAngle(h2 - h1));
+    lineRadius.push(ang > 1e-4 ? Math.hypot(cx - ax, cz - az) / ang : Infinity); // arc / turn
+  }
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius };
 
   // Ground (visual + physics)
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), lambert(0x6cc04a));
@@ -244,6 +261,34 @@ function buildTrack() {
   buildStartLine(data);
   buildScenery(data);
   return data;
+}
+
+/**
+ * Racing line as a lateral offset per sample: the minimum-curvature path inside the road. Starting on the
+ * centre line, repeatedly nudge each point against the path's 4th difference (smoothing out how sharply
+ * it bends), clamped inside the road. Spreading each corner's turn over as long a path as possible gives
+ * the classic line: wide on entry, the inside at the apex, wide on the exit. (Pulling the path tight
+ * instead gives the shortest path, which just hugs the inside of the whole loop.)
+ */
+function racingLine(samples, normals, N) {
+  const lim = CFG.track.halfWidth - CFG.ai.lineMargin;
+  const off = new Float32Array(N);
+  const px = new Float32Array(N), pz = new Float32Array(N);
+  // coarse stencil first (bends over ~30 m, converges fast), then a finer one to settle the details
+  for (let it = 0; it < 3000; it++) {
+    const h = it < 2000 ? 10 : 4;
+    for (let i = 0; i < N; i++) {
+      px[i] = samples[i].x + normals[i].x * off[i];
+      pz[i] = samples[i].z + normals[i].z * off[i];
+    }
+    for (let i = 0; i < N; i++) {
+      const i1 = (i - h + N) % N, i2 = (i - 2 * h + N) % N, j1 = (i + h) % N, j2 = (i + 2 * h) % N;
+      const dx = px[i2] - 4 * px[i1] + 6 * px[i] - 4 * px[j1] + px[j2];
+      const dz = pz[i2] - 4 * pz[i1] + 6 * pz[i] - 4 * pz[j1] + pz[j2];
+      off[i] = clamp(off[i] - 0.1 * (dx * normals[i].x + dz * normals[i].z), -lim, lim);
+    }
+  }
+  return off;
 }
 
 /** Builds a flat strip between two signed lateral offsets along the centre line. */
@@ -1125,7 +1170,8 @@ function updateKartProgress(k, dt, racing) {
   const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
     k.lastReset = k.ai?.resetNow || (k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : 'button');
-    resetKart(k, k.trackIdx, k.ai ? k.ai.lane : 0);
+    const lane = k.ai ? clamp(track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane, -CFG.track.halfWidth + 1.5, CFG.track.halfWidth - 1.5) : 0;
+    resetKart(k, k.trackIdx, lane);
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
     if (k.isPlayer) camState.snap = true;
   }
@@ -1146,6 +1192,7 @@ function completeLap(k) {
   }
   if (k.lap >= CFG.laps) finishKart(k);
   else k.lap++;
+  if (k.ai) k.ai.bias = rand(-CFG.ai.bias, CFG.ai.bias); // a new favourite side each lap
 }
 
 function finishKart(k) {
@@ -1324,8 +1371,8 @@ const aiFwd = new CANNON.Vec3();
 function newAI(lane) {
   const A = CFG.ai;
   return {
-    skill: rand(...A.skill), grip: rand(...A.cornerGrip),
-    lane, laneTarget: lane, laneTimer: rand(2, 5),
+    skill: rand(...A.skill), grip: rand(...A.cornerGrip), lineUse: rand(...A.lineUse), bias: rand(-A.bias, A.bias),
+    lane, laneTarget: 0, laneTimer: rand(2, 5), // lane = offset from this AI's racing line (starts at its grid slot)
     mistake: null, mistakeTimer: rand(...A.mistakeEvery),
     startDelay: rand(0.05, 0.4), // reaction time at GO
     stuckT: 0, backT: 0, stuckCount: 0, wrongT: 0, resetNow: false, resets: 0,
@@ -1349,22 +1396,26 @@ function updateAI(k, dt, canDrive) {
   const fwd = b.quaternion.vmult(LOCAL_FWD, aiFwd);
   const myLane = (b.position.x - samples[idx].x) * n.x + (b.position.z - samples[idx].z) * n.z;
 
-  // --- Racing lane: wander now and then; swing out round a slower kart just ahead
+  // --- Lateral plan. Each AI follows its own share of the racing line (`base`), wandering a little
+  // either side of it. Pads, boxes, bananas and slower karts ahead set an absolute goal instead,
+  // and a kart right alongside pushes it away so it doesn't side-swipe.
+  const edge = CFG.track.halfWidth - 1.5;
+  const base = (i) => track.line[i] * ai.lineUse + ai.bias;
   ai.laneTimer -= dt;
   if (ai.laneTimer <= 0) {
     ai.laneTarget = rand(-A.laneRange, A.laneRange);
     ai.laneTimer = rand(2.5, 6);
   }
-  let laneGoal = ai.laneTarget;
+  let goal = null; // absolute lateral offset from the centre line, when something asks for one
   // Head for a boost pad, or (with no item) the nearest item box, when one is coming up
   const stepsTo = (i) => (i - idx + N) % N;
-  for (const pad of itemVis.pads) if (stepsTo(pad.idx) * spacing < 35 && stepsTo(pad.idx) > 2) laneGoal = pad.lane;
+  for (const pad of itemVis.pads) if (stepsTo(pad.idx) * spacing < 35 && stepsTo(pad.idx) > 2) goal = pad.lane;
   if (!k.item) {
     for (const row of CFG.items.boxRows) {
       const dist = stepsTo(row) * spacing;
       if (dist > 4 && dist < 30) {
         const open = itemVis.boxes.filter((bx) => bx.idx === row && bx.hidden < dist / Math.max(k.speed, 5));
-        if (open.length) laneGoal = open.reduce((a, c) => (Math.abs(c.lane - myLane) < Math.abs(a.lane - myLane) ? c : a)).lane;
+        if (open.length) goal = open.reduce((a, c) => (Math.abs(c.lane - myLane) < Math.abs(a.lane - myLane) ? c : a)).lane;
       }
     }
   }
@@ -1373,30 +1424,37 @@ function updateAI(k, dt, canDrive) {
     const dx = d.pos.x - b.position.x, dz = d.pos.z - b.position.z;
     const dAhead = dx * fwd.x + dz * fwd.z;
     const side = dx * n.x + dz * n.z;
-    if (dAhead > 0 && dAhead < 18 && Math.abs(myLane + side - laneGoal) < 2.2) {
-      laneGoal = clamp(myLane + side + (myLane + side > 0 ? -2.6 : 2.6), -5.5, 5.5);
+    const heading = goal ?? base(idx) + ai.lane;
+    if (dAhead > 0 && dAhead < 18 && Math.abs(myLane + side - heading) < 2.2) {
+      goal = clamp(myLane + side + (myLane + side > 0 ? -2.8 : 2.8), -edge, edge);
     }
   }
-  let blocked = false;
+  let blocked = false, push = 0;
   for (const o of karts) {
     if (o === k) continue;
     const dx = o.body.position.x - b.position.x, dz = o.body.position.z - b.position.z;
     const ahead = dx * fwd.x + dz * fwd.z;
     const side = dx * n.x + dz * n.z; // + = the other kart is to our left
     const closing = k.speed - o.speed;
-    if (ahead > 0 && ahead < Math.max(10, closing * 1.2) && Math.abs(side) < 2.4 && closing > -1) {
+    if (ahead > 2 && ahead < Math.max(10, closing * 1.2) && Math.abs(side) < 2.6 && closing > -1) {
       const dir = myLane + side > 0 ? -1 : 1; // pass on the roomier side of them
-      laneGoal = clamp(myLane + side + dir * 3, -5.5, 5.5);
+      goal = clamp(myLane + side + dir * 3.2, -edge, edge);
       if (ahead < 5 && Math.abs(side) < 1.8) blocked = true; // right on their bumper: ease off
+    } else if (Math.abs(ahead) <= 2.5 && Math.abs(side) < 3.2) {
+      // side by side: keep ~3 m apart (unless that would put us into the wall)
+      const away = side > 0 ? -1 : 1;
+      if (Math.abs(myLane + away) < edge) push += away * (3.2 - Math.abs(side));
     }
   }
-  ai.lane += clamp(laneGoal - ai.lane, -3 * dt, 3 * dt);
+  const relGoal = (goal === null ? ai.laneTarget : goal - base(idx)) + push;
+  ai.lane += clamp(relGoal - ai.lane, -4 * dt, 4 * dt);
 
   // --- Steering: pure pursuit toward a look-ahead point on the lane
   const speedRatio = clamp(k.speed / K.maxSpeed, 0, 1);
   const j = (idx + Math.round(lerp(A.lookAhead[0], A.lookAhead[1], speedRatio) / spacing)) % N;
-  const tx = samples[j].x + normals[j].x * ai.lane;
-  const tz = samples[j].z + normals[j].z * ai.lane;
+  const lat = clamp(base(j) + ai.lane, -edge, edge);
+  const tx = samples[j].x + normals[j].x * lat;
+  const tz = samples[j].z + normals[j].z * lat;
   const d = wrapAngle(Math.atan2(tx - b.position.x, tz - b.position.z) - Math.atan2(fwd.x, fwd.z));
   let steer = clamp(-d * A.steerGain, -1, 1);
 
@@ -1404,15 +1462,21 @@ function updateAI(k, dt, canDrive) {
   const rubber = state.phase === 'race' && !k.finished
     ? clamp(1 - (k.progress - kart.progress) * spacing * A.rubberBand, A.rubberMin, A.rubberMax)
     : 1;
-  let target = K.maxSpeed * (k.finished ? A.finishedPace : ai.skill * rubber);
+  const pace = K.maxSpeed * (k.finished ? A.finishedPace : ai.skill * rubber);
+  let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
   for (let s = 2; s * spacing < 45; s += 2) {
-    const vCorner = Math.sqrt(ai.grip * radius[(idx + s) % N]);
-    target = Math.min(target, Math.sqrt(vCorner * vCorner + 2 * brakeDecel * s * spacing));
+    // this AI's own path is somewhere between the centre line and the racing line: blend the curvatures
+    const c = (idx + s) % N, curv = lerp(1 / radius[c], 1 / track.lineRadius[c], ai.lineUse);
+    const vCorner = Math.sqrt(ai.grip / Math.max(curv, 1e-4));
+    corner = Math.min(corner, Math.sqrt(vCorner * vCorner + 2 * brakeDecel * s * spacing));
   }
+  const target = Math.min(pace, corner);
   k.topMult = target / K.maxSpeed;
   ctl.gas = !blocked;          // the engine cuts out above target on its own (driveKart)
-  ctl.brake = k.speed > target + 5 && k.boost <= 0; // full brakes against a boost tip the kart over
+  // Brake only for corners. Being over its own pace (after a boost pad, or the rubber band) is just a lift:
+  // braking for that looked like slamming on the brakes on a straight.
+  ctl.brake = k.speed > corner + A.brakeOver && k.boost <= 0; // full brakes against a boost tip the kart over
 
   // --- Mistakes: a twitch of the wheel, or a lift off the gas
   if (!k.finished) {
@@ -1798,7 +1862,7 @@ function driveKart(k, dt, canDrive) {
     } else if (ctl.gas || boosting) {
       if (speed < top) engine = K.engineForce;
     } else {
-      brake = k.ai ? K.coastBrake : K.playerCoast;
+      brake = k.ai ? CFG.ai.coast : K.playerCoast;
     }
   } else {
     brake = K.brakeForce; // hold still during menu / countdown
@@ -2224,7 +2288,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 13 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 15 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 onResize();
 showMenu();
 warmUpShaders();

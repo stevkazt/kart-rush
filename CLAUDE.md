@@ -67,6 +67,19 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   own driving + lap state (`freshDriveState()`), and a `ctl {steer -1..1, gas, brake}` that `driveKart` turns into
   forces. The player's `ctl` comes from the buttons; AI karts (`k.ai` set) fill it in `updateAI`. All karts run
   the same physics, so tuning `CFG.kart` changes the AI too. `state` is race-wide only (phase, time, best lap).
+- **AI lanes (2026-10-16):** user said the road was too narrow and the AI "just follows the center line". Road is
+  now `halfWidth: 9` (was 7). `track.line` = minimum-curvature racing line (`racingLine`, 4th-difference
+  smoothing, coarse then fine; a taut-string version just hugged the inside of the loop). Each AI drives
+  `line * ai.lineUse` (0.55-1.0, per race) + `ai.lane` (wander +-1.8 m, relative to that line); pads, boxes,
+  bananas and slower karts ahead set an absolute goal; a kart alongside (within 2.5 m fore/aft) pushes it ~3 m
+  away. Measured in a race vs the old AI: player-AI contacts 48 -> 13-17, 0 resets, similar finish spread.
+  Then (user: "they follow the exact same line... like F1, not the Mario Kart way" and "brake where there's no
+  need"): `lineUse` 0.15-0.85 plus a per-AI `bias` (+-4 m preferred side, re-rolled each lap), `laneRange` 2.5.
+  Corner speed uses the curvature blended between centre line and `track.lineRadius` by `lineUse`. AIs brake
+  only for corners (`corner + brakeOver`); being over their own pace (after a boost pad, the rubber band) is a
+  lift. That was the "braking on straights": hotspots were 25-35 m after each boost pad. AI lift = `ai.coast: 4`
+  (~6 m/s^2; the old coastBrake 12 was ~18 m/s^2, as hard as braking). Measured: AI braking 1-2% -> ~0% of the
+  time; AIs are quicker (whole field within ~3-5 s of the autopilot, which now finishes mid-pack).
 - **AI:** pure pursuit to a look-ahead point on the AI's lane; target speed = top x skill x rubber band, capped
   by `track.radius` corner speeds; lane wander, dodging slower karts ahead, random wobble/lift mistakes;
   back-up + reset recovery and a 4 s no-progress watchdog. After the player finishes, the CPU drives their kart.
@@ -93,8 +106,9 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 6. iOS ignores `user-scalable=no`. Double-tap zoom and the long-press magnifier on the buttons are blocked by
    `preventDefault` on `touchstart`/`touchend` on `#controls`. Pointer Events still fire.
    Don't attach that to `#overlay`, because it would kill the Start button's click.
-7. Keep track corners at a minimum radius of about 19 m or more (the half-width is 7 m, and the walls sit at
-   8.3 m). A 9 m hairpin was unplayable. The track is the `CFG.track.points` Catmull-Rom loop.
+7. Corner radius limit is geometric: the walls sit `halfWidth + curb` (+ thickness) from the centre line, so the
+   inner wall folds over itself once a corner is tighter than that (~10.6 m now). Keep corners >= ~20 m (the
+   tightest is 20 m). A 9 m hairpin was unplayable. The kart itself turns 8 m at 36 km/h, 17 m at 93 km/h. The track is the `CFG.track.points` Catmull-Rom loop.
 8. AI pile-ups: braking hard for corners made trailing AIs rear-end the leaders. AIs now take corners with
    high `cornerGrip`, mostly just lift (brake only when 5 m/s over target), and lift when right behind a kart.
 9. **cannon-es `setBrake(x)` is an impulse cap per sub-step, not a force.** `brakeForce: 600` (or even 80) locks
@@ -102,7 +116,8 @@ launcher repo later. The LAN server above still works for quick testing (no offl
    The committed AI build already did this on any hard brake at top speed. Now braking = tiny `wheelBrake` (1.5)
    + `brakeDecel` applied to the velocity in `preStep`. Same for spin-outs. `brakeForce` is only used at standstill
    (holding karts on the grid). `coastBrake: 12` is also an impulse; it stops the kart from top speed in ~1.4 s,
-   which is close to braking, but it doesn't flip and the AI's cornering relies on it, so it's left alone.
+   which is close to braking. Nothing uses it while driving any more: the player coasts with `playerCoast: 3`,
+   AIs with `ai.coast: 4`.
 10. **Boost is a centre-of-mass push** (`boostAccel` in `preStep`), not more engine force. Extra wheel torque
     popped wheelies on boost pads. Braking cancels a boost, and AIs don't brake while boosting.
 11. Auto-recovery triggers on `up.y < 0.3` or **fewer than 3 wheels down** for 1.5 s (a kart once sat perched on

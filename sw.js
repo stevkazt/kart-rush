@@ -1,5 +1,5 @@
 // Offline cache for Kart Rush. Bump VERSION whenever the game files change.
-const VERSION = 'kart-rush-v13';
+const VERSION = 'kart-rush-v15';
 
 const APP_SHELL = [
   './',
