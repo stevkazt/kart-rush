@@ -24,6 +24,9 @@ const P = {
   muted: `<path d="M3 9 H7 L12 4.5 V19.5 L7 15 H3 Z" fill="currentColor"/>
     <path d="M15.5 9 L21.5 15 M21.5 9 L15.5 15" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>`,
   gear: `<path fill="currentColor" fill-rule="evenodd" d="M10.3 2 h3.4 l.5 2.6 a7.6 7.6 0 0 1 1.9 1.1 l2.5-.9 1.7 2.9 -2 1.7 a7.6 7.6 0 0 1 0 2.2 l2 1.7 -1.7 2.9 -2.5-.9 a7.6 7.6 0 0 1 -1.9 1.1 l-.5 2.6 h-3.4 l-.5-2.6 a7.6 7.6 0 0 1 -1.9-1.1 l-2.5.9 -1.7-2.9 2-1.7 a7.6 7.6 0 0 1 0-2.2 l-2-1.7 1.7-2.9 2.5.9 a7.6 7.6 0 0 1 1.9-1.1 Z M12 8.6 a3.4 3.4 0 1 0 0 6.8 a3.4 3.4 0 1 0 0-6.8 Z"/>`,
+  go: `<path d="M4 12 H19 M13 5.5 L19.5 12 L13 18.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`, // hello screen: let's race
+  back: `<path d="M8.5 5 H20 a1.5 1.5 0 0 1 1.5 1.5 V17.5 a1.5 1.5 0 0 1 -1.5 1.5 H8.5 L2 12 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M11 9 L17 15 M17 9 L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>`, // keyboard delete
   pencil: `<path d="M4 20 L5 15.5 L15.5 5 L19 8.5 L8.5 19 Z" fill="currentColor"/>
     <path d="M14 6.5 L17.5 10" stroke="#1b1f3a" stroke-width="1.3"/>
     <path d="M4 20 L5 15.5 L8.5 19 Z" fill="#ffd9a0"/>`,

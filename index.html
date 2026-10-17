@@ -26,6 +26,7 @@
 </head>
 <body>
   <!-- #app is always laid out landscape; in portrait it is rotated 90deg -->
+  <div id="vp-probe" aria-hidden="true"></div>
   <div id="app">
     <canvas id="game"></canvas>
 
@@ -111,15 +112,17 @@
       <!-- First launch (or EDIT from the title): name + age, saved per device (kartrush.profile) -->
       <div id="hello-screen" class="screen screen-col" hidden>
         <div class="pick-title">HELLO, RACER!</div>
+        <!-- readonly + inputmode none: the iOS keyboard would open upright while the game is turned sideways
+             (portrait lock), so typing goes through the in-game keyboard #kbd (built by buildKeyboard) -->
         <form id="hello-form" class="hello-form" autocomplete="off" novalidate>
           <label class="field"><span class="setting-label">YOUR NAME</span>
-            <input id="hello-name" type="text" maxlength="12" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="next" placeholder="Name"></label>
+            <input id="hello-name" type="text" maxlength="12" readonly inputmode="none" placeholder="Name"></label>
           <label class="field field-age"><span class="setting-label">AGE</span>
-            <input id="hello-age" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" enterkeyhint="go" placeholder="Age"></label>
-          <button type="submit" hidden></button>
+            <input id="hello-age" type="text" maxlength="3" readonly inputmode="none" placeholder="Age"></label>
+          <button id="btn-hello" type="button" class="btn-primary btn-go" aria-label="Let's race"><i data-icon="go"></i></button>
         </form>
         <p id="hello-error" class="hello-error"></p>
-        <button id="btn-hello" class="btn-primary">LET'S RACE</button>
+        <div id="kbd" class="kbd" aria-label="Keyboard"></div>
       </div>
 
       <!-- Track / driver / kart picker (filled by openPicker). Driver + paint: split stage (.staged): the live 3D
@@ -201,6 +204,15 @@
                 <button class="trk" data-vol="0.35">Low</button>
                 <button class="trk" data-vol="0.65">Mid</button>
                 <button class="trk" data-vol="1">Full</button>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting">
+              <span class="setting-label">SCREEN (PORTRAIT LOCK)</span>
+              <div id="flip-pick" class="track-pick">
+                <button class="trk" data-flip="0">Normal</button>
+                <button class="trk" data-flip="1">Flipped</button>
               </div>
             </div>
           </div>

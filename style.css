@@ -25,6 +25,9 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* #vp-probe measures the large viewport (100lvh) for the viewport diagnostic (sendViewport in main.js) */
+#vp-probe { position: fixed; top: 0; left: 0; width: 100lvw; height: 100lvh; visibility: hidden; pointer-events: none; }
+
 button { font: inherit; color: inherit; border: none; outline: none; padding: 0; }
 input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; } /* or iOS won't let you type */
 
@@ -50,6 +53,15 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
   /* rotated 90deg clockwise: game-left is the phone's top, game-right its bottom */
   --edge-l: max(14px, env(safe-area-inset-top));
   --edge-r: max(14px, env(safe-area-inset-bottom));
+}
+/* Settings -> SCREEN Flipped: turned the other way (90deg counter-clockwise), for holding the phone the other
+ * way round under portrait lock: game-left is the phone's bottom, game-right its top */
+#app.rotated.flipped {
+  left: 0;
+  top: 100%;
+  transform: rotate(-90deg);
+  --edge-l: max(14px, env(safe-area-inset-bottom));
+  --edge-r: max(14px, env(safe-area-inset-top));
 }
 
 #game {
@@ -908,6 +920,35 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 .field input:focus { border-color: #ffe14a; }
 .field input::placeholder { color: rgba(255, 255, 255, 0.3); }
 .hello-error { min-height: 1.2em; margin: 0; font-size: 13px; font-weight: 800; color: #ff8a8a; }
+#hello-screen { gap: clamp(4px, calc(var(--app-h) * 0.02), 10px); }
+#hello-screen .pick-title { font-size: clamp(18px, calc(var(--app-h) * 0.06), 28px); }
+.field input { caret-color: transparent; cursor: pointer; }
+.field input.active { border-color: #ffe14a; }
+.field input:focus { border-color: rgba(255, 255, 255, 0.2); }
+.field input.active:focus { border-color: #ffe14a; }
+.field input { padding: clamp(5px, calc(var(--app-h) * 0.018), 10px) 14px; }
+/* In-game keyboard (hello screen): letters for the name, a 3x3 number pad for the age */
+.kbd { display: flex; flex-direction: column; gap: 5px; width: min(620px, 94%); }
+.kbd-row { display: flex; gap: 5px; justify-content: center; }
+.kbd-row[hidden] { display: none; }
+.kbd-row[data-mode="digits"] .kbd-key { max-width: 96px; }
+.kbd-key {
+  flex: 1 1 0;
+  max-width: 54px;
+  height: clamp(30px, calc(var(--app-h) * 0.1), 44px);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+  font: 900 clamp(14px, calc(var(--app-h) * 0.045), 19px) system-ui, -apple-system, sans-serif;
+  color: #fff;
+}
+.kbd-key.down { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); background: rgba(255, 255, 255, 0.3); }
+.kbd-key.wide { max-width: none; flex: 4 1 0; }
+.kbd-key.mid { max-width: 90px; flex: 1.6 1 0; }
+.kbd-key .ico { width: 1.1em; height: 1.1em; }
+/* LET'S RACE: a round arrow right of the fields */
+.btn-go { width: 52px; height: 52px; padding: 0; border-radius: 50%; display: grid; place-items: center; align-self: flex-end; }
+.btn-go .ico { width: 26px; height: 26px; }
 .greeting {
   margin-top: 10px;
   padding: 4px 12px;

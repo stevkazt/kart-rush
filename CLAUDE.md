@@ -87,7 +87,25 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   (short by `safe-area-inset-top`, 47pt) and clipped the page there: an empty band at the home-indicator edge.
   Tried and failed (iOS clips the web view itself): `html, body` height + env(safe-area-inset-top), and sizing
   #app from `screen.*`. Now testing status-bar-style `black` instead of `black-translucent` (the page starts below
-  the status bar). Real landscape (rotation unlocked) never had the bug. The title screen shows `build N · host · app` (bump N with `sw.js` VERSION): if the
+  the status bar). Real landscape (rotation unlocked) never had the bug. 2026-10-17 phone screenshot (build 37):
+  content still runs under the status bar (so the installed app likely kept black-translucent: iOS reads that
+  meta at Add to Home Screen time) and the strip is navy = the page background. **Build 38:** `#vp-probe`
+  (100lvh) and onResize takes max(innerHeight, lvh); html background is teal (#0e9f8a) as a diagnostic (teal
+  strip = iOS draws the page there, our layout is short; navy/black = the web view is clipped); every resize
+  posts `{kind: 'viewport', inner, screen, client, visual, lv, inset, app...}` to the telemetry log (skip
+  these lines in race analysis). **Result:** phone reported inner 797, lv 844, screen 844, insets top 47 /
+  bottom 34, and the strip stayed navy, not teal: iOS clips the web view itself, so no CSS/JS can draw there.
+  Teal + lv sizing removed (sizing to 844 just pushed the game's far edge under the strip). Settings -> SCREEN
+  Normal / Flipped (`#app.rotated.flipped` = rotate(-90deg), `kartrush.flip`; joystick + stage drag mapped)
+  works on the phone but the strip stays at the phone's bottom. Next try needs a reinstall (iOS reads these at
+  Add to Home Screen): status-bar-style `black` (already in index.html) + manifest orientation `any` (was
+  `landscape`, possibly what makes iOS size the portrait window wrong).
+  **Fixed by that reinstall** (2026-10-17, added via Chrome; the phone then reported top inset 0: the page starts
+  below the status bar and fits). Reinstalling wipes localStorage (records, profile, settings).
+- **In-game keyboard (build 38):** under portrait lock iOS opens its keyboard upright while the game is sideways,
+  so the hello fields are `readonly inputmode="none"` and typed from `#kbd` (`buildKeyboard`, `setField`,
+  `typeKey`): QWERTY + Ñ for the name (auto Name Case, max 12), a 3x3 digit pad + ABC 0 delete for the age (4 rows like the letters, so the fields never move), LET'S RACE as the enter
+  key (moved into the active layout's last row). Keys fire on pointerdown. A physical keyboard works too. The title screen shows `build N · host · app` (bump N with `sw.js` VERSION): if the
   phone shows an old N, it is running a stored copy (the home-screen app once never contacted the server at all).
 - **Lobby camera (build 32):** in the menu phase `updateCamera` runs `lobbyCamera` (slow 3/4 turntable of the
   player's kart from the outside of the grid, fov 42) instead of `chaseCamera`; `camera.setViewOffset` shifts the
@@ -131,7 +149,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   shoulder stripes + cuffs, paws on the wheel, **static** red scarf collar with short wind-swept ends (the
   flapping version clipped the seat / tail at speed: don't animate it again), one S-curved tail clear above the
   spoiler, tip under head height so the chase camera sees her. Animation: ears twitch idle / fold with speed,
-  torso + head lean into turns, tail sways against the lean (no idle wag). Next: Rex, Bolt, Mako, Pip.
+  torso + head lean into turns, tail sways against the lean (no idle wag). Next: Pip.
   **Luna (build 35, the cosmic space yeti, not phone-tested):** same smooth standard; torso + shoulder fur 1.3x
   wide (`LUNA_WIDE`), white shoulder tufts overflow the seat back; pear lathe head (lavender #C4B5FD), white neck
   ruff + round cheek puffs (pointed teardrops read as spikes), heavy white unibrow on its own `brow` joint, dark
@@ -140,6 +158,62 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   glowing crescent (`crescent()` extrude) above the seat back. `fluff(g, amp, freq)` = bumpy fur displacement
   (keep amp small: big values look jagged). Animation: slow breathing (torso scale), spring sway with momentum,
   "defender mode" at top speed or right after a kart bump: brow lowers, chin down, glow pulses.
+  **Mako (build 37, the street-biker shark, the bully, not phone-tested):** same smooth standard, ~18k triangles,
+  2 draw calls (matte + gloss). Head = one deformed sphere (`sharkHead(t, a)`: bullet tapering into a dropped
+  snout, flatter belly; teal flanks -> slate crown, white underneath); things stuck on its surface use
+  `onSurf(surf, curve, u)` / `surfRibbon(surf, curve, top, bot, lift)` (curve = u -> [t, a]; any head
+  surface `surf(t, a)`, bent from a sphere by `surfGeo`; ribbons pick one orientation for the whole strip and
+  wind themselves outward: a per-point flip on a flat crown made striped visors): the dark-crimson grin band,
+  gill slits (3 a side), and the angular wrap shades (black, + red bridge; `pw()` = piecewise-linear edges for the
+  sharp corners). Teeth = flattened cones (`tooth`), upper row on the head, lower row on a `jaw` joint. Fins =
+  `finGeo(shape)` (extruded outline, thinner toward the tip): tall dorsal with a V notch on the crown, pectoral
+  blades at the elbows, crescent tail on a stalk above the seat back (lower lobe clears the spoiler). Charcoal
+  vest open over the white belly (V by colorAt) + red lapel sweeps, popped red collar, shoulder pads with 2
+  silver spikes each. `spec.gloss` = per-driver gloss material (Mako: metalness 0.8, roughness 0.1).
+  Animation: hard lean, hunch at speed, tail = rudder (trails to the side he steers) + idle swish, head bob while
+  accelerating, chomp (jaw + head lunge) on firing an item (rider state `fire`, `k.fireT` set in useItem), on a
+  boost, and every 3-7 s while parked (lobby). His team colours changed with him: teal kart 0x0d9488, red
+  accent, charcoal suit (green until build 37).
+  **Rex, Bolt, Koda (build 37, not phone-tested; all 7 drivers now have characters except Pip, still the helmet
+  fallback).** Triangles per rider: Nova 6.8k, Mako 18k, Koda 25k, Luna 26k, Rex 27k, Bolt 33k; draw calls 81 ->
+  86 on the grid, GPU programs unchanged (26).
+  - **Rex, the cyber-raptor:** `raptorHead` surface (emerald snout -> cobalt crown, mint jaw), thin smile + 2
+    fangs, nostrils, glowing cyan -> magenta visor (`surfRibbon`, glow) in a dark gloss frame across the snout,
+    orange crest plates (`plateGeo`) down the head + neck, carbon suit with glowing telemetry lines (`chestZ` =
+    front of the standard torso capsule), orange collar + shoulder caps, green clawed hands. Tail = two joints
+    (`tail`, `tail2`) with armour bands + spine plates, over the engine, swings against the turn (more in a
+    drift), tip lags = a whip. Visor + lines pulse with `R.glow`.
+  - **Bolt, the TV-bot:** `roundedBox` CRT head (analytic normals; r must be <= half the thinnest side), bezel,
+    glossy glass, cyan face glyphs as capsule strokes on joints `happy` (^o^, eyes blink) / `strain` (>_<: bump,
+    hard drift / steer, flooring it; held 0.5 s), screen glitch every 3-8 s, knobs + vents. Copper Tesla coil
+    (`Helix` tube) spins with speed, 4 spark joints re-rolled every 0.05 s. Red stunt suit, white stripes,
+    crash-test quarter-disc markers, hazard belt, 2 batteries + loose wires. Twin booster pipes on the back,
+    spark puffs on acceleration / boost. Hidden parts = scale 1e-4, set only in update() (baking a part at a
+    tiny scale loses precision). Head on a random-kick spring (wild).
+  - **Koda, the red panda:** round rust head, cream muzzle / cheeks / brow spots, dark tear marks, glossy eyes,
+    rounded white-rimmed ears (twitch), red headband with knot + 2 fluttering ends, bamboo bomber (stripes),
+    knit collar / cuffs / hem, dark paws. Huge fluffy ring-striped tail (`sweep` radius now takes (u, v): fur
+    bumps round the tube; rings from the nearest point on the spine) curling up the right side of the seat, on a
+    spring that swings out in drifts.
+  **Pip, Hex, Mako bulk (build 37, later; not phone-tested). All 8 drivers now have characters (FALLBACK unused).**
+  - **Mako bulk:** `MAKO_BULK` 1.15 on his whole rider (S), plus `MAKO_W/MAKO_D` 1.4 / 1.0 torso width / depth
+    (was 1.1 / 0.84; user: "his torso to occupy more space"), shoulder pads + arms moved out to match.
+  - **Pip, the penguin chick:** `PIP_SCALE` 0.75 of the standard, on a brown corduroy booster cushion (`roundedBox`,
+    full size on `root`). Round black chick head + white face mask, oversized brass goggles (gloss) on a strap,
+    beak, striped cream/grey knit sweater (body colorAt) with ribbed hem + turtleneck, flipper arms, grey feet,
+    pink ribbed beanie + cuff, giant fluffy pom-pom (highest point) on a `pom` spring joint driven by acceleration,
+    steering, bumps and road buzz.
+  - **Hex, the imp-wizard (8th driver, new `trickster` AI):** no body: a floating hood (`deform()` shapes a sphere
+    with the face cut out into a pointed, back-leaning cowl with a wavy hem; an inward-facing lining = the black
+    void; rim torus), glowing amber eyes on a blink/squint joint, floppy 3-joint tip (droops parked, windsock at
+    speed), two glow rune rings (violet + amber, glyphs) spinning behind him. The wheel turns by itself.
+    **Trickster AI** (`slip: true` in `ai.styles.Hex`): finds a kart 3-18 m ahead within 3 m sideways, lines up
+    in its wake, gets `tow` +6% pace (+10% behind the leader) while in it, after `slingAt` 0.8-1.8 s pulls out
+    3.2 m and slingshots past (1.6 s, tow kept). AI-only: there is no slipstream physics for the player.
+    Headless meadow race: Hex towed ~24 s in 1.7 laps, 0 resets.
+  - Roster is now Nova + 7 personalities, grid 6: **two** sit out each race (castDrivers handles it generically).
+  - Animation hooks must tolerate missing pose fields (`s.bump || 0`): the studio's forced poses omit bump/fire,
+    and a NaN made Pip's head vanish. New studio views `low` (small drivers) and `rear` (rear 3/4 on the move).
   **Glow parts (build 35):** `part(..., { glow: true })` = third material group, unlit `MeshBasicMaterial`
   (`R.glow`, its colour multiplies to pulse; eyes and crescent pulse together). Rider state got `bump` (0/1, a
   kart-to-kart contact in the last 0.6 s: `k.bumpT` set in the karts' collide listener).
@@ -277,6 +351,15 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   Racecraft knobs 0..1: `overtake`, `defend`, `aggression`, plus `hoard`, `wild`. First phone race: "so much
   better"; Rex won with a 28.4 s lap (user's best 29.6), field spread ~120 m instead of a pack. Watch: Rex too
   strong? Mako never near the player (slow start, mid pace) so not felt as a bully.
+- **Roster of 7, grid of 6 (build 37, user picked "add Koda as 7th driver" + "new drifter style"):** `CFG.racers`
+  = Nova + 6 personalities (Koda added); `CFG.grid.karts` 6. Each race one personality sits out, in turn
+  (`sitOut` in castDrivers, advanced by startRace, saved in `kartrush.sitOut`), so the field never depends on
+  the pick (the picked driver's style still goes to Nova). Telemetry `karts` shows who raced.
+  **Koda = drifter** (`ai.styles.Koda`, `drift: true`): where the corner ahead (look-ahead point) is tighter than
+  `driftRadius` 100 m and he's above driftMinSpeed + 3, he commits to a slide (`ai.sliding`, wheel held at
+  `driftLock` 0.95) until pure pursuit lets go or turns the other way: mini-turbo on the exit. Headless (one race
+  per track): 10-14 s drifting, 4-5 mini-turbos (other AIs 5-13 s, 1-5), 0 resets, placed 3rd / 1st / 3rd.
+  Watch it in the user's races (style 'Koda').
 - **No rubber band (build 29).** The user's races showed AIs ahead holding at 85% pace (rubberMin) waiting for the
   player and all at 1.06 when behind: the field bunched round the player. User: rubber off "feels more natural",
   "leave it off". AI pace now comes from the personalities alone.
@@ -354,7 +437,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 dev/test.sh autopilot 80        # full race with button-style autopilot; prints lap log + STUCK events
 dev/test.sh tap 0.25 0.6 1.0    # hold RIGHT on open grass at top speed; heading/slip/yaw per hold time
 dev/test.sh eval '<js expr>'    # print a page expression ~1 s after GO, e.g. '__karts.map(k=>k.place)'
-dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log
+dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log (test.sh waits for Chrome's port: it once took > 2 s)
 dev/test.sh shots 300,860:3     # screenshots with the player parked at sample idx[:lane]
 dev/test.sh profile 8           # CPU profile, drawing off
 TRACK=canyon dev/test.sh ...    # any mode on another track
@@ -589,6 +672,13 @@ Rivals row (the 5 AIs with role icons) on the setup card.
   the log): it held ~108 km/h (top + 4 m/s, engine only) and gained ~20 m over its 6 s, rarely a place; a
   mushroom peaks ~130. User asked for more speed + a different sound -> done in build 33 (see Items).
 - Also seen: **Bolt hit by his own red shell** (race 14, t 83.7, `hit kart 3 by 3 red`): owner should be immune.
+
+**Note (user 2026-10-17): throw items forwards or backwards.** "I want some powers to give the option to be
+thrown backwards or forwards. So the same power will show twice on screen and depending what the user want they
+will slide to the proper direction." Not started. Idea as given: a throwable item shows two copies (forward /
+backward) and the player slides onto the one they want, like today's slide from GAS onto ITEM (`slideToItem`).
+Fits green / red shells and bananas (Mario Kart style: banana thrown ahead, shell dropped behind); the AI would
+need to pick a direction too. Ask about layout (where the two copies sit vs GAS / BRAKE / joystick) before building.
 
 **Note (user 2026-10-17): remove the side rails.** They make every track look the same. Not started; the rails
 are also the walls karts collide with (+ rail reset, `wallHitLoss`, AI recovery, jump `jumpWallHeight`), so

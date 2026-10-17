@@ -42,7 +42,7 @@ sleep 0.5
 run() {
   "$CHROME" --headless=new --autoplay-policy=no-user-gesture-required --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=844,390 \
     --remote-debugging-port=$DEBUG_PORT --user-data-dir="$TMP/profile-$RANDOM" about:blank >/dev/null 2>&1 &
-  sleep 2
+  for _ in $(seq 40); do curl -s "127.0.0.1:$DEBUG_PORT/json/version" >/dev/null && break; sleep 0.5; done # Chrome can take >2 s to start
   node "$GAME_DIR/dev/test.mjs" $DEBUG_PORT "$@"
   pkill -f "remote-debugging-port=$DEBUG_PORT" || true
   sleep 1

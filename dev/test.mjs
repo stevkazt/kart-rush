@@ -90,6 +90,8 @@ if (mode === 'autopilot' || mode === 'trace') {
     turn: [[0, 1.9, -3.4], [0, 0.9, -0.6], 30, { speed: 0.8, steer: 1, drift: 0.6, boost: 0 }],
     face: [[0.5, 1.15, 1.3], [0, 1.0, -0.2], 26, null],
     profile: [[6, 0.6, 0], [0, 0.3, 0], 30, null], // whole kart side-on: chassis vs driver proportions
+    low: [[1.5, 1.2, 2.4], [0, 0.55, -0.3], 34, null], // front 3/4 aimed lower: small drivers (Pip)
+    rear: [[-1.6, 1.6, -2.8], [0, 0.75, -0.6], 34, { speed: 0.6, steer: 0.4, drift: 0, boost: 0 }], // rear 3/4 on the move
     items: [[1.2, 1.4, 1.2], [1.2, -0.5, 5], 40, null], // item close-up: a banana, green, red parked ahead (on the road)
   };
   await ev(`(() => { document.getElementById('overlay').style.display = 'none';

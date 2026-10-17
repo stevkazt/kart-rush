@@ -171,10 +171,14 @@ const CFG = {
       look: { helmet: 0xe9e4ff, visor: 0x5cc8ff, mark: 'moon', markColor: 0x9b4dff } },
     { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f], tag: 'Born at full throttle',
       look: { helmet: 0x26262c, visor: 0xff5a1f, mark: 'bolt', markColor: 0xffd23a } },
-    { name: 'Mako', colors: [0x2fbf4a, 0xffffff, 0x333333], tag: 'The shark',
-      look: { helmet: 0x2d6b3a, visor: 0xd23a3a, mark: 'fin', markColor: 0xf2f2f2 } },
+    { name: 'Mako', colors: [0x0d9488, 0xef4444, 0x1e293b], tag: 'The shark', // teal kart to match the shark (green until build 37)
+      look: { helmet: 0x334155, visor: 0xef4444, mark: 'fin', markColor: 0xf2f2f2 } },
     { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff], tag: 'Smallest kart in the paddock',
       look: { helmet: 0xffb3d9, visor: 0x9b4dff, mark: 'dots', markColor: 0xffffff } },
+    { name: 'Koda', colors: [0xc2410c, 0xfef3c7, 0x6f8f3a], tag: 'The red panda', // build 37: the 7th driver
+      look: { helmet: 0xc2410c, visor: 0x1c1917, mark: 'dots', markColor: 0xfef3c7 } },
+    { name: 'Hex', colors: [0x3b1f8a, 0xffb21e, 0x2e1f6b], tag: 'Nobody knows what is under the hood', // build 37: the 8th driver
+      look: { helmet: 0x2e1f6b, visor: 0xffb21e, mark: 'dots', markColor: 0xffb21e } },
   ],
   // Kart paint for the player (Kart picker): [body, accent]; null = the driver's own colours. Looks only.
   paints: [
@@ -189,6 +193,7 @@ const CFG = {
   ],
 
   grid: {
+    karts: 6,               // per race: the player + 5 AIs (the roster is bigger: one rival sits each race out)
     firstRow: 8,            // metres behind the start line
     rowGap: 6,
     colOffset: 4,           // lateral offset of the two columns
@@ -236,6 +241,15 @@ const CFG = {
       // fast, brakes late (brakeOver), wide random lines, wobbles a lot
       Bolt: { role: 'wild', skill: [1.03, 1.08], cornerGrip: [22, 25], lineUse: [0, 1], bias: 5, laneRange: 4,
         brakeOver: 6, mistakeEvery: [3, 7], startDelay: [0, 0.6], overtake: 1, defend: 0, aggression: 0.6, wild: true },
+      // build 37: drifts every real corner (holds the wheel past the drift threshold where the corner ahead is
+      // tighter than driftRadius m), so he slides and fires mini-turbos on the exits; tidy line, few mistakes
+      Koda: { role: 'drifter', skill: [1, 1.04], cornerGrip: [22.5, 24.5], lineUse: [0.7, 0.95], bias: 2, laneRange: 1.5,
+        mistakeEvery: [12, 22], overtake: 0.8, defend: 0.3, aggression: 0.3, drift: true, driftRadius: 100, driftLock: 0.95 },
+      // build 37: tucks into the wake of the kart ahead (a tow: +tow of his pace while he's in it, more when it's
+      // the leader), sits there for slingAt s, then pulls out and slingshots past. Mid pace on his own.
+      Hex: { role: 'trickster', skill: [0.98, 1.02], cornerGrip: [22, 24], lineUse: [0.5, 0.85], bias: 2, laneRange: 1.5,
+        mistakeEvery: [10, 20], overtake: 0.9, defend: 0.2, aggression: 0.3,
+        slip: true, tow: 0.06, towLeader: 0.1, towRange: [3, 18], slingAt: [0.8, 1.8] },
     },
   },
 
@@ -311,6 +325,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 1a. Renderer, scene, camera, lights ----------
 const app = $('app');
+const VERSION_N = 38; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -1688,7 +1703,7 @@ const BUBBLE_MAT = new THREE.ShaderMaterial({
 });
 
 const SVG_ITEMS = { mushroom: icon('mushroom'), triple: icon('mushroom'), banana: icon('banana'), shield: icon('shield'), star: icon('star') };
-const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0)); // names + colours are set again by castDrivers
+const karts = CFG.racers.slice(0, CFG.grid.karts).map((r, i) => makeRacer(r, i === 0)); // castDrivers recasts them
 const kart = karts[0];
 world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
 // Rails cost speed. 'collide' fires per contact point, before the solver (true impact speed); keep the
@@ -1746,7 +1761,7 @@ function setRider(k, r, colors) {
   k.alpha = undefined; // re-apply the ghost look to the new materials
 }
 
-const riderState = { speed: 0, steer: 0, drift: 0, boost: 0, bump: 0 };
+const riderState = { speed: 0, steer: 0, drift: 0, boost: 0, bump: 0, fire: 0 };
 /** Feeds a kart's driving state to its rider's animation hook (ears, scarf, tail, lean...). */
 function animateRider(k, dt) {
   if (!k.rider?.update) return;
@@ -1756,18 +1771,26 @@ function animateRider(k, dt) {
   riderState.boost = k.boost > 0 || k.star > 0 ? 1 : 0;
   riderState.bump = k.bumpT > 0 ? 1 : 0; // touched another kart in the last 0.6 s
   k.bumpT = Math.max(0, (k.bumpT || 0) - dt);
+  riderState.fire = k.fireT > 0 ? 1 : 0; // used an item in the last 0.4 s (Mako chomps)
+  k.fireT = Math.max(0, (k.fireT || 0) - dt);
   k.rider.update(dt, riderState);
 }
 
-/** The player (karts[0]) becomes the picked driver in the picked paint; the other five drivers race as AI.
- * The AI field always has the same personalities whoever you pick (user: "the difficulty shouldn't change
- * based on what racer I pick"): the spare driver (CFG.racers[0], Nova) takes over the picked driver's style.
+/** The player (karts[0]) becomes the picked driver in the picked paint; five others race as AI.
+ * The AI field never depends on who you pick (user: "the difficulty shouldn't change based on what racer I
+ * pick"): the personalities are CFG.racers[1..] (7 since build 37, two more than the 5 AI seats), and each race
+ * two of them sit out, in turn (`sitOut`, advanced by startRace, saved). Each style is driven by its own driver,
+ * except the picked one's, which the spare driver (CFG.racers[0], Nova) takes over.
  * k.style = the CFG.ai.styles key newAI uses in placeOnGrid. */
+const SITOUT_KEY = 'kartrush.sitOut';
+let sitOut = (() => { try { return +localStorage.getItem(SITOUT_KEY) || 0; } catch { return 0; } })();
 function castDrivers() {
-  const me = playerDriver(), spare = CFG.racers[0];
-  [me, ...CFG.racers.filter((r) => r !== me)].forEach((r, i) => {
+  const me = playerDriver(), spare = CFG.racers[0], styles = CFG.racers.slice(1);
+  const out = new Set(Array.from({ length: Math.max(0, styles.length - (karts.length - 1)) }, (_, i) => styles[(sitOut + i) % styles.length]));
+  const field = styles.filter((r) => !out.has(r)).map((r) => ({ driver: r === me ? spare : r, style: r.name }));
+  [{ driver: me, style: me.name }, ...field].forEach(({ driver: r, style }, i) => {
     karts[i].name = r.name;
-    karts[i].style = r === spare ? me.name : r.name;
+    karts[i].style = style;
     const colors = i === 0 ? playerColors() : kartColors(r.colors, r.look);
     setRider(karts[i], r, colors);
     paintKart(karts[i], colors);
@@ -2368,7 +2391,7 @@ function initControls() {
   const moveStick = (e) => {
     const r = stickBase.getBoundingClientRect();
     let sx = e.clientX - (r.left + r.width / 2), sy = e.clientY - (r.top + r.height / 2);
-    if (app.classList.contains('rotated')) [sx, sy] = [sy, -sx]; // portrait: the game is turned 90deg
+    if (app.classList.contains('rotated')) [sx, sy] = app.classList.contains('flipped') ? [-sy, sx] : [sy, -sx]; // portrait: the game is turned 90deg
     const radius = stickBase.offsetWidth / 2;
     const lim = Math.min(1, radius / (Math.hypot(sx, sy) || 1));
     sx *= lim; sy *= lim;
@@ -2400,10 +2423,7 @@ function initControls() {
 
   for (const row of document.querySelectorAll('.setup [data-pick]')) onTap(row, () => { sound.click(); openPicker(row.dataset.pick); });
   onTap($('btn-pick-done'), () => { sound.click(); showMenu(); });
-  onTap($('btn-hello'), submitHello);
-  $('hello-form').addEventListener('submit', (e) => { e.preventDefault(); submitHello(); });
-  $('hello-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('hello-age').focus(); } });
-  $('hello-age').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); });
+  buildKeyboard();
   onTap($('hello-edit'), () => { sound.click(); showHello(); });
   onTap($('btn-start'), startRace);
   onTap($('btn-again'), startRace);
@@ -2414,6 +2434,8 @@ function initControls() {
   onTap($('btn-quit'), () => { state.paused = false; sound.unlock(); showMenu(); });
   document.querySelectorAll('.btn-settings').forEach((b) => onTap(b, () => { sound.click(); showSettings(); }));
   for (const b of $('steer-pick').children) onTap(b, () => { sound.click(); setSteering(b.dataset.steer); });
+  for (const b of $('flip-pick').children) onTap(b, () => { sound.click(); setFlip(b.dataset.flip === '1'); });
+  setFlip(savedFlip(), false);
   onTap($('btn-settings-back'), () => { sound.click(); showOverlay(settingsFrom); });
   setSteering(savedSteering(), false);
   for (const pick of document.querySelectorAll('.vol-pick')) {
@@ -2443,7 +2465,7 @@ function initControls() {
   stageEl.addEventListener('pointermove', (e) => {
     if (stage.drag?.id !== e.pointerId) return;
     // #app is turned 90deg in portrait: the screen's vertical is the game's horizontal there
-    const dx = app.classList.contains('rotated') ? e.clientY - stage.drag.y : e.clientX - stage.drag.x;
+    const dx = app.classList.contains('rotated') ? (e.clientY - stage.drag.y) * (app.classList.contains('flipped') ? -1 : 1) : e.clientX - stage.drag.x;
     stage.rot = stage.drag.rot + (dx / Math.max(1, stageEl.offsetWidth)) * Math.PI * 1.6;
   });
   const endDrag = (e) => { if (stage.drag?.id === e.pointerId) { stage.drag = null; stage.idle = 0; } };
@@ -2491,6 +2513,8 @@ function initControls() {
 
 /** The game is always laid out landscape; in portrait the #app container is rotated 90deg. */
 function onResize() {
+  // (iOS portrait strip, build 38: the phone measured 100lvh = 844 but iOS shows only innerHeight 797 of the
+  // web view, so the page can't draw there: size to innerHeight, or the game's far edge gets cut off)
   const vw = window.innerWidth, vh = window.innerHeight;
   const rotated = vh > vw;
   const w = rotated ? vh : vw;
@@ -2505,6 +2529,29 @@ function onResize() {
   camera.updateProjectionMatrix();
   minimap.layout();
   layoutLobby();
+  sendViewport();
+}
+
+/** Diagnostic for the iOS portrait strip: the phone's viewport numbers go to the LAN server's telemetry log
+ * (dev/telemetry/races.jsonl, a line with kind 'viewport'), once things have settled after a resize. */
+let viewportT = 0;
+function sendViewport() {
+  if (location.protocol !== 'http:') return;
+  clearTimeout(viewportT);
+  viewportT = setTimeout(() => {
+    const css = getComputedStyle(app), probe = $('vp-probe'), vv = window.visualViewport;
+    const inset = (side) => { const d = document.createElement('div'); d.style.cssText = `position:fixed;visibility:hidden;height:env(safe-area-inset-${side})`; document.body.append(d); const h = d.offsetHeight; d.remove(); return h; };
+    const v = {
+      kind: 'viewport', build: VERSION_N, t: new Date().toISOString(), ua: navigator.userAgent, standalone: !!navigator.standalone,
+      inner: [innerWidth, innerHeight], screen: [screen.width, screen.height], avail: [screen.availWidth, screen.availHeight],
+      client: [document.documentElement.clientWidth, document.documentElement.clientHeight],
+      visual: vv && [vv.width, vv.height, vv.offsetTop], lv: probe && [probe.offsetWidth, probe.offsetHeight],
+      app: [app.offsetWidth, app.offsetHeight, app.classList.contains('rotated')], dpr: devicePixelRatio,
+      inset: { top: inset('top'), bottom: inset('bottom'), left: inset('left'), right: inset('right') },
+      orientation: screen.orientation?.type, appEdge: [css.getPropertyValue('--edge-l'), css.getPropertyValue('--edge-r')],
+    };
+    fetch('/telemetry', { method: 'POST', body: JSON.stringify(v) }).catch(() => {});
+  }, 1500);
 }
 
 /* ==========================================================================
@@ -2528,6 +2575,9 @@ function startRace() {
   });
   clearItems();
   fx.reset();
+  sitOut++; // a different personality sits this one out (see castDrivers)
+  try { localStorage.setItem(SITOUT_KEY, sitOut); } catch { /* storage blocked */ }
+  castDrivers();
   placeOnGrid();
   teleStart();
   camState.snap = true;
@@ -2823,17 +2873,71 @@ function showHello() {
   $('hello-age').value = profile?.age ?? '';
   $('hello-error').textContent = '';
   showOverlay(hud.helloScreen);
+  setField(profile ? 'hello-age' : 'hello-name');
 }
 function submitHello() {
   const name = $('hello-name').value.trim().replace(/\s+/g, ' '), age = parseInt($('hello-age').value, 10);
   const error = !name ? 'Type your name' : !(age >= 3 && age <= 120) ? 'Type your age (a number)' : '';
   $('hello-error').textContent = error;
-  if (error) { (name ? $('hello-age') : $('hello-name')).focus(); return; }
+  if (error) { setField(name ? 'hello-age' : 'hello-name'); return; }
   sound.click();
   profile = { name, age };
   try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { /* storage blocked */ }
-  document.activeElement?.blur(); // drop the keyboard
   showMenu();
+}
+
+/* In-game keyboard (build 38): with portrait lock the game is drawn sideways but iOS opens its keyboard upright,
+ * so the hello fields are readonly and typed into from #kbd (letters for the name, digits for the age). A tap on
+ * a field picks it; a physical keyboard works too while the screen is up. */
+const kbdField = () => $('kbd').dataset.field || 'hello-name'; // (state on the element: buildKeyboard runs before this line)
+function setField(id) {
+  $('kbd').dataset.field = id;
+  for (const f of ['hello-name', 'hello-age']) $(f).classList.toggle('active', f === id);
+  $('kbd').classList.toggle('digits', id === 'hello-age');
+  const mode = id === 'hello-age' ? 'digits' : 'letters';
+  for (const row of $('kbd').children) row.hidden = row.dataset.mode !== mode;
+}
+function typeKey(k) {
+  const el = $(kbdField());
+  if (k === 'back') el.value = el.value.slice(0, -1);
+  else if (k === 'next') return setField(kbdField() === 'hello-name' ? 'hello-age' : 'hello-name');
+  else if (el.value.length < el.maxLength) {
+    if (kbdField() === 'hello-age') { if (/\d/.test(k)) el.value += k; }
+    else if (k === ' ') { if (el.value && !el.value.endsWith(' ')) el.value += ' '; }
+    else el.value += !el.value || el.value.endsWith(' ') ? k.toUpperCase() : k.toLowerCase(); // Name Case
+  }
+  $('hello-error').textContent = '';
+}
+function buildKeyboard() {
+  const kbd = $('kbd');
+  const key = (label, k, cls = '') => `<button type="button" class="kbd-key ${cls}" data-k="${k}" aria-label="${k === 'back' ? 'Delete' : k === ' ' ? 'Space' : k === 'next' ? 'Next field' : label}">${label}</button>`;
+  const letters = (str) => [...str].map((c) => key(c, c)).join('');
+  kbd.innerHTML = [
+    ['letters', letters('QWERTYUIOP')],
+    ['letters', letters('ASDFGHJKLÑ')],
+    ['letters', letters('ZXCVBNM') + key(icon('back'), 'back', 'mid')],
+    ['letters', key('123', 'next', 'mid') + key('space', ' ', 'wide')],
+    // digits: a 3x3 pad + ABC 0 delete, 4 rows like the letters so the fields above never move
+    ['digits', letters('123')],
+    ['digits', letters('456')],
+    ['digits', letters('789')],
+    ['digits', key('ABC', 'next') + key('0', '0') + key(icon('back'), 'back')],
+  ].map(([mode, html]) => `<div class="kbd-row" data-mode="${mode}">${html}</div>`).join('');
+  // keys react on pointerdown (typing has to feel instant); LET'S RACE is a normal tap
+  for (const b of kbd.querySelectorAll('.kbd-key')) {
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('down'); typeKey(b.dataset.k); sound.click(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => b.classList.remove('down'));
+  }
+  onTap($('btn-hello'), submitHello);
+  for (const f of ['hello-name', 'hello-age']) onTap($(f), () => setField(f));
+  document.addEventListener('keydown', (e) => {
+    if (hud.helloScreen.hidden) return;
+    if (e.key === 'Enter') { e.preventDefault(); kbdField() === 'hello-name' ? typeKey('next') : submitHello(); }
+    else if (e.key === 'Backspace') { e.preventDefault(); typeKey('back'); }
+    else if (e.key === 'Tab') { e.preventDefault(); typeKey('next'); }
+    else if (e.key.length === 1 && /[\p{L}\d ]/u.test(e.key)) typeKey(e.key);
+  });
+  setField('hello-name');
 }
 
 // ---------- Title screen picks (per device): track, driver (karts[0] races as them), kart paint ----------
@@ -3036,6 +3140,16 @@ function setSteering(mode, save = true) {
   input.left = input.right = false;
   releaseStick();
 }
+// Screen flip (Settings -> SCREEN): under portrait lock the game is turned 90deg clockwise; flipped turns it
+// the other way, for holding the phone the other way round. Saved in kartrush.flip.
+const FLIP_KEY = 'kartrush.flip';
+function savedFlip() { try { return localStorage.getItem(FLIP_KEY) === '1'; } catch { return false; } }
+function setFlip(on, save = true) {
+  if (save) try { localStorage.setItem(FLIP_KEY, on ? '1' : '0'); } catch { /* storage blocked */ }
+  app.classList.toggle('flipped', on);
+  for (const b of $('flip-pick').children) b.classList.toggle('on', (b.dataset.flip === '1') === on);
+  releaseStick();
+}
 // Volume levels: 'music' and 'sfx' (effects + engines + drift squeal), 0..1 in four steps
 const volKey = (bus) => `kartrush.volume.${bus}`;
 function savedVolume(bus) {
@@ -3209,6 +3323,7 @@ function newAI(lane, name) {
     lane, laneTarget: 0, laneTimer: rand(2, 5), // lane = offset from this AI's racing line (starts at its grid slot)
     mistake: null, mistakeTimer: rand(...st.mistakeEvery),
     defendT: 0, defendCool: 0, defendLane: 0,
+    towT: 0, towSide: 0, slingT: 0, tow: 0, slingAt: st.slingAt ? rand(...st.slingAt) : 0, // the trickster's slipstream
     startDelay: rand(...st.startDelay), // reaction time at GO
     stuckT: 0, backT: 0, stuckCount: 0, wrongT: 0, resetNow: false, resets: 0,
     watchT: 0, watchProgress: -Infinity,
@@ -3310,6 +3425,36 @@ function updateAI(k, dt, canDrive) {
       if (Math.abs(side) < gap && clampLane(idx, myLane + away) === myLane + away) push += away * (gap - Math.abs(side));
     }
   }
+  // The trickster: tuck into the wake of the kart ahead (a tow), then pull out and slingshot past
+  ai.tow = 0;
+  if (A.slip && !k.finished) {
+    let wake = null, wakeAhead = Infinity;
+    for (const o of karts) {
+      if (o === k || o.spin > 0 || o.speed < 10) continue;
+      const dx = o.body.position.x - b.position.x, dz = o.body.position.z - b.position.z;
+      const ahead = dx * fwd.x + dz * fwd.z, side = dx * n.x + dz * n.z;
+      if (ahead > A.towRange[0] && ahead < A.towRange[1] && Math.abs(side) < 3 && ahead < wakeAhead) { wake = { o, side }; wakeAhead = ahead; }
+    }
+    ai.slingT -= dt;
+    if (wake) {
+      const lead = wake.o.place === 1 ? A.towLeader : A.tow;
+      if (ai.slingT > 0 || ai.towT >= ai.slingAt) { // slingshot: out of the wake and past, keeping the tow a moment
+        if (ai.slingT <= 0) { ai.slingT = 1.6; ai.towSide = myLane + wake.side > 0 ? -1 : 1; }
+        goal = clampLane(idx, myLane + wake.side + ai.towSide * 3.2);
+        ai.tow = lead;
+      } else if (Math.abs(wake.side) < 1.2) { // in the wake
+        ai.towT += dt;
+        ai.tow = lead;
+        goal = clampLane(idx, myLane + wake.side);
+      } else { // lining up behind it
+        goal = clampLane(idx, myLane + wake.side);
+      }
+      blocked = false;
+    } else if (ai.slingT <= 0) {
+      ai.towT = 0;
+      ai.slingAt = rand(...A.slingAt);
+    }
+  }
   const relGoal = (goal === null ? ai.laneTarget : goal - base(idx)) + push;
   ai.lane += clamp(relGoal - ai.lane, -4 * dt, 4 * dt);
 
@@ -3321,9 +3466,17 @@ function updateAI(k, dt, canDrive) {
   const tz = samples[j].z + normals[j].z * lat;
   const d = wrapAngle(Math.atan2(tx - b.position.x, tz - b.position.z) - Math.atan2(fwd.x, fwd.z));
   let steer = clamp(-d * A.steerGain, -1, 1);
+  // the drifter: in a real corner at speed, commits to a slide (holds the wheel past the drift threshold) and
+  // keeps it until pure pursuit lets go or turns the other way (then the mini-turbo fires on the exit)
+  if (A.drift) {
+    const corner = k.speed > K.driftMinSpeed + 3 && lerp(radius[j], track.lineRadius[j], ai.lineUse) < A.driftRadius;
+    const into = Math.sign(steer), keep = ai.sliding && into === ai.sliding && Math.abs(steer) > 0.08;
+    ai.sliding = corner && (keep || Math.abs(steer) > 0.15) ? into : 0;
+    if (ai.sliding) steer = ai.sliding * Math.max(Math.abs(steer), A.driftLock);
+  }
 
   // --- Speed: own pace, capped so it can still brake for every corner ahead
-  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill);
+  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill + ai.tow);
   let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
   for (let s = 2; s * spacing < 45; s += 2) {
@@ -3437,6 +3590,7 @@ function useItem(k) {
   const fx = fwd.x / h, fz = fwd.z / h;
   const item = k.item;
   teleEvent('use', k, { item, place: k.place });
+  k.fireT = 0.4;
   if (item === 'triple') {
     if (k.tripleT > 0) return; // a quick double tap shouldn't burn two
     k.tripleT = I.tripleGap;
@@ -4597,7 +4751,7 @@ function escapeHtml(t) { return t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 36 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build ${VERSION_N} · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 fillIcons();
 loadTrack(savedTrack());
 castDrivers();
