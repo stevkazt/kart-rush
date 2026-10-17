@@ -277,6 +277,44 @@ const sfx = {
     tone(700, now(), 0.7, { type: 'square', vol: 0.15, slide: 0.25 });
     noiseHit(now(), 0.2, { freq: 1200, vol: 0.4 });
   },
+  /** What a hit sounds like per item (`what` from spinOut), `v` 0..1 loudness: a squish, a thud, a boom, a bonk. */
+  hit(what, v = 1) {
+    if (!ready()) return;
+    const t = now();
+    if (what === 'banana') {
+      tone(260, t, 0.3, { type: 'sine', vol: 0.35 * v, slide: 3 });
+      tone(900, t + 0.05, 0.25, { type: 'triangle', vol: 0.15 * v, slide: 0.3 });
+      noiseHit(t, 0.12, { freq: 700, type: 'lowpass', vol: 0.3 * v });
+    } else if (what === 'green' || what === 'red') {
+      tone(110, t, 0.35, { type: 'sine', vol: 0.55 * v, slide: 0.3 });
+      noiseHit(t, 0.4, { freq: 2200, sweepTo: 250, type: 'lowpass', vol: 0.55 * v });
+      tone(520, t + 0.1, 0.5, { type: 'square', vol: 0.1 * v, slide: 0.3 });
+    } else if (what === 'blue' || what === 'bomb') {
+      tone(70, t, 0.8, { type: 'sine', vol: 0.6 * v, slide: 0.4 });
+      noiseHit(t, 0.7, { freq: 1500, sweepTo: 120, type: 'lowpass', vol: 0.6 * v });
+    } else if (what === 'star' || what === 'bullet') {
+      tone(200, t, 0.25, { type: 'square', vol: 0.3 * v, slide: 0.25 });
+      noiseHit(t, 0.2, { freq: 1000, vol: 0.45 * v });
+      tone(1200, t + 0.12, 0.4, { type: 'triangle', vol: 0.15 * v, slide: 0.4 });
+    } else {
+      tone(700, t, 0.7, { type: 'square', vol: 0.15 * v, slide: 0.25 });
+      noiseHit(t, 0.2, { freq: 1200, vol: 0.4 * v });
+    }
+  },
+  /** A kart slammed into a wall: a heavy thump and a crunch. `v` ~0.5..1.4 = how hard. */
+  crash(v = 1) {
+    if (!ready()) return;
+    const t = now(), w = Math.min(v, 1);
+    tone(80, t, 0.35, { type: 'sine', vol: 0.6 * w, slide: 0.35 });
+    noiseHit(t, 0.3, { freq: 900, sweepTo: 200, type: 'lowpass', vol: 0.55 * w });
+    noiseHit(t + 0.02, 0.12, { freq: 3500, type: 'bandpass', q: 1, vol: 0.3 * w });
+  },
+  /** A red shell leaving the kart: a higher, buzzier whoosh than the green one. */
+  throwRed() {
+    if (!ready()) return;
+    noiseHit(now(), 0.3, { freq: 1200, sweepTo: 3500, type: 'bandpass', q: 3, vol: 0.35 });
+    tone(500, now(), 0.3, { type: 'sawtooth', vol: 0.08, slide: 2 });
+  },
   hitOther() { if (ready()) notes([880, 1175], 0.07, { type: 'square', vol: 0.12 }); },
   warn() { if (ready()) tone(1400, now(), 0.12, { type: 'square', vol: 0.12 }); },
   shieldUp() {

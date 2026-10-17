@@ -255,12 +255,12 @@ const CFG = {
         mistakeEvery: [20, 35], startDelay: [0.05, 0.15], overtake: 1, defend: 0.5, aggression: 0.4 },
       Luna: { role: 'defender', skill: [1.02, 1.06], cornerGrip: [23, 24.5], lineUse: [0.75, 0.95], bias: 1.5,
         laneRange: 1.2, mistakeEvery: [18, 30], startDelay: [0.05, 0.2], overtake: 0.7, defend: 1, aggression: 0.2, hoard: true },
-      // itemOdds: x the per-place odds, in ITEM_TYPES order (mush ban gre red shld star trip blue bullet):
+      // itemOdds: x the per-place odds, in ITEM_TYPES order (mush ban gre red shld star trip blue bullet bomb):
       // always armed, rarely a shield or a speed item. trap: lays bananas on the racing line at corner entries
       // (user picked these over red shells that hunt the player: "too much")
       Mako: { role: 'bully', skill: [0.98, 1.02], cornerGrip: [21.5, 23.5], lineUse: [0.4, 0.7], bias: 3,
         overtake: 0.8, defend: 0.3, aggression: 1, trap: true,
-        itemOdds: [0.4, 2, 1.8, 1.6, 0.3, 0.5, 0.4, 1.3, 0.5] },
+        itemOdds: [0.4, 2, 1.8, 1.6, 0.3, 0.5, 0.4, 1.3, 0.5, 1.6] },
       Pip: { role: 'steady', skill: [0.95, 0.99], cornerGrip: [21, 23], lineUse: [0.5, 0.7], bias: 2, laneRange: 1.5,
         mistakeEvery: [25, 40], overtake: 0.3, defend: 0.8, aggression: 0, hoard: true },
       // fast, brakes late (brakeOver), wide random lines, wobbles a lot
@@ -286,6 +286,22 @@ const CFG = {
     padLength: 4, padWidth: 3.2,
     rollTime: 0.9,                    // item roulette before an item can be used
     spinTime: 1.1,                    // spin-out after a banana / shell hit
+    // Star / bullet hit: the victim is flung sideways to the nearest wall at `speed` m/s (so a kart near the wall gets a gentle
+    // shove, one mid-road a hard one), crashes into it for `crash` s, then recovers. Hit time = flight + crash. Scripted, not physics.
+    launch: { star: { speed: 26, crash: 0.5, hop: 1 }, bullet: { speed: 38, crash: 0.8, hop: 1.4, splat: 0.9, minDist: 4, splatLat: 2.5 } }, // bullet from straight behind or next to a wall: steamrolled flat for `splat` s
+    // Build 64.20 hit motions (scripted like the launches; `time` = how long the kart is out, rarer / nastier items = longer).
+    // shove (shells): thrown along the shell's travel (from behind = forward, head-on = back) at `speed` m/s fading out, tumbling `flips` times,
+    // `hop` m high, then bouncing. slide (banana): keeps its momentum and slides `lat` m/s sideways while spinning `turns` times, speed fades by `decay`.
+    // blast (blue shell, bomb): straight up `up` m in a slow tumble, heavy drop + dust ring; others in the blast get `scale` x the lift and are pushed
+    // outward at `push` m/s. The bomb also sets karts on fire for `burn` s.
+    hit: {
+      banana: { mode: 'slide', time: 1.5, lat: 3.5, decay: 0.45, turns: 3 },
+      green: { mode: 'shove', time: 1.7, speed: 34, hop: 3.6, flips: 3 }, // ~23 m thrown (distance = speed x time / 2.5)
+      red: { mode: 'shove', time: 2.1, speed: 42, hop: 5, flips: 4 },     // ~35 m
+      blue: { mode: 'blast', time: 2.4, up: 7, push: 12, scale: 0.55 },
+      bomb: { mode: 'blast', time: 2.6, up: 5.5, push: 14, scale: 0.5, burn: 3.5 },
+    },
+    bombBlast: 4.5,                   // bomb: karts this close (m) to where it went off are caught in it
     mushroomBoost: 1.3,               // x the mini-turbo duration
     shellSpeed: 38, shellLife: 6, shellBounces: 2, // green shells vanish on their 2nd wall hit
     redSpeed: 40, redLife: 12, redHomeDist: 14,
@@ -298,6 +314,7 @@ const CFG = {
     // invincible + faster; karts touched spin out. User (build 33 races): the star "should give more speed": at
     // +4 m/s with engine power only it held ~108 km/h and gained ~20 m over 6 s. Now pushed like a mushroom.
     starTime: 6, starSpeed: 8, starAccel: 150, // + m/s on top speed (~122 km/h), push m/s^2 up to it (high = at once)
+    bulletHalfW: 2.2, bulletRear: 3.0, bulletFront: 3.4, // bullet hit zone (m): the hull's width / length plus the other kart's half size, in the bullet kart's frame
     bumpRadius: 2.3,                  // star / bullet kart this close to another one = hit
     tripleGap: 0.25,                  // triple mushroom: min seconds between two boosts
     blueSpeed: 55, blueLife: 30,      // blue shell: along the track to the leader, explodes
@@ -306,12 +323,12 @@ const CFG = {
     // Item odds by race position (index = place - 1), in ITEM_TYPES order:
     //          mush ban gre red shld star trip blue bullet
     odds: [
-      /* 1st */ [5, 40, 30, 0, 25, 0, 0, 0, 0],
-      /* 2nd */ [10, 25, 25, 15, 18, 0, 7, 0, 0],
-      /* 3rd */ [12, 12, 18, 25, 10, 5, 10, 8, 0],
-      /* 4th */ [12, 6, 12, 25, 6, 10, 14, 10, 5],
-      /* 5th */ [15, 0, 8, 22, 0, 15, 17, 11, 12], // no shields at the back (build 36): useless there
-      /* 6th */ [11, 0, 5, 20, 0, 18, 17, 11, 18],
+      /* 1st */ [5, 40, 30, 0, 25, 0, 0, 0, 0, 0],
+      /* 2nd */ [10, 25, 25, 15, 18, 0, 7, 0, 0, 3],
+      /* 3rd */ [12, 12, 18, 25, 10, 5, 10, 8, 0, 6],
+      /* 4th */ [12, 6, 12, 25, 6, 10, 14, 10, 5, 7],
+      /* 5th */ [15, 0, 8, 22, 0, 15, 17, 11, 12, 8], // no shields at the back (build 36): useless there
+      /* 6th */ [11, 0, 5, 20, 0, 18, 17, 11, 18, 8],
     ],
   },
 
@@ -353,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '64.7'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '65'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -404,6 +421,52 @@ function sizeBlurTarget() {
   blurPass.mat.uniforms.aspect.value = s.x / s.y;
 }
 sizeBlurTarget();
+
+// Rear-view mirror (build 64.18): a second camera looks back from behind the kart into a small target, drawn flipped
+// (like a real mirror) in a scissored box under the TIME/BEST pills; #mirror-frame in the HUD is its border.
+const mirror = {
+  target: new THREE.WebGLRenderTarget(320, 112, { type: THREE.HalfFloatType }),
+  cam: new THREE.PerspectiveCamera(62, 320 / 112, 0.5, 600),
+  scene: new THREE.Scene(), rect: { x: 0, y: 0, w: 0, h: 0 }, look: new THREE.Vector3(),
+};
+mirror.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { tex: { value: mirror.target.texture } }, depthTest: false, depthWrite: false,
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: 'uniform sampler2D tex; varying vec2 vUv; void main() {\n gl_FragColor = vec4(texture2D(tex, vec2(1.0 - vUv.x, vUv.y)).rgb, 1.0);\n #include <colorspace_fragment>\n}',
+})));
+mirror.scene.children[0].frustumCulled = false;
+function layoutMirror(w) {
+  const mw = Math.round(clamp(w * 0.2, 150, 230)), mh = Math.round(mw * 112 / 320);
+  mirror.rect = { x: Math.round((w - mw) / 2), y: 10, w: mw, h: mh }; // y = px from the top
+  const vert = app.classList.contains('vertical'), top = document.getElementById('hud-top');
+  const rowY = Math.round(app.clientHeight * 0.085); // vertical view (64.28): TIME / BEST at this height, the mirror right under them
+  if (vert) { // narrow: the mirror sits between the minimap and the buttons, TIME / BEST go in a row under it
+    mirror.rect.w = Math.round(clamp(w * 0.36, 110, 150)); mirror.rect.h = Math.round(mirror.rect.w * 112 / 320);
+    mirror.rect.x = Math.round((w - mirror.rect.w) / 2);
+    app.style.setProperty('--row-y', `${rowY}px`); top.style.gap = ''; top.style.top = ''; mirror.rect.y = rowY + (top.offsetHeight || 40) + 8; app.style.setProperty('--mirror-y', `${mirror.rect.y}px`);
+  } else { top.style.gap = `${mw + 16}px`; top.style.top = ''; } // TIME and BEST sit either side of the mirror
+  app.style.setProperty('--warn-y', `${mirror.rect.y + mirror.rect.h + 8}px`); // the red incoming-shell warning sits right under the mirror
+  const f = document.getElementById('mirror-frame');
+  if (f) Object.assign(f.style, { left: `${mirror.rect.x}px`, top: `${mirror.rect.y}px`, width: `${mirror.rect.w}px`, height: `${mirror.rect.h}px` });
+}
+function renderMirror(bp, yaw) {
+  const fx_ = Math.sin(yaw), fz_ = Math.cos(yaw);
+  mirror.cam.position.set(bp.x - fx_ * 1.6, bp.y + 1.1, bp.z - fz_ * 1.6);
+  mirror.cam.lookAt(mirror.look.set(bp.x - fx_ * 20, bp.y + 1.0, bp.z - fz_ * 20));
+  renderer.setRenderTarget(mirror.target);
+  renderer.render(scene, mirror.cam);
+  renderer.setRenderTarget(null);
+  const r = mirror.rect, sz = renderer.getSize(new THREE.Vector2()), H = sz.y;
+  renderer.autoClear = false;
+  renderer.setScissorTest(true);
+  renderer.setViewport(r.x, H - r.y - r.h, r.w, r.h);
+  renderer.setScissor(r.x, H - r.y - r.h, r.w, r.h);
+  renderer.clearDepth();
+  renderer.render(mirror.scene, blurPass.cam);
+  renderer.setScissorTest(false);
+  renderer.autoClear = true;
+  renderer.setViewport(0, 0, sz.x, H);
+}
 renderer.info.autoReset = false; // the telemetry's draw-call counts cover both passes; reset once per frame in render()
 
 const scene = new THREE.Scene();
@@ -1880,7 +1943,7 @@ function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
     passT: false, boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0, wallNx: 0, wallNz: 0, wallVx: 0, wallVz: 0,
-    item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, shield: 0, star: 0, bullet: 0, bulletLane: 0,
+    item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, burn: 0, shield: 0, star: 0, bullet: 0, bulletLane: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
     boxAt: -9, rowCheckIdx: undefined, bumpT: 0,
   };
@@ -2333,9 +2396,15 @@ function buildItemVisuals() {
     add(new THREE.TorusGeometry(0.5, 0.075, 10, 32), 0xffffff, 0, 0.1, 0).rotation.x = Math.PI / 2;
     for (const x of [0.55, -0.55]) add(new THREE.BoxGeometry(0.7, 0.06, 0.35), 0xffffff, x * 1.4, 0.45, 0).rotation.z = x * 0.6;
   });
+  const bomb = template('bomb', 0x551100, (add) => {
+    add(new THREE.SphereGeometry(0.4, 24, 16), 0x23232b, 0, 0.42, 0);
+    add(new THREE.CylinderGeometry(0.1, 0.12, 0.12, 12), 0x5a5a66, 0, 0.84, 0);      // cap
+    add(new THREE.CylinderGeometry(0.025, 0.025, 0.22, 6), 0xc9a45a, 0.05, 1.0, 0).rotation.z = -0.4; // fuse
+    add(new THREE.SphereGeometry(0.07, 10, 8), 0xff7a1a, 0.12, 1.1, 0);               // spark
+  });
   return {
     boxes, boxMesh, pads, padTex,
-    models: { banana, green: shell('green', 0x2fbf4a, 0x0d4a1a), red: shell('red', 0xe8322f, 0x5a0c0b), mushroom, blue },
+    models: { banana, green: shell('green', 0x2fbf4a, 0x0d4a1a), red: shell('red', 0xe8322f, 0x5a0c0b), mushroom, blue, bomb },
   };
 }
 
@@ -2353,6 +2422,7 @@ const state = {
   wrongT: 0,             // seconds spent driving the wrong way
 };
 
+let viewFov = 66; // the chase camera's base vertical FOV (wider in the vertical view)
 const input = { left: false, right: false, axis: 0, gas: false, brake: false, reset: false, item: false }; // axis: joystick -1..1
 
 const hud = {
@@ -2491,6 +2561,30 @@ function initControls() {
     stickId = null;
     releaseStick();
   }));
+  // --- Vertical view: SCREEN HALVES. Touch the left half to steer left, the right half to steer right; the further from the
+  // centre line, the harder the turn (dead zone near the line, full lock at 75% of the way to the edge). Sliding the thumb steers live.
+  const vz = $('vsteer'), vl = $('vl'), vr = $('vr');
+  let vId = null;
+  const vSteer = (e) => {
+    const r = vz.getBoundingClientRect(), x = (e.clientX - r.left - r.width / 2) / (r.width / 2), C = CFG.controls;
+    input.axis = Math.sign(x) * clamp((Math.abs(x) - 0.06) / (0.75 - 0.06), 0, 1);
+    vl.style.opacity = input.axis < 0 ? 0.15 + -input.axis * 0.4 : 0;
+    vr.style.opacity = input.axis > 0 ? 0.15 + input.axis * 0.4 : 0;
+  };
+  vz.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (vId !== null) return;
+    vId = e.pointerId;
+    try { vz.setPointerCapture(e.pointerId); } catch { /* synthetic pointer (tests) */ }
+    vSteer(e);
+  });
+  vz.addEventListener('pointermove', (e) => { if (e.pointerId === vId) vSteer(e); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => vz.addEventListener(t, (e) => {
+    if (e.pointerId !== vId) return;
+    vId = null; releaseStick();
+  }));
+  for (const b of $('view-pick').children) onTap(b, () => { sound.click(); setView(b.dataset.view === '1'); });
+  setView(savedView(), false);
   bindHold($('btn-gas'), 'gas');
   slideToItem($('btn-gas'));
   bindHold($('btn-brake'), 'brake');
@@ -2539,7 +2633,7 @@ function initControls() {
 
   // --- Block browser gestures (scroll, pinch, double-tap zoom, long-press menu) ---
   const block = (e) => e.preventDefault();
-  document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.pick-list, #debug-card')) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.pick-list, #debug-card, #settings-screen .settings-card, .help-card, #results-screen')) e.preventDefault(); }, { passive: false });
   // split stage: drag sideways to turn the 3D kart (it swings gently by itself again after a few seconds)
   const stageEl = $('pick-stage');
   stageEl.addEventListener('pointerdown', (e) => {
@@ -2591,6 +2685,11 @@ function initControls() {
     if (e.body.material !== physMats.wall && e.body.material !== physMats.chassis) return;
     const impact = Math.abs(e.contact.getImpactVelocityAlongNormal());
     if (impact > 2) sound.bump(impact / 10);
+    if (e.body.material === physMats.chassis && impact > 2 && !(kart.kbumpT > state.raceTime)) { // log kart-to-kart contacts (was it a bullet / star kart that did not count as a hit?)
+      kart.kbumpT = state.raceTime + 0.5;
+      const o = karts.find((q) => q.body === e.body);
+      teleEvent('kbump', kart, { with: o ? karts.indexOf(o) : -1, imp: +impact.toFixed(1), bullet: o?.bullet > 0, star: o?.star > 0, spin: o?.spin > 0, mine: kart.spin > 0 });
+    }
     if (impact > 3 && navigator.vibrate) navigator.vibrate(Math.min(60, impact * 4));
   });
 }
@@ -2600,17 +2699,21 @@ function onResize() {
   // (iOS portrait strip, build 38: the phone measured 100lvh = 844 but iOS shows only innerHeight 797 of the
   // web view, so the page can't draw there: size to innerHeight, or the game's far edge gets cut off)
   const vw = window.innerWidth, vh = window.innerHeight;
-  const rotated = vh > vw;
+  const vertical = app.classList.contains('vertical'); // Settings -> VIEW Vertical: laid out upright, not turned 90deg
+  const rotated = !vertical && vh > vw;
   const w = rotated ? vh : vw;
   const h = rotated ? vw : vh;
   app.classList.toggle('rotated', rotated);
+  // portrait is narrow: widen the vertical FOV so the road isn't a keyhole (about 72deg across, at most 100 up and down)
+  viewFov = vertical ? clamp(THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(36)) / (w / h))), CFG.camera.fov, 100) : CFG.camera.fov;
   app.style.width = `${w}px`;
   app.style.height = `${h}px`;
   app.style.setProperty('--app-h', `${h}px`);
   renderer.setSize(w, h);
   sizeBlurTarget();
+  layoutMirror(w);
   camera.aspect = w / h;
-  if (camera.view?.enabled) camera.setViewOffset(w, h, lobbyShift, 0, w, h);
+  if (camera.view?.enabled) camera.setViewOffset(w, h, lobbyShift, lobbyShiftY, w, h);
   camera.updateProjectionMatrix();
   minimap.layout();
   layoutLobby();
@@ -2669,7 +2772,7 @@ function startRace() {
   camState.snap = true;
   showCountdown('3');
   sound.beep();
-  showTip('Press GAS on "1" for a rocket start');
+  if (!app.classList.contains('vertical')) showTip('Press GAS on "1" for a rocket start'); // no rocket start in the vertical view (auto-gas)
 }
 
 /** Staggered two-column grid behind the start line. The AIs line up in front; the player starts last. */
@@ -2709,7 +2812,7 @@ function resetKart(k, idx, lane = 0) {
   body.interpolatedPosition.copy(body.position);
   body.previousQuaternion.copy(body.quaternion);
   body.interpolatedQuaternion.copy(body.quaternion);
-  Object.assign(k, { trackIdx: idx, flipTimer: 0, fallT: 0, driftCharge: 0, boost: 0, steerSmooth: 0, spin: 0 });
+  Object.assign(k, { trackIdx: idx, flipTimer: 0, fallT: 0, driftCharge: 0, boost: 0, steerSmooth: 0, spin: 0, burn: 0 });
 }
 
 const resetP = new THREE.Vector3(), resetQ = new THREE.Quaternion(), resetM = new THREE.Matrix4();
@@ -2786,7 +2889,7 @@ function updateKartProgress(k, dt, racing) {
   const onRail = k.railT > 0.3;
   // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
   // reversing uphill barely moves: the AIs' watchdog does the same for them
-  const trying = k.isPlayer && !k.ai && racing && !k.finished && k.spin <= 0 && (input.gas || input.brake);
+  const trying = k.isPlayer && !k.ai && racing && !k.finished && k.spin <= 0 && (k.ctl.gas || input.brake);
   // ...a pedal released a moment ago still counts: tapping gas/brake alternately never filled the timer (22 s stuck, no reset)
   k.tryT = trying ? 1.5 : Math.max(0, (k.tryT || 0) - dt);
   k.stuckT = k.tryT > 0 && racing && Math.abs(k.speed) < CFG.kart.rescueSpeed ? (k.stuckT || 0) + dt : 0;
@@ -3144,6 +3247,7 @@ function openPicker(kind) {
   list.className = `pick-list pick-${kind}`;
   const staged = kind !== 'track'; // driver / paint: the live 3D kart on the left (split stage)
   hud.pickScreen.classList.toggle('staged', staged);
+  hud.pickScreen.classList.toggle('tracks', kind === 'track');
   $('pick-title').textContent = { track: 'CHOOSE A TRACK', driver: 'CHOOSE YOUR DRIVER', kart: 'PAINT YOUR KART' }[kind];
   const options = {
     track: () => Object.entries(CFG.tracks).filter(([, t]) => !t.debug || DEBUG).map(([id, t]) => ({
@@ -3181,6 +3285,7 @@ function openPicker(kind) {
       o.pick();
       cards.forEach((c, i) => c.classList.toggle('on', options[i].on()));
       if (staged) { stage.pop = 1; stageLabel(kind); }
+      if (kind === 'track') trackPreview();
     });
     return b;
   });
@@ -3191,6 +3296,7 @@ function openPicker(kind) {
   grid.append(...cards);
   list.replaceChildren(grid);
   showOverlay(hud.pickScreen);
+  if (kind === 'track') trackPreview();
   if (staged) {
     stage.on = true;
     stage.rot = 0;
@@ -3201,6 +3307,17 @@ function openPicker(kind) {
   list.scrollLeft = list.scrollTop = 0;
   list.classList.toggle('scrolls', list.scrollWidth > list.clientWidth + 2);
   cards.find((c) => c.classList.contains('on'))?.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+
+/** Track picker: the selected track big, left (landscape) or on top (vertical). A 2D map for now: the 3D overview
+ * replaces what is inside #tp-view later (the info under it stays). */
+function trackPreview() {
+  const t = CFG.tracks[track.id], s = trackShape(track.id);
+  $('track-preview').dataset.theme = t.theme;
+  $('tp-view').innerHTML = s.svg;
+  $('tp-name').innerHTML = `${icon(t.icon)}${t.name}`;
+  $('tp-meta').textContent = `${s.length} m · ${CFG.laps} laps`;
+  $('tp-record').textContent = recordText(track.id);
 }
 
 /** The name under the 3D kart on the split stage: the driver and their flavour line (never a role: the
@@ -3236,10 +3353,21 @@ const DIFF = { easy: { ease: 0.09, pace: -0.04 }, medium: { ease: 0.04, pace: 0 
 const DIFF_KEY = 'kartrush.diff';
 let difficulty = 'medium';
 try { const d = localStorage.getItem(DIFF_KEY); if (DIFF[d]) difficulty = d; } catch { /* storage blocked */ }
+/** The difficulty in force: the vertical view is Easy only, unless a debug race is running (build 64.24). */
+function effectiveDiff() {
+  let dbgOn = false;
+  try { dbgOn = dbgActive(); } catch { /* before the debug state exists (boot) */ }
+  return app.classList.contains('vertical') && !dbgOn ? 'easy' : difficulty;
+}
+function showDiff() {
+  const e = effectiveDiff(), locked = e !== difficulty || (app.classList.contains('vertical') && e === 'easy');
+  for (const b of $('diff-pick').children) b.classList.toggle('on', b.dataset.diff === e);
+  $('diff-pick').style.opacity = locked ? 0.55 : '';
+}
 function setDifficulty(d, save = true) {
   difficulty = d;
   if (save) try { localStorage.setItem(DIFF_KEY, d); } catch { /* storage blocked */ }
-  for (const b of $('diff-pick').children) b.classList.toggle('on', b.dataset.diff === d);
+  showDiff();
 }
 for (const b of $('diff-pick').children) onTap(b, () => { sound.click(); setDifficulty(b.dataset.diff); });
 setDifficulty(difficulty, false);
@@ -3248,9 +3376,9 @@ setDifficulty(difficulty, false);
 // Menu / pause -> DEBUG. Pick the track (menu only), park the rivals (invisible, no collisions), a start spot
 // (applied at the start of a race, or at once when paused), an item you always carry (refilled after each use)
 // and one-shot effects. Races played with any of it on are not sent to the telemetry log.
-const dbg = { on: false, parked: false, spot: null, items: [], next: 0, laps: 3 }; // items: the ticked powers, carried in rotation // `on`: this race was started from the panel (or changed from pause)
+const dbg = { on: false, parked: false, spot: null, items: [], next: 0, laps: 3, aggro: false }; // aggro: bots use weapons on the player; items: the ticked powers, carried in rotation // `on`: this race was started from the panel (or changed from pause)
 const dbgActive = () => DEBUG && (track.id === 'lab' || dbg.on);
-function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, items: [], next: 0, laps: 3 }); CFG.laps = 3; }
+function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, items: [], next: 0, laps: 3, aggro: false }); CFG.laps = 3; }
 let dbgFrom = null;
 function dbgSpots() {
   const def = CFG.tracks[track.id], N = track.N;
@@ -3292,7 +3420,9 @@ function dbgTick() { // every frame
     if (k.isPlayer) continue;
     const park = DEBUG && dbg.on && dbg.parked;
     if (k.group.visible === park) k.group.visible = !park;
-    if (k.body.collisionResponse === park) k.body.collisionResponse = !park;
+    // only touch collisionResponse when parking changes: setting it every frame turned the bots' bullets solid again (they shoved the player without a hit)
+    if (park && !k.dbgParked) { k.body.collisionResponse = false; k.dbgParked = true; }
+    else if (!park && k.dbgParked) { k.body.collisionResponse = !(k.bullet > 0); k.dbgParked = false; }
   }
   if (dbg.on && dbg.items.length && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) dbgHold(dbgNextItem());
 }
@@ -3314,12 +3444,13 @@ function dbgRender() {
   };
   const racing = state.paused || state.phase === 'race';
   if (!racing) row('TRACK', Object.entries(CFG.tracks).map(([id, t]) => ({ text: t.name, on: track.id === id, pick: () => { dbg.spot = null; selectTrack(id); } })));
+  row('AI ITEMS', [{ text: 'Normal', on: !dbg.aggro, pick: () => { dbg.aggro = false; } }, { text: 'Aggressive', on: dbg.aggro, pick: () => { dbg.aggro = true; } }]); // aggressive: weapons only, used on you sooner and from further away
   row('RIVALS', [{ text: 'Race', on: !dbg.parked, pick: () => { dbg.parked = false; } }, { text: 'Parked', on: dbg.parked, pick: () => { dbg.parked = true; } }]);
   row('LAPS', [1, 3].map((n) => ({ text: n === 1 ? '1 lap' : '3 laps', on: dbg.laps === n, pick: () => { dbg.laps = n; CFG.laps = n; } })));
   row(racing ? 'GO TO' : 'START AT', [{ text: 'Grid', on: !dbg.spot, pick: () => { dbg.spot = null; } },
     ...dbgSpots().map((s) => ({ text: s.name, on: dbg.spot?.idx === s.idx, pick: () => dbgGoto(s) }))]);
   row('ITEMS', [{ text: 'Normal', on: !dbg.items.length, pick: () => dbgToggle(null) },
-    ...ITEM_TYPES.map((t) => ({ text: t, on: dbg.items.includes(t), pick: () => dbgToggle(t) }))]); // tick several: carried in rotation
+    ...ITEM_TYPES.map((t) => ({ text: t, on: dbg.items.includes(t), pick: () => dbgToggle(t) }))]); // tick several: you carry them in rotation, and the bots' boxes give only these (random)
   if (racing) row('NOW', [
     { text: 'Boost', on: false, pick: () => { kart.boost = CFG.kart.boostDuration * 1.3; } },
     { text: 'Spin out', on: false, pick: () => spinOut(kart, null, 'debug') },
@@ -3339,6 +3470,19 @@ if (DEBUG) {
   onTap($('btn-debug-start'), () => { sound.click(); dbg.on = true; startRace(); });
 }
 
+// Settings -> VIEW: Landscape (the game turned sideways under portrait lock) or Vertical (upright, drag to steer, auto-gas). kartrush.view
+function savedView() { try { return localStorage.getItem('kartrush.view') !== 'landscape'; } catch { return true; } } // vertical unless the player chose Landscape (build 64.47)
+function setView(vertical, save = true) {
+  if (save) try { localStorage.setItem('kartrush.view', vertical ? 'vertical' : 'landscape'); } catch { /* storage blocked */ }
+  app.classList.toggle('vertical', vertical);
+  // vertical: LAP joins TIME and BEST in one top bar (#hud-top); landscape keeps it under the minimap
+  if (vertical) $('hud-top').prepend($('lapbox')); else $('hud').append($('lapbox'));
+  for (const b of $('view-pick').children) b.classList.toggle('on', (b.dataset.view === '1') === vertical);
+  input.left = input.right = false;
+  releaseStick();
+  if (save) showDiff();
+  if (save) onResize(); // (at boot onResize runs anyway, after everything exists)
+}
 // Screen flip (Settings -> SCREEN): under portrait lock the game is turned 90deg clockwise; flipped turns it
 // the other way, for holding the phone the other way round. Saved in kartrush.flip.
 const FLIP_KEY = 'kartrush.flip';
@@ -3368,7 +3512,7 @@ function teleStart() {
   tele.nextT = 0;
   tele.race = {
     build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id, ...(dbgActive() && { debug: true }),
-    steering: savedSteering(), laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
+    steering: savedSteering(), diff: effectiveDiff(), view: app.classList.contains('vertical') ? 'vertical' : 'landscape', laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
     karts: karts.map((k) => ({ name: k.name, ...(k.ai && { style: k.style, role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
       lineUse: +k.ai.lineUse.toFixed(2) }) })),
     // every second: t, then per kart [metres raced, km/h, place, AI target speed as % of top], then the player's
@@ -3380,12 +3524,14 @@ function teleEvent(type, k, data = {}) {
   if (!tele.race) return;
   tele.race.events.push({ t: +state.raceTime.toFixed(2), type, kart: karts.indexOf(k), ...data });
 }
+window.addEventListener('error', (e) => teleEvent('jserror', kart, { msg: String(e.message).slice(0, 120), line: e.lineno }));
+window.addEventListener('unhandledrejection', (e) => teleEvent('jserror', kart, { msg: String(e.reason).slice(0, 120) }));
 function teleSample() {
   if (!tele.race || state.raceTime < tele.nextT) return;
   tele.nextT = state.raceTime + 1;
   tele.race.samples.push([+state.raceTime.toFixed(1), ...karts.map((k) => [Math.round(k.progress * track.spacing),
     Math.round(k.speed * 3.6), k.place, k.ai ? Math.round(k.topMult * 100) : 0]),
-    input.gas ? 'g' : input.brake ? 'b' : '-']);
+    karts[0].ctl.gas ? 'g' : input.brake ? 'b' : '-']);
 }
 function teleSend(end) {
   const race = tele.race;
@@ -3396,12 +3542,25 @@ function teleSend(end) {
   fetch('/telemetry', { method: 'POST', body: JSON.stringify(race) }).catch(() => {});
 }
 
+/** The page going to the background (leaving the app, locking the phone) can end it for good on iOS, and a race abandoned like that was never
+ * logged. So the race so far is sent as a partial record (end: 'hidden'); the race itself goes on and still sends its normal record at the end. */
+function teleHidden() {
+  const race = tele.race;
+  if (!race || state.raceTime < 5) return;
+  const body = JSON.stringify({ ...race, end: 'hidden', partial: true, raceTime: +state.raceTime.toFixed(1),
+    result: karts.map((k) => ({ finished: k.finished, time: k.finished ? +k.finishTime.toFixed(2) : null, place: k.place })) });
+  if (!(navigator.sendBeacon && navigator.sendBeacon('/telemetry', body))) fetch('/telemetry', { method: 'POST', body, keepalive: true }).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') teleHidden(); });
+window.addEventListener('pagehide', teleHidden);
+
 function showSettings() {
   settingsFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
   showOverlay(hud.settingsScreen);
 }
 function releaseStick() {
   input.axis = 0;
+  $('vl').style.opacity = $('vr').style.opacity = 0;
   hud.knob.style.transform = '';
   hud.knob.classList.remove('held');
 }
@@ -3589,7 +3748,7 @@ function updateAI(k, dt, canDrive) {
   }
   if (ai.defendT > 0) goal = ai.defendLane;
   // Banana trap (the bully): with a banana in hand and a corner coming, get onto the racing line to drop it
-  if (A.trap && k.item === 'banana' && k.itemRoll <= 0 && trapCorner(idx)) goal = clampLane(idx, track.line[idx]);
+  if (A.trap && (k.item === 'banana' || k.item === 'bomb') && k.itemRoll <= 0 && trapCorner(idx)) goal = clampLane(idx, track.line[idx]);
   // Steer round bananas
   for (const d of drops) {
     const dx = d.pos.x - b.position.x, dz = d.pos.z - b.position.z;
@@ -3679,7 +3838,7 @@ function updateAI(k, dt, canDrive) {
   // Gentle rubber band (build 45, a friend: the game is hard, nobody should be left far behind): an AI more than
   // easeFrom metres ahead of the player loses up to easeMax of top speed, full at easeFull. Never speeds anyone up.
   const gapAhead = (k.progress - kart.progress) * track.spacing;
-  const catchUp = DIFF[difficulty].pace - DIFF[difficulty].ease * clamp((gapAhead - CFG.ai.easeFrom) / (CFG.ai.easeFull - CFG.ai.easeFrom), 0, 1);
+  const catchUp = DIFF[effectiveDiff()].pace - DIFF[effectiveDiff()].ease * clamp((gapAhead - CFG.ai.easeFrom) / (CFG.ai.easeFull - CFG.ai.easeFrom), 0, 1);
   const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill + ai.tow + catchUp);
   let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
@@ -3748,7 +3907,7 @@ function updateAI(k, dt, canDrive) {
  * Boxes hand out an item rolled from the kart's race position. Bananas and shells are not physics
  * bodies: they move on the track plane and hit karts by distance. A hit kart spins out (see driveKart).
  * ========================================================================== */
-const ITEM_TYPES = ['mushroom', 'banana', 'green', 'red', 'shield', 'star', 'triple', 'blue', 'bullet'];
+const ITEM_TYPES = ['mushroom', 'banana', 'green', 'red', 'shield', 'star', 'triple', 'blue', 'bullet', 'bomb'];
 const drops = [];   // bananas on the track: { mesh, pos, owner, age }
 const shells = [];  // { kind, mesh, pos, vel, idx, owner, target, age, life, bounces } (+ along, homing: blue)
 
@@ -3764,7 +3923,9 @@ function clearItems() {
 }
 
 function rollItem(place, k) {
+  if (k?.ai && dbg.on && dbg.items.length) return dbg.items[Math.floor(Math.random() * dbg.items.length)]; // DEBUG: the bots' boxes only give the ticked items
   const odds = CFG.items.odds[clamp(place, 1, CFG.items.odds.length) - 1].slice();
+  if (k?.ai && dbg.on && dbg.aggro) for (const t of ['mushroom', 'shield', 'triple']) odds[ITEM_TYPES.indexOf(t)] = 0; // DEBUG aggressive bots: weapons only
   const tilt = k?.ai?.style.itemOdds; // a personality's item luck (the bully: weapons)
   if (tilt) tilt.forEach((m, i) => { odds[i] *= m; });
   // one blue shell at a time (flying or held)
@@ -3831,23 +3992,37 @@ function useItem(k) {
     if (blue.target && blue.target.progress < k.progress) blue.dir = -1;
     showMessage(k.isPlayer ? 'BLUE SHELL!' : `BLUE SHELL FROM ${k.name.toUpperCase()}!`);
     sound.blueLaunch();
-  } else if (item === 'banana') {
+  } else if (item === 'banana' || item === 'bomb') {
     const pos = new THREE.Vector3(b.position.x - fx * 2.5, 0, b.position.z - fz * 2.5); // clear of the banana
     pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)); // on the road, even mid-air
-    drops.push({ mesh: spawnModel('banana', pos), pos, owner: k, age: 0 });
-    if (k.isPlayer) sound.drop();
+    drops.push({ mesh: spawnModel(item, pos), pos, owner: k, age: 0, kind: item });
+    if (k.isPlayer || near(k, 25)) sound.drop();
   } else {
     const red = item === 'red';
     const ahead = red ? redShellTarget(k) : null;
     const speed = red ? I.redSpeed : I.shellSpeed;
     const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0, b.position.z + fz * 2.4);
     pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.03;
+    // the player's green shell (build 64.45): aimed at the closest rival ahead (within 28 m, 70 deg of the nose),
+    // else along the road's centre line 22 m ahead, so it doesn't just follow wherever the kart happens to point
+    let dx = fx, dz = fz;
+    if (item === 'green' && k.isPlayer) {
+      let aim = null, best = 28 * 28;
+      for (const o of karts) {
+        if (o === k || o.finished) continue;
+        const ox = o.body.position.x - pos.x, oz = o.body.position.z - pos.z, d2 = ox * ox + oz * oz;
+        if (d2 < best && d2 > 1 && (ox * fx + oz * fz) / Math.sqrt(d2) > 0.34) { best = d2; aim = o.body.position; }
+      }
+      if (!aim) aim = track.samples[(k.trackIdx + Math.round(22 / track.spacing)) % track.N];
+      const ax = aim.x - pos.x, az = aim.z - pos.z, al = Math.hypot(ax, az) || 1;
+      dx = ax / al; dz = az / al;
+    }
     shells.push({
       kind: item, mesh: spawnModel(item, pos), pos,
-      vel: new THREE.Vector3(fx * speed, 0, fz * speed), idx: k.trackIdx,
+      vel: new THREE.Vector3(dx * speed, 0, dz * speed), idx: k.trackIdx,
       owner: k, target: ahead || null, age: 0, life: red ? I.redLife : I.shellLife, bounces: 0,
     });
-    if (k.isPlayer || ahead?.isPlayer) sound.throwShell();
+    if (k.isPlayer || ahead?.isPlayer || near(k, 25)) (red ? sound.throwRed() : sound.throwShell());
   }
 }
 
@@ -3867,14 +4042,22 @@ function blueTarget(owner) {
   return best;
 }
 
-/** A pop of yellow / white sparks where a kart got hit. */
-function hitBurst(k) {
-  const p = k.body.position;
-  for (let i = 0; i < 22; i++) {
-    const a = Math.random() * Math.PI * 2, sp = 3.5 + Math.random() * 3.5;
+/** Hit sparks per item: yellow peel bits (banana), orange fireball + smoke (shells), blue (blue shell), gold stars (star / bullet). */
+const HIT_FX = {
+  banana: { n: 22, cols: [[1, 1, 1], [1, 0.86, 0.25]], up: 3, sp: 3.5 },
+  green: { n: 30, cols: [[1, 0.55, 0.15], [1, 0.9, 0.3], [0.35, 0.35, 0.35]], up: 4.5, sp: 5 },
+  red: { n: 30, cols: [[1, 0.35, 0.15], [1, 0.8, 0.25], [0.35, 0.35, 0.35]], up: 4.5, sp: 5 },
+  blue: { n: 40, cols: [[0.35, 0.6, 1], [1, 1, 1], [0.3, 0.3, 0.4]], up: 6, sp: 6 },
+  star: { n: 26, cols: [[1, 0.9, 0.3], [1, 1, 1]], up: 4, sp: 5 },
+  bullet: { n: 26, cols: [[1, 0.9, 0.3], [1, 1, 1]], up: 4, sp: 5 },
+};
+function hitBurst(k, what) {
+  const p = k.body.position, F = HIT_FX[what] || HIT_FX.banana;
+  for (let i = 0; i < F.n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = F.sp * (0.7 + Math.random() * 0.8);
     emitP.set(p.x, p.y + 0.7, p.z);
-    emitV.set(Math.cos(a) * sp, 1.5 + Math.random() * 3, Math.sin(a) * sp);
-    fx.emit(emitP, emitV, i % 2 ? [1, 1, 1] : [1, 0.86, 0.25], { life: 0.5, size: 0.35, grow: 0.4, alpha: 0.95 });
+    emitV.set(Math.cos(a) * sp, 1.5 + Math.random() * F.up, Math.sin(a) * sp);
+    fx.emit(emitP, emitV, F.cols[i % F.cols.length], { life: 0.5 + Math.random() * 0.3, size: 0.35, grow: 0.4, alpha: 0.95 });
   }
 }
 
@@ -3932,9 +4115,12 @@ function shellExplosion(pos) {
  * Hit by a banana / shell / star / bullet / blast. A star or a bullet makes a kart immune, a shield
  * takes the hit and pops. Returns whether the kart actually spun out.
  */
-function spinOut(k, by, what, time = CFG.items.spinTime) {
+function spinOut(k, by, what, time = CFG.items.spinTime, ctx = {}) {
   // finished karts are out of it (build 36: a red shell hit Luna 11 s after she had crossed the line)
-  if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted || k.finished) return false;
+  if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted || k.finished) {
+    if (k.isPlayer) teleEvent('hitskip', k, { by: by ? karts.indexOf(by) : -1, what, why: k.spin > 0 ? 'spin' : k.star > 0 ? 'star' : k.bullet > 0 ? 'bullet' : k.ghosted ? 'ghost' : 'finished' });
+    return false;
+  }
   if (k.shield > 0) {
     teleEvent('blocked', k, { by: by ? karts.indexOf(by) : -1, what });
     k.shield = 0;
@@ -3944,23 +4130,215 @@ function spinOut(k, by, what, time = CFG.items.spinTime) {
     return false;
   }
   k.spin = k.spinTotal = time;
+  k.spinKind = what;
+  k.launch = null;
   k.hitBy = `${what} from ${by?.name}`;
-  teleEvent('hit', k, { by: by ? karts.indexOf(by) : -1, what });
+  if (CFG.items.hit[what]) startHit(k, by, what, CFG.items.hit[what], ctx);
+  else if (CFG.items.launch[what]) startWallLaunch(k, by, CFG.items.launch[what]);
+  const Lh = k.launch; // hit log: how it was handled (mode splat / wall / shove / slide / blast / spin), the victim's speed + lateral offset, the flight distance and attacker offset
+  teleEvent('hit', k, { by: by ? karts.indexOf(by) : -1, what, mode: Lh ? (Lh.mode || (Lh.splat ? 'splat' : 'wall')) : 'spin', kmh: Math.round(k.speed * 3.6),
+    idx: k.trackIdx, lat: +lateral(k.trackIdx, k.body.position).toFixed(1), dur: +k.spinTotal.toFixed(2),
+    ...(Lh?.dist !== undefined && { dist: +Lh.dist.toFixed(1), away: +Lh.away.toFixed(1) }), ...(Lh?.info && Lh.info) });
   k.boost = 0;
   k.driftCharge = 0;
-  // Lose half the speed at once, then slide on: stopping dead got karts rear-ended into the air
-  k.body.velocity.x *= 0.5;
-  k.body.velocity.z *= 0.5;
-  hitBurst(k);
+  // Lose half the speed at once, then slide on: stopping dead got karts rear-ended into the air (the new hit motions set their own speed)
+  if (!Lh?.mode) {
+    k.body.velocity.x *= 0.5;
+    k.body.velocity.z *= 0.5;
+  }
+  hitBurst(k, what);
   if (k.isPlayer) {
     showMessage('OUCH!');
-    sound.spin();
+    sound.hit(what);
     if (navigator.vibrate) navigator.vibrate(120);
   } else if (by?.isPlayer) {
     showMessage(`HIT ${k.name.toUpperCase()}!`);
     sound.hitOther();
-  }
+    if (near(k, 30)) sound.hit(what, 0.5);
+  } else if (near(k, 30)) sound.hit(what, 0.4);
   return true;
+}
+
+/**
+ * Build 64.20: shells / banana / blue / bomb hit motions (CFG.items.hit). Sets k.launch = { mode, ... }; stepHit moves the body
+ * each physics step, syncMeshes draws the tumble / spin / lift. `ctx`: dir (shell travel), scale + push + centre (a blast's bystanders).
+ */
+function startHit(k, by, what, H, ctx) {
+  const b = k.body, v = b.velocity, sc = ctx.scale ?? 1;
+  const fwd = b.quaternion.vmult(LOCAL_FWD, itemFwd), fh = Math.hypot(fwd.x, fwd.z) || 1;
+  const L = { mode: H.mode, what, t: 0, dur: H.time, crashed: false, x0: b.position.x, z0: b.position.z, info: {} };
+  if (H.mode === 'shove') {
+    let dx = ctx.dir?.x ?? fwd.x, dz = ctx.dir?.z ?? fwd.z;
+    const dh = Math.hypot(dx, dz) || 1;
+    dx /= dh; dz /= dh;
+    const along = v.x * dx + v.z * dz; // the victim's own speed along the throw adds a little
+    Object.assign(L, { dx, dz, speed: H.speed + Math.max(0, along) * 0.6, hop: H.hop, flips: H.flips });
+    L.info = { rel: +((dx * fwd.x + dz * fwd.z) / fh).toFixed(2), v: +L.speed.toFixed(1), hop: H.hop, flips: H.flips };
+  } else if (H.mode === 'slide') {
+    L.v0x = v.x; L.v0z = v.z; L.decay = H.decay; L.lat = H.lat; L.turns = H.turns;
+    L.side = Math.random() < 0.5 ? -1 : 1;
+    L.info = { lat: H.lat, turns: H.turns, side: L.side };
+  } else {
+    const c = ctx.centre, px = c ? b.position.x - c.x : -fwd.x, pz = c ? b.position.z - c.z : -fwd.z, ph = Math.hypot(px, pz) || 1;
+    L.up = H.up * sc;
+    v.x *= 0.35; v.z *= 0.35;
+    if (ctx.push) { v.x += (px / ph) * H.push; v.z += (pz / ph) * H.push; } // the shockwave
+    L.info = { up: +L.up.toFixed(1), push: ctx.push ? H.push : 0 };
+  }
+  k.launch = L;
+  k.spin = k.spinTotal = H.time;
+}
+
+const smokeP = new THREE.Vector3(), smokeV = new THREE.Vector3();
+/** One physics step of a shove / slide / blast hit. */
+function stepHit(k, L, dt) {
+  const b = k.body, v = b.velocity, i = k.trackIdx;
+  L.t += dt;
+  const p = clamp(L.t / L.dur, 0, 1);
+  if (L.mode === 'shove') {
+    const s = L.speed * (1 - p) ** 1.5;
+    v.x = L.dx * s; v.z = L.dz * s;
+  } else if (L.mode === 'slide') {
+    const n = track.normals[i], f = 1 - L.decay * p, w = L.lat * Math.sin(p * Math.PI);
+    v.x = L.v0x * f + n.x * L.side * w; v.z = L.v0z * f + n.z * L.side * w;
+    if (Math.random() < 0.45) { // tyre smoke off the sliding kart
+      smokeP.set(b.position.x, b.position.y - 0.2, b.position.z);
+      smokeV.set((Math.random() - 0.5) * 1.5, 0.6 + Math.random(), (Math.random() - 0.5) * 1.5);
+      fx.emit(smokeP, smokeV, [0.8, 0.8, 0.82], { life: 0.5, size: 0.5, grow: 1.4, alpha: 0.55 });
+    }
+  } else if (!L.crashed && p >= 0.7) { // blast: the drop is over, it lands heavily
+    L.crashed = true;
+    splatFx(k);
+    teleEvent('crash', k, { mode: 'blast', what: L.what, up: +L.up.toFixed(1) });
+  }
+  if (L.mode !== 'blast' && !L.crashed) { // into the wall before the motion ends: sparks, and the wall takes the sideways speed
+    const lat = lateral(i, b.position), lim = lat > 0 ? track.wL[i] + CFG.track.curb - 0.7 : track.wR[i] + CFG.track.curb - 0.7;
+    if (Math.abs(lat) > lim) {
+      const n = track.normals[i], vn = v.x * n.x + v.z * n.z, side = Math.sign(lat), hs = Math.hypot(v.x, v.z);
+      L.crashed = true;
+      if (vn * side > 0) { v.x -= n.x * vn; v.z -= n.z * vn; }
+      wallCrash(k, { speed: hs, side });
+      teleEvent('crash', k, { mode: `${L.mode}-wall`, what: L.what, kmh: Math.round(hs * 3.6), t: +L.t.toFixed(2) });
+    }
+  }
+}
+
+/** Everyone in a blast: the victim goes full height, the rest are shoved outward and thrown up less. Logs who was caught. */
+function blastVictims(owner, at, centre, radius, what) {
+  const H = CFG.items.hit[what], caught = [];
+  for (const k of karts) {
+    const d2 = (k.body.position.x - centre.x) ** 2 + (k.body.position.z - centre.z) ** 2;
+    if (k !== at && (d2 > radius ** 2 || Math.abs(k.body.position.y - centre.y) > 2.5)) continue;
+    const main = k === at;
+    if (spinOut(k, owner, what, undefined, { scale: main ? 1 : H.scale, push: !main, centre })) {
+      caught.push(karts.indexOf(k));
+      if (H.burn) k.burn = H.burn * (main ? 1 : H.scale);
+    }
+  }
+  teleEvent('blast', owner, { what, at: karts.indexOf(at), caught, r: radius });
+}
+
+/** The bomb goes off where a kart ran into it (or a shell hit it). */
+function bombBlast(hit, owner, pos) {
+  blastVictims(owner, hit, pos, CFG.items.bombBlast, 'bomb');
+  for (let i = 0; i < 46; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 8;
+    emitP.set(pos.x, pos.y + 0.6, pos.z);
+    emitV.set(Math.cos(a) * sp, 2 + Math.random() * 7, Math.sin(a) * sp);
+    fx.emit(emitP, emitV, i % 3 === 0 ? [0.2, 0.2, 0.22] : i % 3 === 1 ? [1, 0.55, 0.12] : [1, 0.9, 0.3], { life: 0.9, size: 0.8, grow: 1.6, alpha: 0.9 });
+  }
+  const dist = Math.hypot(pos.x - kart.body.position.x, pos.z - kart.body.position.z);
+  if (dist < 80) sound.explosion(clamp(1.2 - dist / 80, 0.3, 1));
+}
+
+/** Burning karts (bomb): flames and black smoke for `k.burn` seconds, whatever else the kart is doing. */
+function updateBurn(dt) {
+  for (const k of karts) {
+    if (!(k.burn > 0)) continue;
+    k.burn -= dt;
+    if (k.burn <= 0) { k.burn = 0; teleEvent('burnend', k); continue; }
+    if (!near(k, 70)) continue;
+    const p = k.group.position;
+    for (let i = 0; i < 2; i++) {
+      emitP.set(p.x + (Math.random() - 0.5) * 0.9, p.y + 0.3 + Math.random() * 0.5, p.z + (Math.random() - 0.5) * 0.9);
+      emitV.set((Math.random() - 0.5) * 1, 2 + Math.random() * 2, (Math.random() - 0.5) * 1);
+      fx.emit(emitP, emitV, Math.random() < 0.55 ? [1, 0.5 + Math.random() * 0.3, 0.1] : [0.12, 0.12, 0.13], { life: 0.5 + Math.random() * 0.3, size: 0.55, grow: 1.2, alpha: 0.85 });
+    }
+  }
+}
+
+/** Star / bullet: fling the victim away from the attacker to the nearest wall on that side (scripted by stepLaunch). */
+function startWallLaunch(k, by, LC) {
+  const i = k.trackIdx, lat = lateral(i, k.body.position);
+  const away = by ? lat - lateral(i, by.body.position) : 0;
+  const side = Math.abs(away) > 0.5 ? Math.sign(away) : Math.sign(lat) || 1;
+  const wallLat = side * ((side > 0 ? track.wL[i] : track.wR[i]) + CFG.track.curb - 0.7);
+  const dist = Math.max(0, (wallLat - lat) * side);
+  if (LC.splat && (Math.abs(away) <= LC.splatLat || dist < LC.minDist)) { // nowhere to fly: the bullet runs it over and flattens it
+    k.launch = { splat: true, side, dist, away, t: 0, dur: 0, crash: LC.splat, crashed: false };
+    k.spin = k.spinTotal = LC.splat;
+    return;
+  }
+  const dur = clamp(dist / LC.speed, 0.12, 0.7);
+  k.launch = { side, dist, away, wallLat, speed: dist / dur, dur, crash: LC.crash, hop: LC.hop, t: 0, crashed: false };
+  k.spin = k.spinTotal = dur + LC.crash;
+}
+
+/** One physics step of a wall launch: slide across the road, then stop dead at the wall and crash. */
+function stepLaunch(k, dt) {
+  const L = k.launch, b = k.body, n = track.normals[k.trackIdx];
+  if (L.mode) return stepHit(k, L, dt);
+  L.t += dt;
+  if (L.splat) {
+    if (!L.crashed) {
+      L.crashed = true;
+      b.velocity.x *= 0.25;
+      b.velocity.z *= 0.25;
+      splatFx(k);
+      teleEvent('crash', k, { mode: 'splat', kmh: Math.round(k.speed * 3.6) });
+    }
+    return;
+  }
+  const vn = b.velocity.x * n.x + b.velocity.z * n.z;
+  if (L.t < L.dur) {
+    const step = Math.min(L.speed * dt, Math.max(0, (L.wallLat - lateral(k.trackIdx, b.position)) * L.side));
+    b.position.x += n.x * L.side * step;
+    b.position.z += n.z * L.side * step;
+    b.velocity.x += n.x * (L.side * L.speed - vn);
+    b.velocity.z += n.z * (L.side * L.speed - vn);
+  } else if (!L.crashed) {
+    L.crashed = true;
+    b.velocity.x -= n.x * vn;
+    b.velocity.z -= n.z * vn;
+    wallCrash(k, L);
+    teleEvent('crash', k, { mode: 'wall', kmh: Math.round(k.speed * 3.6), v: +L.speed.toFixed(0) });
+  }
+}
+
+/** A kart flattened by a bullet: a ring of dust, a crunch and a long buzz for the player. */
+function splatFx(k) {
+  const p = k.body.position;
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2, sp = 4 + Math.random() * 2;
+    emitP.set(p.x, p.y + 0.2, p.z);
+    emitV.set(Math.cos(a) * sp, 0.4 + Math.random(), Math.sin(a) * sp);
+    fx.emit(emitP, emitV, i % 2 ? [0.75, 0.7, 0.62] : [0.55, 0.52, 0.5], { life: 0.6 + Math.random() * 0.3, size: 0.9, grow: 1.2, alpha: 0.8 });
+  }
+  if (k.isPlayer) { sound.crash(1.2); if (navigator.vibrate) navigator.vibrate([60, 40, 200]); }
+  else if (near(k, 35)) sound.crash(0.6);
+}
+
+/** The kart hits the wall: sparks and dust off the wall, a thump, a buzz for the player. Harder with the launch speed. */
+function wallCrash(k, L) {
+  const v = clamp(L.speed / 30, 0.5, 1.4), n = track.normals[k.trackIdx], p = k.body.position;
+  for (let i = 0; i < 18 * v; i++) {
+    const sp = 3 + Math.random() * 5 * v;
+    emitP.set(p.x + n.x * L.side * 0.6, p.y + 0.5, p.z + n.z * L.side * 0.6);
+    emitV.set(-n.x * L.side * sp + (Math.random() - 0.5) * 3, 1 + Math.random() * 4, -n.z * L.side * sp + (Math.random() - 0.5) * 3);
+    fx.emit(emitP, emitV, i % 3 ? [1, 0.85, 0.3] : [0.7, 0.65, 0.6], { life: 0.5 + Math.random() * 0.4, size: 0.4, grow: 0.6, alpha: 0.95 });
+  }
+  if (k.isPlayer) { sound.crash(v); if (navigator.vibrate) navigator.vibrate(200); }
+  else if (near(k, 35)) sound.crash(v * 0.5);
 }
 
 const near = (k, m) => k.body.position.distanceSquared(kart.body.position) < m * m;
@@ -3968,11 +4346,7 @@ const near = (k, m) => k.body.position.distanceSquared(kart.body.position) < m *
 /** The blue shell's blast: everyone close to its target spins out for longer, and gets popped up a bit. */
 function blueBlast(s, at) {
   const I = CFG.items, p = at.body.position;
-  for (const k of karts) {
-    const d2 = (k.body.position.x - p.x) ** 2 + (k.body.position.z - p.z) ** 2;
-    if (d2 > I.blueBlast ** 2 || Math.abs(k.body.position.y - p.y) > 2.5) continue;
-    if (spinOut(k, s.owner, 'blue', I.blueSpin)) k.body.velocity.y += 3;
-  }
+  blastVictims(s.owner, at, p, I.blueBlast, 'blue');
   for (let i = 0; i < 40; i++) {
     const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 7;
     emitP.set(p.x, p.y + 0.8, p.z);
@@ -4045,7 +4419,7 @@ function updateItems(dt, racing) {
         k.itemCount = k.item === 'triple' ? 3 : 1;
         k.itemRoll = I.rollTime;
         k.boxAt = state.raceTime;
-        if (k.ai) k.ai.itemT = rand(0.4, 2.5);
+        if (k.ai) k.ai.itemT = dbg.on && dbg.aggro ? rand(0.1, 0.5) : rand(0.4, 2.5);
         if (k.isPlayer) sound.itemBox(I.rollTime);
       }
       break;
@@ -4090,12 +4464,23 @@ function updateItems(dt, racing) {
     // Star / bullet: anyone touched spins out and gets knocked aside
     if (racing && (k.star > 0 || k.bullet > 0)) {
       for (const o of karts) {
-        if (o === k || flat2(o.body.position, k.body.position) > I.bumpRadius ** 2) continue;
-        if (!spinOut(o, k, k.bullet > 0 ? 'bullet' : 'star')) continue;
-        const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
-        const d = Math.hypot(dx, dz) || 1, shove = k.bullet > 0 ? 6 : 7;
-        o.body.velocity.x += (dx / d) * shove;
-        o.body.velocity.z += (dz / d) * shove;
+        if (o === k) continue;
+        const d2 = flat2(o.body.position, k.body.position);
+        let inside = d2 <= I.bumpRadius ** 2;
+        if (k.bullet > 0 && d2 < 36) { // the bullet is long and wide: a box in its own frame, not a circle (side and rear hits were missed)
+          const f = k.body.quaternion.vmult(LOCAL_FWD, aiFwd), fl = Math.hypot(f.x, f.z) || 1;
+          const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
+          const lo = (dx * f.x + dz * f.z) / fl, la = (dx * f.z - dz * f.x) / fl;
+          inside = Math.abs(la) < I.bulletHalfW && lo > -I.bulletRear && lo < I.bulletFront;
+        }
+        if (!inside) { // log a close pass at the player that did not count as a hit (1 per attacker per second)
+          if (o.isPlayer && d2 < 36 && !(k.nearT > state.raceTime)) {
+            k.nearT = state.raceTime + 1;
+            teleEvent('near', o, { by: karts.indexOf(k), what: k.bullet > 0 ? 'bullet' : 'star', d: +Math.sqrt(d2).toFixed(1), away: +(lateral(o.trackIdx, o.body.position) - lateral(o.trackIdx, k.body.position)).toFixed(1) });
+          }
+          continue;
+        }
+        spinOut(o, k, k.bullet > 0 ? 'bullet' : 'star'); // flung to the wall by startWallLaunch
       }
     }
     // --- Boost pads
@@ -4119,7 +4504,9 @@ function updateItems(dt, racing) {
     d.age += dt;
     const hit = karts.find((k) => (k !== d.owner || d.age > 0.8) && !k.finished && flat2(k.body.position, d.pos) < I.bananaRadius ** 2);
     if (hit) {
-      spinOut(hit, d.owner, 'banana');
+      teleEvent(d.kind === 'bomb' ? 'bombhit' : 'bananahit', hit, { by: karts.indexOf(d.owner), age: +d.age.toFixed(1) });
+      if (d.kind === 'bomb') bombBlast(hit, d.owner, d.pos);
+      else spinOut(hit, d.owner, 'banana');
       scene.remove(d.mesh);
       drops.splice(i, 1);
     }
@@ -4172,7 +4559,7 @@ function updateItems(dt, racing) {
     // a red shell never hits its owner (build 36: Bolt was hit by his own); a green one bouncing back still can
     const hit = !gone && karts.find((k) => (k !== s.owner || (s.kind === 'green' && s.age > 0.6)) && !k.finished
       && flat2(k.body.position, s.pos) < I.hitRadius ** 2);
-    if (hit) { spinOut(hit, s.owner, s.kind); gone = true; }
+    if (hit) { spinOut(hit, s.owner, s.kind, undefined, { dir: s.vel }); gone = true; }
     const banana = gone ? -1 : drops.findIndex((d) => flat2(d.pos, s.pos) < 1.6);
     if (banana >= 0) {
       scene.remove(drops[banana].mesh);
@@ -4180,6 +4567,7 @@ function updateItems(dt, racing) {
       gone = true;
     }
     if (gone) {
+      teleEvent('shellend', s.owner, { kind: s.kind, end: hit ? 'hit' : banana >= 0 ? 'drop' : s.life <= 0 ? 'life' : 'bounces', age: +s.age.toFixed(1), victim: hit ? karts.indexOf(hit) : -1 });
       if (s.kind === 'green') {
         shellExplosion(s.pos);
         const d = s.pos.distanceTo(kart.body.position);
@@ -4210,7 +4598,7 @@ function trapCorner(idx, within = 40) {
  * the shield when a shell (or a star / bullet) is coming, star / bullet / blue shell straight away.
  */
 function updateAIItem(k, dt) {
-  const ai = k.ai, st = ai.style;
+  const ai = k.ai, st = ai.style, aggro = dbg.on && dbg.aggro; // aggro (DEBUG): weapons go at the player from further away and are never held back
   if (!k.item || k.itemRoll > 0 || k.finished || k.spin > 0 || k.bullet > 0) return;
   ai.itemT -= dt;
   if (ai.itemT > 0) return;
@@ -4221,7 +4609,7 @@ function updateAIItem(k, dt) {
     let tight = Infinity;
     for (let s = 10; s * spacing < 40; s += 3) tight = Math.min(tight, radius[(k.trackIdx + s) % N]);
     use = tight > 60 || ai.itemT < (st.wild ? -1 : -6);
-  } else if (k.item === 'red' && (st.hoard || st.overtake > 0.9)) {
+  } else if (k.item === 'red' && !aggro && (st.hoard || st.overtake > 0.9)) {
     // the careful ones wait until a kart ahead is close enough for the shell to lock on
     use = ai.itemT < -10 || karts.some((o) => o !== k && o.progress > k.progress && (o.progress - k.progress) * spacing < 40);
   } else if (k.item === 'red' || k.item === 'blue' || k.item === 'star' || k.item === 'bullet') {
@@ -4230,20 +4618,21 @@ function updateAIItem(k, dt) {
     use = shellIncoming(k) || ai.itemT < (st.hoard ? -25 : -4) || karts.some((o) => (o.star > 0 || o.bullet > 0) && o !== k &&
       o.body.position.distanceSquared(k.body.position) < 20 * 20);
   } else {
-    const wantBehind = k.item === 'banana';
+    const wantBehind = k.item === 'banana' || k.item === 'bomb';
     use = ai.itemT < (wantBehind ? (st.hoard || st.trap ? -20 : -7) : -10);
     // the trap: dropped on the racing line just before a corner, where everyone (the player too) will drive
     if (wantBehind && st.trap && trapCorner(k.trackIdx, 18) &&
       Math.abs(lateral(k.trackIdx, k.body.position) - track.line[k.trackIdx]) < 1.2) use = true;
     const tail = st.aggression > 0.7 ? 20 : 14; // the bully drops it for anyone within 20 m
+    const reach = aggro ? 55 : 30, wide = aggro ? 0.2 : 0.12;
     for (const o of karts) {
       if (o === k) continue;
       const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
       const ahead = dx * fwd.x + dz * fwd.z;
       const side = Math.abs(dx * fwd.z - dz * fwd.x);
       if (wantBehind) {
-        if (ahead < -2 && ahead > -tail && side < 3) use = true;
-      } else if (ahead > 3 && ahead < 30 && side < ahead * 0.12 + 0.6 && (o.isPlayer || st.aggression > 0.7 || ai.itemT < -5)) {
+        if (ahead < -2 && ahead > -(aggro && o.isPlayer ? 45 : tail) && side < (aggro && o.isPlayer ? 4 : 3)) use = true;
+      } else if (ahead > 3 && ahead < reach && side < ahead * wide + 0.6 && (o.isPlayer || st.aggression > 0.7 || ai.itemT < -5)) {
         use = true; // shells go at the player (the bully: at anyone); other AIs only once it's been held a while
       }
     }
@@ -4258,6 +4647,32 @@ function updateAIItem(k, dt) {
  * 4. PHYSICS STEP
  * ========================================================================== */
 const speedFx = { v: 0 }; // 0..1 strength of the radial blur (see render())
+/**
+ * Vertical view auto-gas (build 64.35, smarter): lift only if coasting from now is needed to be slow enough by the time the kart
+ * reaches a tight corner. Corner speed = sqrt(14 m/s^2 x radius) x 1.25 (a little over the grip limit: a touch of rail is fine,
+ * the kart rarely needs to lift); coasting sheds about 6 m/s^2. So a 12 m hairpin lifts ~34 m before it, a 28 m bend only in the last few m.
+ */
+const AUTO_GAS = { grip: 22, margin: 1.1, decel: 6, look: 45, maxRadius: 45 };
+/** tooFastForCorner + a log of every lift (on / off, where, how fast, which corner, how long) for the telemetry. */
+function autoLift(k) {
+  const on = tooFastForCorner(k);
+  if (on !== !!k.lifting) {
+    k.lifting = on;
+    teleEvent('lift', k, { on, idx: k.trackIdx, kmh: Math.round(k.speed * 3.6), ...(on ? { r: Math.round(k.liftR) } : { dur: +(state.raceTime - k.liftT).toFixed(2) }) });
+    if (on) k.liftT = state.raceTime;
+  }
+  return on;
+}
+function tooFastForCorner(k) {
+  const { N, spacing } = track, A = AUTO_GAS, v = k.speed;
+  for (let s = 0; s * spacing < A.look; s++) {
+    const r = track.lineRadius[(k.trackIdx + s) % N]; // the racing line's radius (a driver cuts the corner), as the AIs use
+    if (r > A.maxRadius) continue;
+    const need = Math.sqrt(A.grip * r) * A.margin;
+    if (v > need && s * spacing <= (v * v - need * need) / (2 * A.decel)) { k.liftR = r; return true; }
+  }
+  return false;
+}
 const tmpVec = new CANNON.Vec3();
 const tmpFwd = new CANNON.Vec3();
 
@@ -4270,8 +4685,11 @@ function stepPhysics(dt) {
       updateAI(k, dt, canDrive);
     } else {
       k.ctl.steer = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + input.axis, -1, 1);
-      k.ctl.gas = input.gas;
       k.ctl.brake = input.brake;
+      // Vertical view: no gas button, always on; it lifts only for a really tight corner coming up too fast (build 64.27)
+      k.ctl.gas = app.classList.contains('vertical')
+        ? canDrive && !input.brake && !autoLift(k)
+        : input.gas;
       if (input.item && canDrive && !k.finished) useItem(k);
     }
     driveKart(k, dt, canDrive);
@@ -4342,6 +4760,14 @@ function driveKart(k, dt, canDrive) {
   } else if (k.spin > 0) {
     // Spun out by a banana / shell: no power, scrub off speed, wheels straight
     k.spin = Math.max(0, k.spin - dt);
+    if (k.launch) {
+      stepLaunch(k, dt);
+      if (k.spin === 0) { // recovered: where and how fast it is back on the road
+        teleEvent('hitend', k, { mode: k.launch.mode || (k.launch.splat ? 'splat' : 'wall'), what: k.launch.what, kmh: Math.round(k.speed * 3.6), idx: k.trackIdx, lat: +lateral(k.trackIdx, k.body.position).toFixed(1),
+          ...(k.launch.x0 !== undefined && { moved: +Math.hypot(k.body.position.x - k.launch.x0, k.body.position.z - k.launch.z0).toFixed(1) }), crashed: !!k.launch.crashed });
+        k.launch = null;
+      }
+    }
     brake = K.wheelBrake;
     k.braking = true;
     vehicle.setSteeringValue(0, 0);
@@ -4550,7 +4976,16 @@ function bulletGuide(k) {
 const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), snap: true };
 const desiredCam = new THREE.Vector3();
 
-const spinQ = new THREE.Quaternion();
+const spinQ = new THREE.Quaternion(), flipQ = new THREE.Quaternion();
+/** Per-item hit reaction (visual only): yaw turns, a flip about the kart's side (x) or nose (z) axis, and a hop in metres. */
+const HIT_ANIM = {
+  banana: { yaw: 3, hop: 0.9 },                 // slips: fast spin and a little hop
+  green: { yaw: 1, flipX: 1, hop: 1.5 },      // knocked up, tumbles end over end
+  red: { yaw: 1, flipX: 1, hop: 1.5 },
+  blue: { yaw: 1, flipX: 2, hop: 2.4 },         // launched high, double tumble
+  star: { yaw: 1, flipZ: 1, hop: 1.2 },         // cartwheels away
+  bullet: { yaw: 1, flipZ: 1, hop: 1.2 },
+};
 const spinAxis = new THREE.Vector3();
 const interpQ = new THREE.Quaternion(), bodyP = new THREE.Vector3(), rawQInv = new THREE.Quaternion();
 const drawQ = new THREE.Quaternion();
@@ -4562,9 +4997,11 @@ const drawQ = new THREE.Quaternion();
  */
 function syncMeshes() {
   const L = CFG.kart.look;
-  for (const { body, vehicle, group, wheelMeshes, spin, spinTotal, bullet } of karts) {
+  for (const { body, vehicle, group, wheelMeshes, spin, spinTotal, spinKind, launch, bullet } of karts) {
     group.position.copy(body.interpolatedPosition);
     group.quaternion.copy(body.interpolatedQuaternion);
+    group.scale.set(1, 1, 1);
+    let squash = 1; // < 1 while a bullet has the kart flattened
     // wheel transforms come from the raw pose: move them by (interpolated pose) * (raw pose)^-1
     bodyP.copy(body.position);
     rawQInv.copy(body.quaternion).invert();
@@ -4572,10 +5009,65 @@ function syncMeshes() {
     drawQ.copy(group.quaternion); // before the spin-out turn
     // Spin-out is visual only: turn the body and wheels about the kart's up axis (two full turns)
     const spinning = spin > 0;
-    if (spinning) {
+    if (spinning && launch?.splat) {
+      // flat in 0.08 s, held, then pops back up with a little overshoot
+      const sm = (x) => x * x * (3 - 2 * x), t = launch.t, back = launch.crash * 0.75;
+      squash = t < 0.08 ? 1 - 0.75 * sm(t / 0.08) : t < back ? 0.25 + Math.sin(t * 50) * 0.02
+        : 0.25 + 0.75 * sm(Math.min(1, (t - back) / (launch.crash - back))) + Math.sin(Math.min(1, (t - back) / (launch.crash - back)) * Math.PI) * 0.12;
+      spinQ.identity();
+      group.scale.set(1 + (1 - squash) * 0.35, squash, 1 + (1 - squash) * 0.35);
+      group.position.y -= (1 - squash) * 0.35;
+    } else if (spinning && launch?.mode) {
+      const sm = (x) => x * x * (3 - 2 * x), p = clamp(launch.t / launch.dur, 0, 1);
+      let lift = 0;
+      if (launch.mode === 'shove') {
+        // knocked along the throw and tumbling end over end, then bounces to a stop
+        spinAxis.set(launch.dz, 0, -launch.dx);
+        spinQ.setFromAxisAngle(spinAxis, sm(clamp(p / 0.7, 0, 1)) * launch.flips * Math.PI * 2);
+        const q = (p - 0.5) / 0.5;
+        lift = p < 0.5 ? launch.hop * Math.sin((p / 0.5) * Math.PI) : launch.hop * 0.3 * (1 - q) * Math.abs(Math.sin(q * Math.PI * 2));
+      } else if (launch.mode === 'slide') {
+        // fast spins about its own axis, leaning into the slide
+        spinAxis.set(0, 1, 0).applyQuaternion(group.quaternion);
+        spinQ.setFromAxisAngle(spinAxis, sm(p) * launch.turns * Math.PI * 2);
+        spinAxis.set(0, 0, 1).applyQuaternion(group.quaternion);
+        spinQ.premultiply(flipQ.setFromAxisAngle(spinAxis, -launch.side * 0.3 * Math.sin(p * Math.PI) * Math.sin(p * 14)));
+        lift = 0.3 * Math.sin(clamp(p / 0.25, 0, 1) * Math.PI);
+      } else {
+        // blast: straight up in a slow tumble, hangs, drops heavily at 70%, small rebound
+        const u = clamp(p / 0.7, 0, 1);
+        lift = p < 0.7 ? launch.up * (1 - (u * 2 - 1) ** 2) : launch.up * 0.07 * Math.abs(Math.sin(((p - 0.7) / 0.3) * Math.PI * 2)) * (1 - (p - 0.7) / 0.3);
+        spinAxis.set(0, 1, 0).applyQuaternion(group.quaternion);
+        spinQ.setFromAxisAngle(spinAxis, sm(u) * Math.PI * 2);
+        spinAxis.set(1, 0, 0).applyQuaternion(group.quaternion);
+        spinQ.premultiply(flipQ.setFromAxisAngle(spinAxis, sm(u) * Math.PI * 2));
+      }
+      group.position.y += lift;
+      group.quaternion.premultiply(spinQ);
+    } else if (spinning && launch) {
+      // wall launch: a sideways cartwheel across the road (1.25 turns, so it lands on its side), a crash on the wall, then it slides back upright
+      const sm = (x) => x * x * (3 - 2 * x), fly = Math.min(1, launch.t / launch.dur);
+      let ang, lift;
+      if (launch.t < launch.dur) { ang = sm(fly) * 2.5 * Math.PI; lift = Math.sin(fly * Math.PI) * launch.hop; }
+      else {
+        const v = clamp((launch.t - launch.dur) / launch.crash, 0, 1), settle = v < 0.45 ? 0 : sm((v - 0.45) / 0.55);
+        ang = Math.PI / 2 * (1 - settle) + Math.sin(v * 45) * 0.07 * (1 - v);
+        lift = 0.5 * (1 - settle);
+      }
+      spinAxis.set(0, 0, 1).applyQuaternion(group.quaternion);
+      spinQ.setFromAxisAngle(spinAxis, -launch.side * ang);
+      group.position.y += lift;
+      group.quaternion.premultiply(spinQ);
+    } else if (spinning) {
+      const A = HIT_ANIM[spinKind] || { yaw: 2 }, p = 1 - spin / spinTotal, e = p * p * (3 - 2 * p); // eased so every turn ends upright
+      const turns = Math.max(1, Math.round(A.yaw * spinTotal / CFG.items.spinTime)); // whole turns, so it ends upright (blue's longer blast turns more)
       spinAxis.set(0, 1, 0).applyQuaternion(group.quaternion);
-      // two turns per spinTime (the blue shell's longer blast spins more)
-      spinQ.setFromAxisAngle(spinAxis, (1 - spin / spinTotal) * (spinTotal / CFG.items.spinTime) * Math.PI * 4);
+      spinQ.setFromAxisAngle(spinAxis, e * turns * Math.PI * 2);
+      if (A.flipX || A.flipZ) {
+        spinAxis.set(A.flipX ? 1 : 0, 0, A.flipZ ? 1 : 0).applyQuaternion(group.quaternion);
+        spinQ.premultiply(flipQ.setFromAxisAngle(spinAxis, e * (A.flipX || A.flipZ) * Math.PI * 2));
+      }
+      if (A.hop) group.position.y += Math.sin(p * Math.PI) * A.hop;
       group.quaternion.premultiply(spinQ);
     }
     for (let i = 0; i < vehicle.wheelInfos.length; i++) {
@@ -4590,6 +5082,8 @@ function syncMeshes() {
       w.position.y -= CFG.kart.wheelRadius * (1 - L.scale);
       w.position.applyQuaternion(drawQ).add(group.position);
       w.quaternion.copy(t.quaternion).premultiply(interpQ);
+      w.scale.set(1 + (1 - squash) * 0.35, squash, 1 + (1 - squash) * 0.35);
+      if (squash < 1) w.position.y = group.position.y + (w.position.y - group.position.y - 0.35 * (1 - squash)) * squash;
       if (spinning) {
         w.position.sub(group.position).applyQuaternion(spinQ).add(group.position);
         w.quaternion.premultiply(spinQ);
@@ -4678,11 +5172,11 @@ function updateCamera(dt) {
  * the planned 3D characters ride in it). The projection is shifted so the kart sits in the gap between the
  * lobby's columns (lobbyShift, measured in layoutLobby). The chase camera snaps back at the race start. */
 const LOBBY_FOV = 42;
-let lobbyShift = 0, lobbyClock = 0;
+let lobbyShift = 0, lobbyShiftY = 0, lobbyClock = 0; // Y: the vertical view stacks the lobby, so the kart is shifted up/down instead
 /** Split stage (driver / paint pickers): close 3/4 front view framed on the left, turned by drag (rot), a key
  * light on the kart, a bounce on each pick (pop). The lobby camera blends between this and the turntable. */
 const stage = { on: false, rot: 0, idle: 0, drag: null, pop: 0 };
-const lobbyView = { a: 0, dist: 9, up: 2.3, lookUp: 0.9, fov: LOBBY_FOV, shift: 0, init: false };
+const lobbyView = { a: 0, dist: 9, up: 2.3, lookUp: 0.9, fov: LOBBY_FOV, shift: 0, shiftY: 0, init: false };
 const lightSide = new THREE.Vector3();
 // Key light for the stage. Always in the scene (0 in a race) so adding it never recompiles every material.
 const stageLight = new THREE.DirectionalLight(0xfff4e6, 0);
@@ -4693,7 +5187,8 @@ function lobbyCamera(dt, bp, yaw) {
   const out = Math.sign(lateral(i, bp) || 1); // the grid side away from the centre line: no karts there
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
   const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
-  let a, dist, up, lookUp, fov, shift;
+  let a, dist, up, lookUp, fov, shift, shiftY = 0;
+  const vert = app.classList.contains('vertical'); // narrow upright screen: stand the kart further back so it fits the width
   if (stage.on) {
     // untouched: ease back into a slow swing around the 3/4 front
     stage.idle += dt;
@@ -4702,17 +5197,18 @@ function lobbyCamera(dt, bp, yaw) {
       stage.rot = wrapAngle(stage.rot) + (swing - wrapAngle(stage.rot)) * (1 - Math.exp(-dt * 0.8));
     }
     const el = $('pick-stage');
-    a = 0.55 + stage.rot; dist = 5.4; up = 1.7; lookUp = 0.85; fov = 34;
-    shift = Math.round(app.clientWidth / 2 - (el.offsetLeft + el.offsetWidth / 2)); // kart in the stage's middle
+    a = 0.55 + stage.rot; dist = vert ? 10 : 5.4; up = vert ? 2.6 : 1.7; lookUp = 0.85; fov = 34;
+    if (vert) { shift = 0; shiftY = Math.round(app.clientHeight / 2 - (el.offsetTop + el.offsetHeight / 2)); } // stage on top: kart in its middle
+    else shift = Math.round(app.clientWidth / 2 - (el.offsetLeft + el.offsetWidth / 2)); // kart in the stage's middle
   } else {
-    a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22); dist = 9; up = 2.3; lookUp = 0.9; fov = LOBBY_FOV; shift = lobbyShift;
+    a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22); dist = vert ? 11 : 9; up = 2.3; lookUp = 0.9; fov = LOBBY_FOV; shift = lobbyShift; shiftY = lobbyShiftY;
   }
   // smooth move between turntable and stage: blend the orbit (angle, distance, height), so it swings round the
   // kart instead of cutting through it
   const V = lobbyView, k = V.init ? 1 - Math.exp(-dt * 5) : 1;
   V.init = true;
   V.a += wrapAngle(a - V.a) * k;
-  for (const [key, to] of [['dist', dist], ['up', up], ['lookUp', lookUp], ['fov', fov], ['shift', shift]]) V[key] += (to - V[key]) * k;
+  for (const [key, to] of [['dist', dist], ['up', up], ['lookUp', lookUp], ['fov', fov], ['shift', shift], ['shiftY', shiftY]]) V[key] += (to - V[key]) * k;
   const ca = Math.cos(V.a), sa = Math.sin(V.a);
   camera.position.set(
     bp.x + (fx * ca + n.x * out * sa) * V.dist,
@@ -4721,9 +5217,9 @@ function lobbyCamera(dt, bp, yaw) {
   );
   camState.look.set(bp.x, bp.y + V.lookUp, bp.z);
   camera.lookAt(camState.look);
-  if (Math.abs(camera.fov - V.fov) > 0.01 || Math.abs((camera.view?.offsetX ?? 0) - V.shift) > 0.5 || !camera.view?.enabled) {
+  if (Math.abs(camera.fov - V.fov) > 0.01 || Math.abs((camera.view?.offsetX ?? 0) - V.shift) > 0.5 || Math.abs((camera.view?.offsetY ?? 0) - V.shiftY) > 0.5 || !camera.view?.enabled) {
     camera.fov = V.fov;
-    camera.setViewOffset(w, h, Math.round(V.shift), 0, w, h);
+    camera.setViewOffset(w, h, Math.round(V.shift), Math.round(V.shiftY), w, h);
   }
   // key light from above the camera's left: the character's colours and smooth shading pop on any track
   stageLight.intensity += ((stage.on ? 1.3 : 0) - stageLight.intensity) * (1 - Math.exp(-dt * 4));
@@ -4743,13 +5239,19 @@ function lobbyCamera(dt, bp, yaw) {
 function layoutLobby() {
   const cta = document.querySelector('.lobby-cta'), setup = document.querySelector('.setup');
   if (!cta.offsetWidth) return; // lobby not shown
+  if (app.classList.contains('vertical')) { // stacked: the open gap is between the logo block and the setup card
+    const top = cta.offsetTop + cta.offsetHeight, bottom = setup.offsetTop;
+    lobbyShift = 0; lobbyShiftY = Math.round(app.clientHeight / 2 - (top + bottom) / 2);
+    return;
+  }
+  lobbyShiftY = 0;
   const left = cta.offsetLeft + cta.offsetWidth, right = setup.offsetLeft;
   lobbyShift = Math.round(app.clientWidth / 2 - (left + right) / 2);
 }
 
 function chaseCamera(dt, bp, yaw, speedRatio) {
   const C = CFG.camera;
-  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = C.fov; camera.updateProjectionMatrix(); stageLight.intensity = 0; }
+  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = viewFov; camera.updateProjectionMatrix(); stageLight.intensity = 0; }
 
   if (camState.snap) {
     camState.yaw = yaw;
@@ -4790,7 +5292,7 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
   speedFx.v += (fxTo - speedFx.v) * (1 - Math.exp(-dt * (fxTo > speedFx.v ? 12 : 4)));
 
   // Speed-based FOV kick
-  const targetFov = C.fov + Math.min(C.fovMax, speedRatio * C.fovSpeed + (kart.boost > 0 ? C.fovBoost : 0));
+  const targetFov = viewFov + Math.min(C.fovMax, speedRatio * C.fovSpeed + (kart.boost > 0 ? C.fovBoost : 0));
   if (Math.abs(camera.fov - targetFov) > 0.05) {
     camera.fov = lerp(camera.fov, targetFov, 1 - Math.exp(-dt * 4));
     camera.updateProjectionMatrix();
@@ -4972,6 +5474,7 @@ function render(dt) {
   syncMeshes();
   updateCamera(dt);
   updateEffects(dt);
+  updateBurn(dt);
   fx.update(dt);
   updateItemVisuals(dt);
   theme.update(dt);
@@ -4985,6 +5488,12 @@ function render(dt) {
     renderer.render(blurPass.scene, blurPass.cam);
   } else {
     renderer.render(scene, camera);
+  }
+  const mirrorOn = state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown';
+  document.getElementById('mirror-frame').style.display = mirrorOn ? 'block' : 'none';
+  if (mirrorOn) {
+    const b = kart.body, f = b.interpolatedQuaternion.vmult(LOCAL_FWD, tmpVec);
+    renderMirror(b.interpolatedPosition, Math.atan2(f.x, f.z));
   }
   updateSound(dt);
 }

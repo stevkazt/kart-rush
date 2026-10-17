@@ -98,3 +98,5 @@ Moved out of CLAUDE.md (2026-10-17). Lobby, pickers, settings, keyboard, camera,
   springs back on release (`releaseStick`, also on pause). Portrait: screen offsets are turned 90deg back into
   the game's frame. `ctl.steer = clamp(arrows/keys + input.axis)`, so the steering ramp and lock are the same for
   both. Add future options as more `.setting` blocks on that screen.
+
+- **Vertical-view menus (build 64-65):** the overlay is laid out upright (~390 x 800); see 'Builds 64.40-65' in history.md. Default view is vertical (`savedView`). Track picker = `#track-preview` + compact card column (`.tracks`); the 3D track overview later replaces the contents of `#tp-view`. Lobby/picker kart framing in vertical uses `lobbyShiftY` / `shiftY` (view offset Y).

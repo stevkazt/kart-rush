@@ -345,7 +345,7 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 /* Red shell incoming */
 #warn {
   position: absolute;
-  top: 72px;
+  top: var(--warn-y, 72px);
   left: 50%;
   width: 46px;
   height: 46px;
@@ -1027,6 +1027,25 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #pick-screen.staged .pick-card b { font-size: 14px; }
 #pick-screen.staged .pick-card small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
+/* Track picker: the selected track big (left; on top in the vertical view) + compact cards in a column */
+.track-preview { display: none; }
+#pick-screen.tracks { flex-direction: row; align-items: stretch; gap: 12px; max-width: none; height: 100%; }
+#pick-screen.tracks .track-preview { display: flex; flex: 0 0 46%; flex-direction: column; justify-content: center; align-items: center; gap: 8px; min-width: 0; }
+.tp-view { width: 100%; display: grid; place-items: center; }
+.tp-view .track-art { width: 100%; height: auto; aspect-ratio: 100 / 64; max-height: 100%; border-radius: 18px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+.tp-info { display: flex; flex-direction: column; align-items: center; text-align: center; line-height: 1.25; }
+.tp-info b { display: inline-flex; align-items: center; gap: 6px; font-size: 22px; font-weight: 900; font-style: italic; color: #ffe14a; }
+.tp-info b .ico { width: 22px; height: 22px; }
+.tp-info small { font-size: 12px; opacity: 0.75; }
+.tp-info em { font-style: normal; font-size: 12px; font-weight: 800; color: #ffe14a; }
+#pick-screen.tracks .pick-panel { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: clamp(6px, calc(var(--app-h) * 0.025), 12px); }
+#pick-screen.tracks .pick-title { font-size: clamp(20px, calc(var(--app-h) * 0.065), 28px); }
+#pick-screen.tracks .pick-list { flex: 1 1 auto; min-height: 0; width: 100%; overflow-x: hidden; overflow-y: auto; touch-action: pan-y; scroll-snap-type: none; -webkit-mask-image: none; mask-image: none; }
+#pick-screen.tracks .pick-grid { grid-auto-flow: row; grid-template-rows: none; grid-template-columns: 1fr; grid-auto-columns: auto; width: 100%; box-sizing: border-box; }
+#pick-screen.tracks .pick-card { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; justify-items: start; padding: 6px 10px 6px 6px; text-align: left; }
+#pick-screen.tracks .pick-card .track-art { grid-row: 1 / 3; width: 66px; max-height: none; border-radius: 8px; }
+#pick-screen.tracks .pick-card small { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
 /* Paint picker: a soft spotlight + floor under each kart so dark paints (Midnight, Coal) stand out */
 .pick-kart .pick-card { background: radial-gradient(ellipse at 50% 42%, rgba(160, 180, 255, 0.22), rgba(10, 12, 36, 0.78) 68%); }
 .pick-kart .pick-card.on { background: radial-gradient(ellipse at 50% 42%, rgba(255, 225, 74, 0.28), rgba(60, 50, 20, 0.85) 68%); }
@@ -1122,3 +1141,208 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #debug-screen .pick-title { margin-bottom: 4px; }
 #debug-card .setting-row { margin-bottom: 4px; }
 #btn-debug-start[hidden] { display: none; }
+
+#mirror-frame { position: absolute; display: none; box-sizing: border-box; border: 2px solid rgba(255,255,255,0.75); border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.45); pointer-events: none; }
+#btn-item[data-item="bomb"]::before {
+  content: "";
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  border: 0.08em solid #fff;
+  background: radial-gradient(circle at 35% 30%, #7a7a88, #1c1c24);
+  box-shadow: 0.25em -0.45em 0 -0.22em #ff8a1f; /* the fuse spark */
+}
+
+/* ============ Vertical view (Settings -> VIEW): upright, no turn; auto-gas, so no GAS button; drag to steer ============ */
+#vsteer { display: none; position: absolute; left: 0; right: 0; top: 32%; bottom: 0; pointer-events: auto; touch-action: none; }
+#vbase {
+  position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.35); background: rgba(255, 255, 255, 0.08); display: none; pointer-events: none;
+}
+#vsteer.held #vbase { display: block; }
+#vknob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); }
+/* build 64.24: arrow buttons across the bottom (left under the left thumb, right under the right), item in the middle, no brake and no gas */
+#app.vertical #joystick, #app.vertical #btn-gas, #app.vertical #pedals, #app.vertical #vsteer { display: none !important; }
+#app.vertical #steer { display: flex !important; left: var(--edge-l); right: var(--edge-r); bottom: 24px; justify-content: space-between; }
+#app.vertical .steer-btn { width: calc(var(--ctl) * 1.15); height: calc(var(--ctl) * 1.15); }
+#app.vertical #pedals { left: calc(50% - var(--ctl) * 0.95 - 8px); right: auto; bottom: 24px; } /* brake + item share the middle strip: the halves are the sides */
+#app.vertical #btn-brake { width: calc(var(--ctl) * 0.95); height: calc(var(--ctl) * 0.95); font-size: calc(var(--ctl) * 0.16); }
+#app.vertical #btn-item { left: calc(50% - var(--ctl) * 0.475); right: auto; bottom: 24px; width: calc(var(--ctl) * 0.95); height: calc(var(--ctl) * 0.95); }
+#app.vertical #minimap, #app.vertical #lapbox { --map: 84px; }
+#vl, #vr { position: absolute; top: 0; bottom: 0; width: 50%; opacity: 0; pointer-events: none; }
+#vl { left: 0; background: linear-gradient(90deg, rgba(255,255,255,0.5), rgba(255,255,255,0)); }
+#vr { right: 0; background: linear-gradient(270deg, rgba(255,255,255,0.5), rgba(255,255,255,0)); }
+/* build 64.25: squared buttons; pause + reset moved down beside the right thumb, above the right arrow */
+#app.vertical .steer-btn { border-radius: 22%; }
+#app.vertical #btn-pause, #app.vertical #btn-reset { top: auto; right: var(--edge-r); bottom: calc(24px + var(--ctl) * 1.15 + 16px); }
+#app.vertical #btn-reset { bottom: calc(24px + var(--ctl) * 1.15 + 16px + 56px); }
+/* build 64.27: tall steering buttons, the three buttons a bit higher; pause + reset big, mid-screen on the right */
+#app.vertical .steer-btn { width: calc(var(--ctl) * 0.95); height: calc(var(--ctl) * 1.55); border-radius: 22%; }
+#app.vertical #steer { bottom: 64px; }
+#app.vertical #btn-item { bottom: 64px; }
+#app.vertical #btn-pause, #app.vertical #btn-reset { width: 66px; height: 66px; font-size: 32px; top: 50%; bottom: auto; right: var(--edge-r); }
+#app.vertical #btn-pause { top: calc(50% - 78px); } /* build 64.31: pause above, reset below */
+#app.vertical #btn-reset { top: 50%; }
+/* build 64.28: wide (horizontal) steering buttons, the item between them */
+#app.vertical .steer-btn { width: calc(var(--ctl) * 1.15); height: calc(var(--ctl) * 0.85); }
+#app.vertical #btn-item { left: calc(50% - var(--ctl) * 0.425); width: calc(var(--ctl) * 0.85); height: calc(var(--ctl) * 0.85); }
+
+/* ============ build 64.30: portrait HUD ============ */
+#app.vertical { --safe-b: max(0px, env(safe-area-inset-bottom)); }
+/* 1. one top bar for LAP | TIME | BEST (JS moves #lapbox inside #hud-top) */
+#app.vertical #hud-top {
+  left: var(--edge-l); right: var(--edge-r); top: var(--row-y, 118px); transform: none;
+  gap: 0 !important; align-items: stretch; padding: 4px 4px;
+  border-radius: 16px; background: rgba(20, 24, 60, 0.6); border: 2px solid rgba(255, 255, 255, 0.25);
+}
+#app.vertical #hud-top > .pill, #app.vertical #hud-top > #lapbox {
+  position: static; flex: 1; width: auto; min-width: 0; margin: 0; padding: 2px 6px;
+  flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  background: none; border: none; border-radius: 0;
+  font-size: 17px; font-style: normal; font-weight: 800;
+}
+#app.vertical #hud-top > * + * { border-left: 1px solid rgba(255, 255, 255, 0.2); }
+#app.vertical #lapbox .label { font-size: 10px; letter-spacing: 2px; }
+#app.vertical #lapbox.final { color: #ffe14a; }
+/* 2. position + field size read as one badge: "5th /6" */
+#app.vertical #place {
+  top: calc(var(--row-y, 118px) + 70px); right: var(--edge-r);
+  display: flex; align-items: baseline; gap: 4px; padding: 4px 12px 7px;
+  border-radius: 14px; background: rgba(20, 24, 60, 0.6); border: 2px solid rgba(255, 255, 255, 0.25);
+}
+#app.vertical #place[hidden] { display: none; }
+#app.vertical #place-num { font-size: 44px; }
+#app.vertical #place-suffix { font-size: 20px; vertical-align: baseline; }
+#app.vertical #place-of { display: inline; margin: 0 0 0 4px; font-size: 18px; text-align: left; }
+/* 3. safe zones: the speed readout sat on the right edge and was cut off; now inside the side + bottom insets, above the buttons */
+#app.vertical #speedo {
+  left: auto; right: calc(var(--edge-r) + 6px); text-align: right;
+  bottom: calc(var(--safe-b) + 56px + var(--ctl) * 0.85 + 14px);
+}
+#app.vertical #drift-bar { margin-right: 0; margin-left: auto; }
+#app.vertical #steer, #app.vertical #btn-item { bottom: calc(var(--safe-b) + 56px); }
+#app.vertical #minimap { top: var(--mirror-y, 160px); } /* top edge level with the mirror */
+/* build 64.32: smaller position badge, same spot (it touched the mirror) */
+#app.vertical #place { padding: 3px 9px 5px; gap: 3px; border-radius: 12px; }
+#app.vertical #place-num { font-size: 34px; }
+#app.vertical #place-suffix { font-size: 15px; }
+#app.vertical #place-of { font-size: 14px; margin-left: 3px; }
+/* build 64.33: reset lower by the right thumb, pause on the left at the same height */
+#app.vertical #btn-reset { top: 54%; }
+#app.vertical #btn-pause { top: 54%; left: var(--edge-l); right: auto; }
+
+/* ============ build 64.36: chunky 3D buttons (vertical view): thick dark bottom edge; pressing sinks the button by the edge's height ============ */
+#app.vertical .steer-btn, #app.vertical #btn-item, #app.vertical #btn-pause, #app.vertical #btn-reset {
+  box-shadow: 0 8px 0 #1a1a2e, inset 0 -6px 0 rgba(0, 0, 0, 0.18);
+  transform: translateY(0);
+  transition: transform 0.05s ease-out, box-shadow 0.05s ease-out; /* the snap-back on release */
+}
+/* pressed: .pressed is set by the touch code (a held finger), :active covers the buttons that have no hold state. Instant, no transition. */
+#app.vertical .steer-btn.pressed, #app.vertical #btn-item.pressed, #app.vertical #btn-pause:active, #app.vertical #btn-reset:active,
+#app.vertical .steer-btn:active, #app.vertical #btn-item:active {
+  transform: translateY(8px);
+  box-shadow: 0 0 0 #1a1a2e, inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  filter: brightness(1.1);
+  transition: none;
+  animation: none; /* the item's ready-glow animation would otherwise keep a shadow on while pressed */
+}
+
+/* build 64.37: steering buttons in the HUD bar's deep navy, crisp white arrows (vertical view) */
+#app.vertical .steer-btn { background: rgb(20, 24, 60); color: #fff; text-shadow: none; }
+
+/* ============ build 64.39: the vertical view's button style in landscape too (style only: shapes and positions stay) ============ */
+.steer-btn, #btn-gas, #btn-brake, #btn-item, #btn-pause, #btn-reset {
+  box-shadow: 0 8px 0 #1a1a2e, inset 0 -6px 0 rgba(0, 0, 0, 0.18);
+  transform: translateY(0);
+  transition: transform 0.05s ease-out, box-shadow 0.05s ease-out;
+}
+.steer-btn.pressed, #btn-gas.pressed, #btn-brake.pressed, #btn-item.pressed, .steer-btn:active, #btn-gas:active, #btn-brake:active,
+#btn-item:active, #btn-pause:active, #btn-reset:active {
+  transform: translateY(8px);
+  box-shadow: 0 0 0 #1a1a2e, inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  filter: brightness(1.1);
+  transition: none;
+  animation: none;
+}
+.steer-btn { background: rgb(20, 24, 60); color: #fff; text-shadow: none; }
+
+/* ============ build 64.40: menus in the vertical view (the overlay is ~390 px wide and tall: stack what landscape puts side by side) ============ */
+#app.vertical { --edge-l: max(14px, env(safe-area-inset-left)); --edge-r: max(14px, env(safe-area-inset-right)); }
+#app.vertical #overlay { padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+#app.vertical .screen { gap: 14px; }
+#app.vertical .pick-title { font-size: 28px; }
+#app.vertical .btn-row { margin-top: 16px; }
+
+/* Lobby: logo + START on top, the kart in the open middle, RACE SETUP at the bottom */
+#app.vertical #overlay.lobby-on {
+  background: linear-gradient(180deg, rgba(14, 12, 40, 0.88) 0%, rgba(20, 16, 60, 0.45) 22%, rgba(20, 16, 60, 0.05) 36%,
+    rgba(20, 16, 60, 0.05) 52%, rgba(14, 12, 40, 0.6) 64%, rgba(14, 12, 40, 0.85) 100%);
+}
+#app.vertical .lobby-main { flex-direction: column; align-items: stretch; gap: 8px; }
+#app.vertical .lobby-cta { padding-top: 6px; }
+#app.vertical .lobby-stage { flex: 1 1 auto; min-height: 120px; }
+#app.vertical .screen .setup { width: auto; max-width: 380px; align-self: center; width: 100%; box-sizing: border-box; padding: 10px 12px 12px !important; }
+#app.vertical .setup-track .pick-art { width: 76px; height: 50px; }
+#app.vertical #overlay .lobby h1 { font-size: 56px; }
+#app.vertical .lobby-cta .race-pill { white-space: normal; font-size: 12px; }
+#app.vertical .btn-start { font-size: 24px; padding: 14px 40px; }
+#app.vertical #build { margin-top: 6px; }
+
+/* Driver / paint picker: the 3D stage on top, the cards below (scrolling) */
+#app.vertical #overlay.stage-on { background: linear-gradient(to bottom, rgba(10, 14, 26, 0.15) 0%, rgba(10, 14, 26, 0.15) 30%, rgba(10, 14, 26, 0.9) 46%, rgba(10, 14, 26, 0.94) 100%); }
+#app.vertical #pick-screen.staged { flex-direction: column; }
+#app.vertical #pick-screen.staged .pick-stage { flex: 0 0 38%; padding-top: 4px; }
+#app.vertical #pick-screen.staged .pick-panel { flex: 1 1 0; width: 100%; }
+#app.vertical #pick-screen.staged .pick-driver .driver-art { width: 64px; }
+#app.vertical #pick-screen.staged .pick-kart .kart-art { width: 84px; }
+#app.vertical #pick-screen.staged .btn-primary { flex: 0 0 auto; }
+/* Track picker: preview on top, compact cards below (see the shared .tracks rules above) */
+#app.vertical #pick-screen.tracks { flex-direction: column; }
+#app.vertical #pick-screen.tracks .track-preview { flex: 0 0 38%; }
+#app.vertical #pick-screen.tracks .pick-panel { width: 100%; }
+
+/* Results: place + stats on top, the standings in the middle, the buttons under them */
+#app.vertical #results-screen { flex-direction: column; justify-content: flex-start; padding-top: 6px; overflow-y: auto; gap: 12px; }
+#app.vertical #results-screen .side { width: 100%; }
+#app.vertical #results-screen .card { flex: 0 0 auto; width: 100%; max-width: 380px; box-sizing: border-box; padding: 8px 10px; }
+#app.vertical #results-screen .standings { font-size: 14px; }
+#app.vertical #results-screen .btn-row { width: 100%; max-width: 380px; }
+#app.vertical #results-screen .btn-row > * { flex: 1 1 0; }
+#app.vertical .stats div { min-width: 110px; }
+
+/* Pause */
+#app.vertical #pause-screen .btn-primary, #app.vertical #pause-screen .btn-row { width: 100%; max-width: 300px; }
+#app.vertical #pause-screen .btn-row > * { flex: 1 1 0; }
+
+/* How to play: columns stacked, no GAS / BRAKE / ROCKET (auto-gas in this view) */
+#app.vertical #help-screen { justify-content: flex-start; padding-top: 4px; }
+#app.vertical .screen .help-card { flex-direction: column; gap: 12px; max-height: calc(100% - 60px); }
+#app.vertical .help-grid.g4 { grid-template-columns: repeat(3, 1fr); }
+#app.vertical .tile.ls { display: none; }
+#app.vertical .tile small { font-size: 11px; }
+
+/* Settings: the buttons may wrap, SCREEN (flip) is for the turned landscape view only */
+#app.vertical .settings-card { max-width: 100%; box-sizing: border-box; }
+#app.vertical .settings-card .setting .track-pick { flex-wrap: wrap; justify-content: flex-start; }
+#app.vertical .settings-card .trk, #app.vertical .settings-card .vol-pick .trk { padding: 6px 9px; }
+#app.vertical .settings-card .setting-label { justify-self: start; text-align: left; }
+#app.vertical #flip-pick, #app.vertical #flip-pick + *, #app.vertical .setting:has(#flip-pick) { display: none; }
+#app.vertical #settings-screen, #app.vertical #debug-screen { overflow-y: auto; }
+
+/* Hello / keyboard */
+#app.vertical #hello-screen { justify-content: flex-start; padding-top: 24px; }
+
+/* build 64.43: Settings never pushes BACK off the screen (the turned landscape view is only ~390 px tall): the card scrolls, title + BACK stay */
+#settings-screen { max-height: 100%; }
+#settings-screen .settings-card { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+#settings-screen .btn-primary { flex: 0 0 auto; }
+
+/* build 64.44: hello screen (vertical view): name, then age, stacked; the keyboard; the go button under it */
+#app.vertical .hello-form { display: contents; }
+#app.vertical #hello-screen { gap: 10px; }
+#app.vertical #hello-screen .field { order: 1; width: 100%; max-width: 320px; }
+#app.vertical #hello-screen .field input, #app.vertical #hello-screen .field-age input { width: 100%; box-sizing: border-box; text-align: center; }
+#app.vertical #hello-error { order: 2; }
+#app.vertical #kbd { order: 3; width: 100%; max-width: 380px; }
+#app.vertical #kbd .kbd-key { height: 50px; }
+#app.vertical #btn-hello { order: 4; align-self: center; width: 100%; max-width: 320px; height: 56px; border-radius: 28px; }
