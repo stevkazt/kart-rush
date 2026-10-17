@@ -87,6 +87,8 @@ const CFG = {
     brakeDecel: 22,         // m/s^2 through the centre of mass (big wheel brakes flipped the kart)
     coastBrake: 12,         // rolling resistance when no pedal is held (unused while driving now: see playerCoast, ai.coast)
     playerCoast: 3,         // the player's kart rolls on when GAS is released (~5 km/h lost per 0.3 s lift)
+    rescueTime: 2.5,        // player held GAS/BRAKE this long while barely moving (stuck on a rail): put back
+    rescueSpeed: 2,         // ...below this speed (m/s)
     maxSpeed: 26,           // m/s
     maxReverse: 8,
 
@@ -2047,9 +2049,15 @@ function updateKartProgress(k, dt, racing) {
   // Off the road (over a rail, off a jump): well below the road surface for a moment
   const below = surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
   k.fallT = below ? k.fallT + dt : 0;
-  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.fallT > 0.6 || k.ai?.resetNow;
+  // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
+  // reversing uphill barely moves: the AIs' watchdog does the same for them
+  const trying = k.isPlayer && !k.ai && racing && !k.finished && k.spin <= 0 && (input.gas || input.brake);
+  k.stuckT = trying && Math.abs(k.speed) < CFG.kart.rescueSpeed ? (k.stuckT || 0) + dt : 0;
+  const rescue = k.stuckT > CFG.kart.rescueTime;
+  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.fallT > 0.6 || rescue || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
-    k.lastReset = k.ai?.resetNow || (k.fallT > 0.6 ? 'fell' : k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : 'button');
+    k.lastReset = k.ai?.resetNow || (k.fallT > 0.6 ? 'fell' : k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : rescue ? 'stuck' : 'button');
+    k.stuckT = 0;
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     resetKart(k, k.trackIdx, lane);
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
@@ -3265,7 +3273,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 23 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 24 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
 onResize();
 showMenu();

@@ -162,7 +162,10 @@ launcher repo later. The LAN server above still works for quick testing (no offl
    AIs with `ai.coast: 4`.
 10. **Boost is a centre-of-mass push** (`boostAccel` in `preStep`), not more engine force. Extra wheel torque
     popped wheelies on boost pads. Braking cancels a boost, and AIs don't brake while boosting.
-11. Auto-recovery triggers on `up.y < 0.3` or **fewer than 3 wheels down** for 1.5 s (a kart once sat perched on
+11. Player rescue (build 24; user got stuck nose-in on a rail on a slope, "really difficult to back up"): GAS or
+    BRAKE held while under `rescueSpeed` 2 m/s for `rescueTime` 2.5 s (not while spun out) = reset ('stuck').
+    Test: nose-in with GAS -> rescued at ~2.9 s; backing out with BRAKE crawls at 2-7 km/h for ~1.5 s, then
+    gets going (timer peaked 2.3 s). Auto-recovery also triggers on `up.y < 0.3` or **fewer than 3 wheels down** for 1.5 s (a kart once sat perched on
     a wall with its rear wheels in the air). Resets record `k.lastReset` (AI reason or flip/button) for debugging.
 12. **Draw from `body.interpolatedPosition/Quaternion`**, never the raw pose (karts, wheels, camera, sun).
     Raw poses advance 0 or 2 fixed steps on some frames and cause hitches at a steady fps. Teleports must also
@@ -199,7 +202,10 @@ exposed too.
 Chrome with autoplay allowed so the audio code is exercised. The autopilot never fires items, so with items on it
 no longer reliably wins. To have it fire items, add `if (__k.item && __k.itemRoll <= 0) __in.item = true` in a
 trace probe. Spin-outs record `k.hitBy` ("red from Mako").
-Current baseline: autopilot laps of about 21–23 s with 0 STUCK events. The autopilot log lists every kart each
+Baselines (2026-10-16, drawing off via a probe): meadow laps ~33-37 s, canyon ~44-51 s, 3-lap races on both
+with 0 AI resets/flips in clean runs (items occasionally cause a watchdog reset). Probes used are simple
+`setInterval` scripts logging to `__log` (airtime per kart, resets with `k.lastReset`, place changes, wheel
+contacts); write new ones as needed. Older note: autopilot laps of about 21–23 s with 0 STUCK events. The autopilot log lists every kart each
 5 s (place, lap/idx, speed, AI `resets=`). With AIs, the autopilot finishes 1st by ~2 s; the whole field
 finishes within ~10 s, with 0 AI resets in a clean run. `tap 0.6` gives about 35 degrees at
 release, slip under 2 degrees, and 95 km/h kept (before the 2026-10-16 grip cut; now 0.25 s = 9 deg, 0.6 s = 25 deg, 1.0 s = 51 deg). `dev/test.sh` injects debug globals (`__k` kart, `__s` state,
@@ -214,6 +220,10 @@ check touch and feel.
 - Wants it to feel like a finished game rather than a demo.
 - 2026-10-16: new menu/results screens "look good"; player coasting + slide GAS->ITEM "really improved the game
   experience". Plays with rotation unlocked (real landscape), which avoids the iOS portrait strip.
+- 2026-10-16 (late): lap counter under the minimap: good. Canyon Run: jump "very realistic", canyon walls and
+  theme "perfect", 60 fps on the phone; bumps should feel bumpy (keep); banking "not that relevant" (small grip
+  bonus added). New engine sound "much better, not too present" (will say if it annoys again). Steady place
+  indicator: good. Asked for auto-rescue when stuck (build 24, 2.5 s): judge after real use.
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
@@ -238,7 +248,8 @@ ended last after item hits: they judged it fine (variance comes from items), no 
 Lane changes at top speed after the cut (0.25 s tap 14 -> 9 deg): user says "feels ok... hard but normal at high
 speeds". Keep. Nothing open before expansion.
 
-**Builds 20-23 (2026-10-16, committed 37bbae6 + 7d75563, not pushed):** Canyon Run (hills, bridge, jump, crest,
+**Builds 20-24 (2026-10-16, committed locally, NOT pushed; GitHub Pages still has the 6109dca diagnostic
+build; `git status -sb` shows how far ahead of origin):** build 24 = player auto-rescue (gotcha 11). Canyon Run (hills, bridge, jump, crest,
 banking, desert theme with life), track picker, per-track records. User asked for it as the physics test bed
 for future tracks. Phone feedback: jump "feels very realistic"; canyon walls and theme "perfect"; 60 fps
 (meter's worst-frame stat showed 20 once, not noticed); banked turns "don't help" (expected: the stability
