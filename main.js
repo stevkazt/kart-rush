@@ -158,6 +158,7 @@ const CFG = {
     wallHitLoss: 0.01,      // rails: share of speed lost per m/s of impact into the rail...
     wallHitMax: 0.15,       // ...capped here (was 0.35; cut in half after a friend said rails brake too hard)
     railPush: 2,            // m/s the solver may still push a kart out of a rail (frees it when sunk in; more = bouncier)
+    railGlide: 0.6,         // share of the speed that went into a rail kept as speed along it (0 = a head-on hit stops dead)
     railClimb: 1.0,         // m/s a kart in rail contact may rise beyond the road's own slope (stops it riding up the wall)
     railFree: 7,            // m/s^2 nudge along the road when pinned on a rail with the gas held (below railFreeBelow)
     railFreeBelow: 3,       // m/s
@@ -1785,7 +1786,12 @@ for (const k of karts) {
     if (e.body.material === physMats.chassis) { k.bumpT = 0.6; return; } // kart-to-kart: riders react (Luna)
     if (e.body.material !== physMats.wall) return;
     k.wallTouch = true;
-    k.wallHit = Math.max(k.wallHit, Math.abs(e.contact.getImpactVelocityAlongNormal()));
+    const imp = Math.abs(e.contact.getImpactVelocityAlongNormal());
+    if (imp >= k.wallHit) { // the hardest hit this step: the way out of the rail (flat) and the velocity going in
+      const sg = e.contact.bi === k.body ? -1 : 1, nx = e.contact.ni.x * sg, nz = e.contact.ni.z * sg, nl = Math.hypot(nx, nz);
+      if (nl > 0.3) { k.wallNx = nx / nl; k.wallNz = nz / nl; k.wallVx = k.body.velocity.x; k.wallVz = k.body.velocity.z; }
+    }
+    k.wallHit = Math.max(k.wallHit, imp);
   });
 }
 
@@ -1873,7 +1879,7 @@ function castDrivers() {
 function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
-    passT: false, boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
+    passT: false, boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0, wallNx: 0, wallNz: 0, wallVx: 0, wallVz: 0,
     item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, shield: 0, star: 0, bullet: 0, bulletLane: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
     boxAt: -9, rowCheckIdx: undefined, bumpT: 0,
@@ -4402,6 +4408,19 @@ function applyStabilityAssist(k) {
     const scale = (1 - hit) * (1 - K.wallScrape * CFG.physicsStep);
     body.velocity.x *= scale;
     body.velocity.z *= scale;
+    // Glance, don't stop: a head-on hit used to leave only the speed along the rail (none at 90 degrees), so the
+    // kart stalled and had to build up from 0. Keep railGlide of the speed that went into the rail, as speed along it
+    // (towards where the kart is already heading), so it is carried round the bend like in Mario Kart.
+    if (k.wallHit > 3 && (k.wallNx || k.wallNz)) {
+      const vin = Math.hypot(k.wallVx, k.wallVz), vn = k.wallVx * k.wallNx + k.wallVz * k.wallNz; // vn < 0: into the rail
+      let tx = -k.wallNz, tz = k.wallNx;
+      const f0 = body.quaternion.vmult(LOCAL_FWD, tmpFwd);
+      const along = k.wallVx * tx + k.wallVz * tz;
+      if (Math.abs(along) > 0.5 ? along < 0 : f0.x * tx + f0.z * tz < 0) { tx = -tx; tz = -tz; }
+      const want = Math.min(Math.abs(along) + K.railGlide * Math.max(0, -vn), vin * 0.85) * (1 - hit);
+      const have = body.velocity.x * tx + body.velocity.z * tz;
+      if (have < want) { body.velocity.x += (want - have) * tx; body.velocity.z += (want - have) * tz; }
+    }
     k.wallTouch = false;
     k.wallHit = 0;
   }
