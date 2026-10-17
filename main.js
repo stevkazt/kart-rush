@@ -353,7 +353,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '64.3'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '64.4'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -4410,6 +4410,11 @@ function applyStabilityAssist(k) {
   if (k.bullet > 0) { bulletGuide(k); return; }
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
 
+  if (k.railProbe && (k.railProbe.t -= CFG.physicsStep) <= 0) {
+    teleEvent('railpost', k, { ...k.railProbe, v1: Math.round(Math.hypot(body.velocity.x, body.velocity.z) * 3.6), fwd: Math.round(k.speed * 3.6) });
+    k.railProbe = null;
+  }
+
   // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
   if (k.wallTouch) {
     const hit = clamp((k.wallHit - 1.5) * K.wallHitLoss, 0, K.wallHitMax);
@@ -4429,6 +4434,10 @@ function applyStabilityAssist(k) {
       const want = Math.min(Math.abs(along) + K.railGlide * Math.max(0, -vn), vin * 0.85) * (1 - hit);
       const have = body.velocity.x * tx + body.velocity.z * tz;
       if (have < want) { body.velocity.x += (want - have) * tx; body.velocity.z += (want - have) * tz; }
+      if (k.isPlayer) { // diagnostics for the race log: how head-on, what the glide set, what is left 0.35 s later (see 'railpost')
+        k.railProbe = { t: 0.35, idx: k.trackIdx, into: +(-(f0.x * k.wallNx + f0.z * k.wallNz)).toFixed(2), vin: Math.round(vin * 3.6),
+          along: Math.round(Math.abs(along) * 3.6), want: Math.round(want * 3.6), v0: Math.round(Math.hypot(body.velocity.x, body.velocity.z) * 3.6) };
+      }
     }
     k.wallTouch = false;
     k.wallHit = 0;
