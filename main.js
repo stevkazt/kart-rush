@@ -151,8 +151,9 @@ const CFG = {
     stallTime: 0.8,
     airLevel: 6,            // in the air: turn toward the road's tilt (rad/s per rad off)...
     airDamp: 3,             // ...and damp tumbling (per second)
-    boostAccel: 8,          // m/s^2 on top of the engine, pushed through the centre of mass (no wheelie)
+    boostAccel: 150,        // m/s^2 on top of the engine, pushed through the centre of mass (no wheelie); high = boost speed at once
     boostSpeed: 6,
+    rocketAccel: 8,         // the rocket start keeps the old gradual push (a standing start with the instant one is too much)
   },
 
   // The six drivers. Colours: [body, accent, driver suit]. The player picks one on the title screen (Driver);
@@ -272,7 +273,7 @@ const CFG = {
     shieldTime: 10,                   // bubble that blocks the next hit (any kind), gone after this anyway
     // invincible + faster; karts touched spin out. User (build 33 races): the star "should give more speed": at
     // +4 m/s with engine power only it held ~108 km/h and gained ~20 m over 6 s. Now pushed like a mushroom.
-    starTime: 6, starSpeed: 8, starAccel: 7, // + m/s on top speed (~122 km/h), push m/s^2 up to it
+    starTime: 6, starSpeed: 8, starAccel: 150, // + m/s on top speed (~122 km/h), push m/s^2 up to it (high = at once)
     bumpRadius: 2.3,                  // star / bullet kart this close to another one = hit
     tripleGap: 0.25,                  // triple mushroom: min seconds between two boosts
     blueSpeed: 55, blueLife: 30,      // blue shell: along the track to the leader, explodes
@@ -325,7 +326,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 1a. Renderer, scene, camera, lights ----------
 const app = $('app');
-const VERSION_N = 39; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
+const VERSION_N = 44; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -1801,7 +1802,7 @@ function castDrivers() {
 function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
-    boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
+    passT: false, boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
     item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, shield: 0, star: 0, bullet: 0, bulletLane: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
     boxAt: -9, rowCheckIdx: undefined, bumpT: 0,
@@ -2837,6 +2838,7 @@ function rocketStart() {
   if (from === null) return;
   if (from <= K.rocketWindow) {
     kart.boost = K.rocketBoost;
+    kart.rocketT = K.rocketBoost; // this boost keeps the gentle push (K.rocketAccel)
     showMessage('ROCKET START!');
     sound.boost();
   } else if (from > K.rocketEarly) {
@@ -3656,7 +3658,7 @@ function redShellTarget(k) {
   return karts.find((o) => o.place === k.place - 1 && !o.finished) || null;
 }
 
-/** The blue shell goes for whoever leads the race (not its owner), and moves on if they finish. */
+/** The blue shell goes for whoever leads the race (not its owner), and fizzles if they finish. */
 function blueTarget(owner) {
   let best = null;
   for (const o of karts) if (o !== owner && !o.finished && (!best || o.place < best.place)) best = o;
@@ -3747,8 +3749,8 @@ const blueA = new THREE.Vector3(), blueB = new THREE.Vector3();
  */
 function updateBlue(s, dt) {
   const I = CFG.items, { N, spacing } = track;
-  if (!s.target || s.target.finished) {
-    // the target finished: go for the new leader, the short way round
+  if (s.target?.finished) return true; // the target crossed the line: the shell is dropped, not passed on
+  if (!s.target) {
     s.target = blueTarget(s.owner);
     if (s.target) s.dir = (s.target.trackIdx - s.idx + N) % N < N / 2 ? 1 : -1;
   }
@@ -3836,13 +3838,18 @@ function updateItems(dt, racing) {
       !karts.some((o) => o !== k && o.body.position.distanceSquared(k.body.position) < 3.2 * 3.2)) {
       k.body.collisionResponse = true;
     }
+    // A star drives through the other karts (they spin out and fly aside instead of stalling it); it turns
+    // solid again once no kart is inside it, as after a bullet or a respawn
+    if (k.star > 0) k.passT = true;
+    else if (k.passT && !karts.some((o) => o !== k && o.body.position.distanceSquared(k.body.position) < 3.2 * 3.2)) k.passT = false;
+    k.body.collisionFilterMask = k.ghosted || k.passT ? -1 & ~KART_GROUP : -1;
     // Star / bullet: anyone touched spins out and gets knocked aside
     if (racing && (k.star > 0 || k.bullet > 0)) {
       for (const o of karts) {
         if (o === k || flat2(o.body.position, k.body.position) > I.bumpRadius ** 2) continue;
         if (!spinOut(o, k, k.bullet > 0 ? 'bullet' : 'star')) continue;
         const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
-        const d = Math.hypot(dx, dz) || 1, shove = k.bullet > 0 ? 6 : 3;
+        const d = Math.hypot(dx, dz) || 1, shove = k.bullet > 0 ? 6 : 7;
         o.body.velocity.x += (dx / d) * shove;
         o.body.velocity.z += (dz / d) * shove;
       }
@@ -4068,6 +4075,7 @@ function driveKart(k, dt, canDrive) {
   }
   k.drifting = drifting;
   k.boost = Math.max(0, k.boost - dt);
+  k.rocketT = Math.max(0, (k.rocketT || 0) - dt);
   const boosting = k.boost > 0;
 
   // --- Engine & brakes
@@ -4168,7 +4176,7 @@ function applyStabilityAssist(k) {
   // Boost: extra push through the centre of mass. Doing it with more wheel torque popped wheelies
   // and flipped karts that hit a boost pad at low speed.
   // (the star pushes the same way, up to its own higher top speed)
-  const boostPush = k.boost > 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed ? K.boostAccel : 0;
+  const boostPush = k.boost > 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed ? (k.rocketT > 0 ? K.rocketAccel : K.boostAccel) : 0;
   const starPush = k.star > 0 && speed < K.maxSpeed * k.topMult + CFG.items.starSpeed ? CFG.items.starAccel : 0;
   if ((boostPush || starPush) && k.spin <= 0 && onGround) {
     const dv = Math.max(boostPush, starPush) * CFG.physicsStep;
@@ -4485,13 +4493,13 @@ function updateEffects(dt) {
       u.fade.value = k.shield > 1.5 ? 1 : 0.35 + 0.65 * Math.abs(Math.sin(k.shield * 9));
     }
     // ghost: see-through, flickering
-    const alpha = k.ghosted ? (Math.floor(itemClock * 12) % 2 ? 0.25 : 0.5) : 1;
+    const alpha = k.ghosted ? (Math.floor(itemClock * 6) % 2 ? 0.4 : 0.6) : 1;
     if (alpha !== k.alpha) {
       k.alpha = alpha;
       for (const m of [k.bodyMesh.material, ...k.rider.mats, ...k.wheelMeshes.map((w) => w.children[0].material)]) {
-        m.transparent = alpha < 1;
+        if (m.transparent !== alpha < 1) { m.transparent = alpha < 1; m.needsUpdate = true; } // three bakes OPAQUE into the shader: opacity is ignored until it recompiles
         m.opacity = alpha;
-        m.depthWrite = alpha === 1;
+        m.depthWrite = true; // the rider is one baked mesh: without depth writes its overlapping parts all blend through each other
       }
     }
     k.hull.visible = k.bullet > 0;

@@ -243,3 +243,23 @@ Collisions under 50-150 ms lag are the hard part. Remote player = another driver
 **Deferred by the user ("ignore for now"):** the speed-feel item. That means a lower/closer camera, speed
 lines, camera shake, close trackside objects and a higher top speed.
 
+
+
+## Builds 40-44 (2026-10-17, all uncommitted, not pushed, phone-tested: ghost look only)
+User asked for game-experience tweaks after the build 39 race analysis (3 races on 38-39, all meadow).
+- **Telemetry caveat:** races 1-76 hold only 1 buttons race of 32 (the user says they played buttons more; check
+  whether older builds logged `steering` differently). Buttons race 47: 9 rail touches, ~1.8 s lost in total, still
+  2nd. Joystick: ~1.4 rail touches/race. **Awaiting the user's own buttons races** before touching button
+  steering. Ideas: gentler `steerReturn` (7 -> ~4), softer first ramp, rail assist (slide along the rail).
+- **Build 40 instant boosts:** `CFG.kart.boostAccel` 8 -> 150 and `CFG.items.starAccel` 7 -> 150 m/s^2, so boost
+  speed (+6, star +8 m/s) is reached in ~4 physics steps. Applies to mushrooms, pads, mini-turbos, star, AIs.
+- **Build 41-43 ghost look:** the rider is one baked multi-material mesh; transparent + `depthWrite false` made
+  its parts blend through each other. Now depthWrite stays on, alpha 0.4/0.6 at 6 Hz. **Real cause of "nothing
+  shown" (build 43):** three bakes OPAQUE into the shader, so `material.transparent` needs `needsUpdate = true`
+  or opacity is ignored. Manual reset uses the same ghost path (2 s, confirmed in telemetry).
+  Still possible: drop-in pop and spawn flash on respawn, blue ghost tint.
+- **Build 42 rocket start:** the instant push was too much from a standing start: `rocketAccel: 8` and
+  `k.rocketT` keep the old gradual push for the rocket boost only.
+- **Build 44 star:** the star kart now has no kart-vs-kart collision while star > 0 (`k.passT`, solid again once no
+  kart is inside it), shove on hit 3 -> 7 m/s, so it drives through rivals instead of stalling behind them.
+- Not done: more item boxes (4-5 rows), softer place odds, ghost-bug watch, boxes per race (9-12 in 38-39).
