@@ -158,6 +158,9 @@ const CFG = {
     wallHitLoss: 0.01,      // rails: share of speed lost per m/s of impact into the rail...
     wallHitMax: 0.15,       // ...capped here (was 0.35; cut in half after a friend said rails brake too hard)
     railPush: 2,            // m/s the solver may still push a kart out of a rail (frees it when sunk in; more = bouncier)
+    railClimb: 1.0,         // m/s a kart in rail contact may rise beyond the road's own slope (stops it riding up the wall)
+    railFree: 7,            // m/s^2 nudge along the road when pinned on a rail with the gas held (below railFreeBelow)
+    railFreeBelow: 3,       // m/s
     railTurn: 8,            // rad/s^2 swinging a nose-into-the-rail kart along it (build 45: head-on hits stopped it dead / flipped it)
     wallScrape: 0.2,        // share of speed lost per second sliding along a rail (~9 m/s^2 at top speed,
                             // little when crawling off it; rails had no friction: free to lean on)
@@ -4395,7 +4398,7 @@ function applyStabilityAssist(k) {
   // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
   if (k.wallTouch) {
     const hit = clamp((k.wallHit - 1.5) * K.wallHitLoss, 0, K.wallHitMax);
-    if (k.isPlayer && hit > 0.03) teleEvent('rail', k, { loss: +hit.toFixed(2), kmh: Math.round(k.speed * 3.6) });
+    if (k.isPlayer && hit > 0.03) teleEvent('rail', k, { loss: +hit.toFixed(2), kmh: Math.round(k.speed * 3.6), idx: k.trackIdx, up: +body.quaternion.vmult(LOCAL_UP, tmpVec).y.toFixed(2), vy: +body.velocity.y.toFixed(1) });
     const scale = (1 - hit) * (1 - K.wallScrape * CFG.physicsStep);
     body.velocity.x *= scale;
     body.velocity.z *= scale;
@@ -4405,6 +4408,7 @@ function applyStabilityAssist(k) {
 
   // No rebound: the solver's push out of a rail (worst where the wall bends: two segments or a seam
   // at once) is cut every step, along each rail contact's own normal. Sliding along the rail stays.
+  let touching = false, wallNx = 0, wallNz = 0;
   for (const c of world.contacts) {
     const mine = c.bi === body ? -1 : c.bj === body ? 1 : 0;
     if (!mine) continue;
@@ -4413,6 +4417,7 @@ function applyStabilityAssist(k) {
     const nx = c.ni.x * mine, nz = c.ni.z * mine, nl = Math.hypot(nx, nz);
     if (nl < 0.3) continue; // floor-ish contact
     const away = (body.velocity.x * nx + body.velocity.z * nz) / nl;
+    wallNx = nx / nl; wallNz = nz / nl; // (the last rail contact's way out, for the unstick nudge)
     // Keep up to railPush m/s out of the rail: that is how the solver frees a kart that sank into it (cutting
     // all of it left karts embedded and stuck); only the rebound above that is removed.
     if (away > K.railPush) { const cut = away - K.railPush; body.velocity.x -= cut * nx / nl; body.velocity.z -= cut * nz / nl; }
@@ -4425,6 +4430,24 @@ function applyStabilityAssist(k) {
       const dir = Math.sign(f.z * tx - f.x * tz);
       body.angularVelocity.y = clamp(body.angularVelocity.y + dir * K.railTurn * into * CFG.physicsStep, -K.maxYawRate, K.maxYawRate);
       body.angularVelocity.x *= 0.7; body.angularVelocity.z *= 0.7;
+    }
+    touching = true;
+  }
+  if (touching) {
+    // Don't climb the rail (canyon banks / whoops: a tilted kart rode up the upright wall): cap the upward speed
+    // at what the road's own slope gives, plus a little, and calm roll/pitch spin
+    const i0 = k.trackIdx, i1 = (i0 + 3) % track.N, i2 = (i0 - 3 + track.N) % track.N;
+    const slopeVy = Math.max(0, (track.samples[i1].y - track.samples[i2].y) / (6 * track.spacing)) * Math.hypot(body.velocity.x, body.velocity.z);
+    const maxVy = slopeVy + K.railClimb;
+    if (body.velocity.y > maxVy) body.velocity.y = maxVy;
+    body.angularVelocity.x *= 0.85; body.angularVelocity.z *= 0.85;
+    // Dead against the rail with the gas held (player only: the AIs have their own watchdog): nudge it back along
+    // the road and a little off the wall, so it gets going instead of waiting for the stuck reset
+    if (k.isPlayer && k.ctl.gas && !k.ctl.brake && k.speed < K.railFreeBelow) {
+      const t = track.tangents[i0], tl = Math.hypot(t.x, t.z) || 1;
+      const dv = K.railFree * CFG.physicsStep;
+      body.velocity.x += (t.x / tl) * dv + wallNx * dv * 0.5;
+      body.velocity.z += (t.z / tl) * dv + wallNz * dv * 0.5;
     }
   }
 
