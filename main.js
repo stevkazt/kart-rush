@@ -370,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '65'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '65.1'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -3471,7 +3471,15 @@ if (DEBUG) {
 }
 
 // Settings -> VIEW: Landscape (the game turned sideways under portrait lock) or Vertical (upright, drag to steer, auto-gas). kartrush.view
-function savedView() { try { return localStorage.getItem('kartrush.view') !== 'landscape'; } catch { return true; } } // vertical unless the player chose Landscape (build 64.47)
+function savedView() { // a first-time player (no view choice, no profile yet) starts vertical, and that is saved; everyone else keeps what they had
+  try {
+    const v = localStorage.getItem('kartrush.view');
+    if (v) return v === 'vertical';
+    if (localStorage.getItem('kartrush.profile')) return false; // literal key: PROFILE_KEY is declared later (TDZ at boot)
+    localStorage.setItem('kartrush.view', 'vertical');
+    return true;
+  } catch { return false; }
+}
 function setView(vertical, save = true) {
   if (save) try { localStorage.setItem('kartrush.view', vertical ? 'vertical' : 'landscape'); } catch { /* storage blocked */ }
   app.classList.toggle('vertical', vertical);
