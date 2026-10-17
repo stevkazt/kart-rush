@@ -337,6 +337,13 @@ phone-tested and liked.
 **Next**, roughly in order (agreed 2026-10-16):
 - Another themed track (idea: snowy night with falling snow + an icy section).
 - Kart colour picker (body / trim / driver).
+- **Driver looks matching their personalities** (user, 2026-10-17: will give them styles later): Rex the ace,
+  Luna the defender, Mako the bully, Pip the steady one, Bolt the wild card. Each kart + driver should read as
+  its character at a glance (colours, shape, maybe a signature part), and the name should show where it
+  matters (results, the item warning "MAKO!"). Today they only differ by `CFG.karts` colours.
+- Bully items (proposed 2026-10-17, waiting for the user's pick): Mako's odds lean to weapons, his red shells
+  hunt the player from much further than `aiTargetPlayer` and he saves them for the player; maybe banana
+  traps on the racing line.
 - Maybe later: stronger drift as its own experiment (steering feel: ask first), track editor with shareable links, ghost of the best lap, steering-sensitivity setting.
 - Push to GitHub only when the user asks.
 
