@@ -353,7 +353,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = 44; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
+const VERSION_N = '64.1'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
