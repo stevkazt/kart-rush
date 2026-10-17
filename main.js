@@ -299,7 +299,7 @@ const CFG = {
       green: { mode: 'shove', time: 1.7, speed: 34, hop: 3.6, flips: 3 }, // ~23 m thrown (distance = speed x time / 2.5)
       red: { mode: 'shove', time: 2.1, speed: 42, hop: 5, flips: 4 },     // ~35 m
       blue: { mode: 'blast', time: 2.4, up: 7, push: 12, scale: 0.55 },
-      bomb: { mode: 'blast', time: 2.6, up: 5.5, push: 14, scale: 0.5, burn: 3.5 },
+      bomb: { mode: 'blast', time: 3.2, up: 5.5, push: 14, scale: 0.5, burn: 3.5, eject: { up: 10, side: 5, spin: 9 } }, // eject: the driver leaves the kart (apex m, sideways m/s, spin rad/s)
     },
     bombBlast: 4.5,                   // bomb: karts this close (m) to where it went off are caught in it
     mushroomBoost: 1.3,               // x the mini-turbo duration
@@ -308,7 +308,7 @@ const CFG = {
     aiTargetPlayer: 140,              // AI red shells lock onto the player when they're up to this far ahead (m)
     // Drawn size per kind. Build 34 (user: "way too small on a mobile screen") went to 2x; with the smaller
     // drawn kart that was "too big and low definition" (build 35): now ~1.4x and smooth, higher-res models
-    modelScale: { green: 1.4, red: 1.4, banana: 1.3, blue: 1.25, mushroom: 1.15 },
+    modelScale: { green: 1.4, red: 1.4, banana: 1.3, bomb: 1.35, blue: 1.25, mushroom: 1.15 },
     hitRadius: 1.5, bananaRadius: 1.3, // were 1.4 / 1.2 before build 34, 1.7 / 1.5 in build 34
     shieldTime: 10,                   // bubble that blocks the next hit (any kind), gone after this anyway
     // invincible + faster; karts touched spin out. User (build 33 races): the star "should give more speed": at
@@ -370,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '65.1'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '66'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -2197,7 +2197,7 @@ function particleMaterial() {
 
 function buildEffects() {
   // Particles: one THREE.Points with a soft round sprite, per-particle colour, alpha and size.
-  const MAX = 400; // box pops emit ~55 at once
+  const MAX = 600; // box pops emit ~55 at once, a bomb ~120
   const pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3);
   const alpha = new Float32Array(MAX), size = new Float32Array(MAX);
   const vel = new Float32Array(MAX * 3), life = new Float32Array(MAX), maxLife = new Float32Array(MAX);
@@ -2396,11 +2396,13 @@ function buildItemVisuals() {
     add(new THREE.TorusGeometry(0.5, 0.075, 10, 32), 0xffffff, 0, 0.1, 0).rotation.x = Math.PI / 2;
     for (const x of [0.55, -0.55]) add(new THREE.BoxGeometry(0.7, 0.06, 0.35), 0xffffff, x * 1.4, 0.45, 0).rotation.z = x * 0.6;
   });
-  const bomb = template('bomb', 0x551100, (add) => {
-    add(new THREE.SphereGeometry(0.4, 24, 16), 0x23232b, 0, 0.42, 0);
-    add(new THREE.CylinderGeometry(0.1, 0.12, 0.12, 12), 0x5a5a66, 0, 0.84, 0);      // cap
-    add(new THREE.CylinderGeometry(0.025, 0.025, 0.22, 6), 0xc9a45a, 0.05, 1.0, 0).rotation.z = -0.4; // fuse
-    add(new THREE.SphereGeometry(0.07, 10, 8), 0xff7a1a, 0.12, 1.1, 0);               // spark
+  const bomb = template('bomb', 0x200808, (add) => {
+    add(new THREE.SphereGeometry(0.4, 24, 16), 0x15151c, 0, 0.42, 0);                  // black body
+    add(new THREE.TorusGeometry(0.405, 0.055, 10, 32), 0xff3b1f, 0, 0.42, 0).rotation.x = Math.PI / 2; // red warning band
+    add(new THREE.SphereGeometry(0.09, 10, 8), 0x8a8a9a, 0.17, 0.62, 0.26);              // shine
+    add(new THREE.CylinderGeometry(0.11, 0.14, 0.14, 12), 0x8a8a96, 0, 0.84, 0);         // cap
+    add(new THREE.CylinderGeometry(0.03, 0.03, 0.26, 6), 0xe8d8a0, 0.06, 1.0, 0).rotation.z = -0.4; // fuse
+    add(new THREE.SphereGeometry(0.1, 10, 8), 0xffd21a, 0.14, 1.13, 0);                  // spark
   });
   return {
     boxes, boxMesh, pads, padTex,
@@ -4002,7 +4004,7 @@ function useItem(k) {
     sound.blueLaunch();
   } else if (item === 'banana' || item === 'bomb') {
     const pos = new THREE.Vector3(b.position.x - fx * 2.5, 0, b.position.z - fz * 2.5); // clear of the banana
-    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)); // on the road, even mid-air
+    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.14; // on the road, even mid-air; lifted so it doesn't look sunk into the asphalt
     drops.push({ mesh: spawnModel(item, pos), pos, owner: k, age: 0, kind: item });
     if (k.isPlayer || near(k, 25)) sound.drop();
   } else {
@@ -4195,6 +4197,7 @@ function startHit(k, by, what, H, ctx) {
   }
   k.launch = L;
   k.spin = k.spinTotal = H.time;
+  if (H.eject) startEject(k, H);
 }
 
 const smokeP = new THREE.Vector3(), smokeV = new THREE.Vector3();
@@ -4246,17 +4249,100 @@ function blastVictims(owner, at, centre, radius, what) {
   teleEvent('blast', owner, { what, at: karts.indexOf(at), caught, r: radius });
 }
 
+/** The bomb's explosion (build 65.4): a white-hot flash, a big rolling orange fireball, sparks, and black smoke rising after it. */
+function bombFire(pos) {
+  const y = pos.y + 0.7, R = Math.random;
+  const put = (spread, up, cols, o) => {
+    emitP.set(pos.x + (R() - 0.5) * 0.6, y + (R() - 0.5) * 0.4, pos.z + (R() - 0.5) * 0.6);
+    const a = R() * Math.PI * 2, e = (R() - 0.3) * 1.2, h = Math.cos(e);
+    emitV.set(Math.cos(a) * h * spread * (0.4 + R() * 0.6), Math.sin(e) * spread * 0.7 + up * (0.5 + R() * 0.5), Math.sin(a) * h * spread * (0.4 + R() * 0.6));
+    fx.emit(emitP, emitV, cols[(R() * cols.length) | 0], o);
+  };
+  for (let i = 0; i < 8; i++) put(2, 1, [[1, 1, 0.85]], { life: 0.28, size: 5, grow: 2.2, alpha: 1 });                       // flash
+  for (let i = 0; i < 60; i++) put(9, 3, [[1, 0.75, 0.15], [1, 0.45, 0.08], [0.95, 0.25, 0.05]], { life: 0.55 + R() * 0.55, size: 2.4 + R() * 1.6, grow: 1.1, alpha: 0.95 }); // fireball
+  for (let i = 0; i < 26; i++) put(15, 8, [[1, 0.9, 0.4], [1, 0.6, 0.2]], { life: 0.5 + R() * 0.5, size: 0.45, grow: 0.2, alpha: 1 }); // sparks
+  for (let i = 0; i < 22; i++) put(4, 7, [[0.14, 0.14, 0.16], [0.28, 0.26, 0.26]], { life: 1.2 + R() * 0.6, size: 2.2, grow: 2.2, alpha: 0.7 }); // smoke
+}
+
 /** The bomb goes off where a kart ran into it (or a shell hit it). */
 function bombBlast(hit, owner, pos) {
   blastVictims(owner, hit, pos, CFG.items.bombBlast, 'bomb');
-  for (let i = 0; i < 46; i++) {
-    const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 8;
-    emitP.set(pos.x, pos.y + 0.6, pos.z);
-    emitV.set(Math.cos(a) * sp, 2 + Math.random() * 7, Math.sin(a) * sp);
-    fx.emit(emitP, emitV, i % 3 === 0 ? [0.2, 0.2, 0.22] : i % 3 === 1 ? [1, 0.55, 0.12] : [1, 0.9, 0.3], { life: 0.9, size: 0.8, grow: 1.6, alpha: 0.9 });
-  }
+  bombFire(pos);
   const dist = Math.hypot(pos.x - kart.body.position.x, pos.z - kart.body.position.z);
   if (dist < 80) sound.explosion(clamp(1.2 - dist / 80, 0.3, 1));
+}
+
+// ---------- Ejected driver (bomb hit, build 65.3) ----------
+// The driver is lifted out of the kart as its own object (reparented to the scene, ballistic arc + spin, a bounce or two),
+// then flies back into the seat. The player's camera follows the driver meanwhile (camFocus).
+const EJECT_G = 22;
+const camFocus = new THREE.Vector3();
+const ejQ = new THREE.Quaternion(), ejV = new THREE.Vector3(), ejSeat = new THREE.Vector3(), ejSeatQ = new THREE.Quaternion(), ejS = new THREE.Vector3();
+
+function startEject(k, H) {
+  const R = k.rider?.mesh, E = H.eject;
+  if (!R || k.eject) return;
+  R.updateWorldMatrix(true, false);
+  const e = { t: 0, dur: H.time, ret: H.time - 0.7, pos: new THREE.Vector3(), q: new THREE.Quaternion(), vel: new THREE.Vector3(), av: new THREE.Vector3(),
+    lp: R.position.clone(), lq: R.quaternion.clone(), ls: R.scale.clone(), ground: 0, bounces: 0, back: null };
+  R.getWorldPosition(e.pos); R.getWorldQuaternion(e.q); R.getWorldScale(ejS);
+  const lat = clamp(lateral(k.trackIdx, e.pos), -2, 2);
+  e.ground = surfaceY(k.trackIdx, lat) + Math.max(0.4, e.pos.y - surfaceY(k.trackIdx, lat)); // rests at its seated height
+  const v = k.body.velocity, a = Math.random() * Math.PI * 2;
+  e.vel.set(v.x * 0.5 + Math.cos(a) * E.side, Math.sqrt(2 * EJECT_G * E.up), v.z * 0.5 + Math.sin(a) * E.side);
+  e.av.set((Math.random() - 0.5) * E.spin, (Math.random() - 0.5) * E.spin, (Math.random() - 0.5) * E.spin);
+  scene.add(R);
+  R.position.copy(e.pos); R.quaternion.copy(e.q); R.scale.copy(ejS);
+  k.eject = e;
+  teleEvent('eject', k, { up: E.up });
+}
+
+function endEject(k) {
+  const e = k.eject, R = k.rider?.mesh;
+  k.eject = null;
+  if (!R) return;
+  k.group.add(R);
+  R.position.copy(e.lp); R.quaternion.copy(e.lq); R.scale.copy(e.ls);
+  if (near(k, 70)) for (let i = 0; i < 10; i++) { // a puff where the driver drops back in
+    emitP.copy(k.group.position); emitP.y += 0.5;
+    emitV.set((Math.random() - 0.5) * 4, 1 + Math.random() * 2, (Math.random() - 0.5) * 4);
+    fx.emit(emitP, emitV, [0.9, 0.9, 0.9], { life: 0.5, size: 0.5, grow: 1.4, alpha: 0.6 });
+  }
+}
+
+/** Per frame: the ejected drivers (arc, bounce, return to the seat). */
+function updateEject(dt) {
+  for (const k of karts) {
+    const e = k.eject;
+    if (!e) continue;
+    const R = k.rider.mesh;
+    if (!k.launch || k.launch.what !== 'bomb' || e.t >= e.dur) { endEject(k); continue; }
+    e.t += dt;
+    if (e.t < e.ret) {
+      e.vel.y -= EJECT_G * dt;
+      e.pos.addScaledVector(e.vel, dt);
+      if (e.pos.y < e.ground && e.vel.y < 0) { // a bounce, losing energy
+        e.pos.y = e.ground; e.vel.y *= -0.5; e.vel.x *= 0.6; e.vel.z *= 0.6; e.av.multiplyScalar(0.6); e.bounces++;
+        if (e.vel.y < 2) e.vel.y = 0;
+      }
+      ejV.copy(e.av).multiplyScalar(dt);
+      const ang = ejV.length();
+      if (ang > 1e-5) e.q.premultiply(ejQ.setFromAxisAngle(ejV.normalize(), ang));
+      R.position.copy(e.pos); R.quaternion.copy(e.q);
+    } else { // flying back into the seat
+      if (!e.back) e.back = { p: e.pos.clone(), q: e.q.clone() };
+      const u = clamp((e.t - e.ret) / (e.dur - e.ret), 0, 1), m = u * u * (3 - 2 * u);
+      ejSeat.copy(e.lp).applyMatrix4(k.group.matrixWorld);
+      k.group.getWorldQuaternion(ejSeatQ);
+      ejSeatQ.multiply(e.lq);
+      e.pos.copy(e.back.p).lerp(ejSeat, m).y += Math.sin(u * Math.PI) * 1.2;
+      e.q.copy(e.back.q).slerp(ejSeatQ, m);
+      R.position.copy(e.pos); R.quaternion.copy(e.q);
+    }
+    if (k.isPlayer) { // the camera follows the driver
+      camFocus.lerp(e.pos, 1 - Math.exp(-dt * 30)); // nearly rigid: the driver moves fast
+    }
+  }
 }
 
 /** Burning karts (bomb): flames and black smoke for `k.burn` seconds, whatever else the kart is doing. */
@@ -5159,7 +5245,9 @@ function updateCamera(dt) {
   const b = kart.body;
   const fwd = b.interpolatedQuaternion.vmult(LOCAL_FWD, tmpVec);
   const yaw = Math.atan2(fwd.x, fwd.z);
-  const bp = b.interpolatedPosition; // match the drawn kart (see syncMeshes)
+  let bp = b.interpolatedPosition; // match the drawn kart (see syncMeshes)
+  if (kart.eject) bp = camFocus; // bomb hit: follow the flying driver
+  else camFocus.copy(bp);
   const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
 
   if (state.phase === 'menu') lobbyCamera(dt, bp, yaw);
@@ -5278,10 +5366,11 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
     camState.pos.copy(desiredCam);
     camState.snap = false;
   } else {
-    camState.pos.lerp(desiredCam, 1 - Math.exp(-dt * C.posLag));
+    camState.pos.lerp(desiredCam, 1 - Math.exp(-dt * (kart.eject ? 16 : C.posLag)));
     // a smooth follow, but never trailing far behind at speed (the old lag added ~4.5 m at top speed)
     const lag = camState.pos.distanceTo(desiredCam);
-    if (lag > C.maxLag) camState.pos.lerp(desiredCam, 1 - C.maxLag / lag);
+    const maxLag = kart.eject ? 0.12 : C.maxLag;
+    if (lag > maxLag) camState.pos.lerp(desiredCam, 1 - maxLag / lag);
   }
   camState.pos.y = Math.max(camState.pos.y, track.samples[kart.trackIdx].y + 1.0);
   camera.position.copy(camState.pos);
@@ -5483,6 +5572,7 @@ function render(dt) {
   updateCamera(dt);
   updateEffects(dt);
   updateBurn(dt);
+  updateEject(dt);
   fx.update(dt);
   updateItemVisuals(dt);
   theme.update(dt);

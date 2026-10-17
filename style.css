@@ -1346,3 +1346,4 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #app.vertical #kbd { order: 3; width: 100%; max-width: 380px; }
 #app.vertical #kbd .kbd-key { height: 50px; }
 #app.vertical #btn-hello { order: 4; align-self: center; width: 100%; max-width: 320px; height: 56px; border-radius: 28px; }
+

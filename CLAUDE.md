@@ -139,6 +139,7 @@ check touch and feel.
 
 ## Open items (details in docs/history.md)
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
+- **Hit motions all approved (2026-10-17, build 65.5, uncommitted):** bomb ejects the driver, `bombFire` explosion; see history.md. Bones/burn/skeleton gore and the age banner still owed.
 - **State 2026-10-17 (build 65, VERSION v65):** vertical is the default view; vertical menus, track preview, green-shell aim done (history.md 'Builds 64.40-65'); committed and pushed. Menus need phone feedback.
 - **Open: wall stalls on the canyon** (banks, whoops, post-bridge idx 870-990). Next step: read the `railpost` events in the user's next canyon race (history.md says how). The user tests on the phone: don't run headless physics unless asked; taller walls are ruled out.
 - Next options: check the mushroom-at-wall trick on the Test Lab; the user's own buttons races; rail/steering options.
