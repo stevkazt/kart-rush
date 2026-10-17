@@ -1121,3 +1121,4 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #debug-card { max-height: calc(var(--app-h) - 118px); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 #debug-screen .pick-title { margin-bottom: 4px; }
 #debug-card .setting-row { margin-bottom: 4px; }
+#btn-debug-start[hidden] { display: none; }

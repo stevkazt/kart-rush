@@ -2494,7 +2494,7 @@ function initControls() {
   onTap($('btn-pick-done'), () => { sound.click(); showMenu(); });
   buildKeyboard();
   onTap($('hello-edit'), () => { sound.click(); showHello(); });
-  onTap($('btn-start'), startRace);
+  onTap($('btn-start'), () => { dbgClear(); startRace(); }); // the normal start is never a debug race
   onTap($('btn-again'), startRace);
   onTap($('btn-menu'), () => { sound.click(); showMenu(); });
   $('btn-pause').addEventListener('pointerdown', (e) => { e.preventDefault(); pauseGame(); });
@@ -3239,8 +3239,9 @@ setDifficulty(difficulty, false);
 // Menu / pause -> DEBUG. Pick the track (menu only), park the rivals (invisible, no collisions), a start spot
 // (applied at the start of a race, or at once when paused), an item you always carry (refilled after each use)
 // and one-shot effects. Races played with any of it on are not sent to the telemetry log.
-const dbg = { parked: false, spot: null, item: null };
-const dbgActive = () => DEBUG && (track.id === 'lab' || dbg.parked || dbg.spot || dbg.item);
+const dbg = { on: false, parked: false, spot: null, item: null }; // `on`: this race was started from the panel (or changed from pause)
+const dbgActive = () => DEBUG && (track.id === 'lab' || dbg.on);
+function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, item: null }); }
 let dbgFrom = null;
 function dbgSpots() {
   const def = CFG.tracks[track.id], N = track.N;
@@ -3266,17 +3267,18 @@ function dbgGive(kind) {
   if (kind && (state.phase === 'race' || state.phase === 'countdown')) { kart.item = kind; kart.itemRoll = 0; kart.itemCount = kind === 'triple' ? 3 : 1; }
 }
 function dbgApplyStart() { // right after the grid is set up for a race
+  if (!dbg.on) return;
   if (dbg.spot) resetKart(kart, dbg.spot.idx, 0);
   if (dbg.item) dbgGive(dbg.item);
 }
 function dbgTick() { // every frame
   for (const k of karts) {
     if (k.isPlayer) continue;
-    const park = DEBUG && dbg.parked;
+    const park = DEBUG && dbg.on && dbg.parked;
     if (k.group.visible === park) k.group.visible = !park;
     if (k.body.collisionResponse === park) k.body.collisionResponse = !park;
   }
-  if (dbg.item && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) { kart.item = dbg.item; kart.itemRoll = 0; kart.itemCount = dbg.item === 'triple' ? 3 : 1; }
+  if (dbg.on && dbg.item && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) { kart.item = dbg.item; kart.itemRoll = 0; kart.itemCount = dbg.item === 'triple' ? 3 : 1; }
 }
 function dbgRender() {
   const card = $('debug-card'), rows = [];
@@ -3289,7 +3291,7 @@ function dbgRender() {
       const b = document.createElement('button');
       b.className = 'trk' + (o.on ? ' on' : '');
       b.textContent = o.text;
-      onTap(b, () => { sound.click(); o.pick(); dbgRender(); });
+      onTap(b, () => { sound.click(); o.pick(); if (racing) dbg.on = true; dbgRender(); });
       box.append(b);
     }
     rows.push(el);
@@ -3307,6 +3309,7 @@ function dbgRender() {
     { text: 'Reset lap time', on: false, pick: () => { state.lapStart = state.raceTime; } },
   ]);
   card.replaceChildren(...rows);
+  $('btn-debug-start').hidden = racing;
 }
 function showDebug() {
   dbgFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
@@ -3316,6 +3319,7 @@ function showDebug() {
 if (DEBUG) {
   document.querySelectorAll('.btn-debug').forEach((b) => { b.hidden = false; onTap(b, () => { sound.click(); showDebug(); }); });
   onTap($('btn-debug-back'), () => { sound.click(); showOverlay(dbgFrom); });
+  onTap($('btn-debug-start'), () => { sound.click(); dbg.on = true; startRace(); });
 }
 
 // Screen flip (Settings -> SCREEN): under portrait lock the game is turned 90deg clockwise; flipped turns it
@@ -4242,7 +4246,7 @@ const tmpFwd = new CANNON.Vec3();
 function stepPhysics(dt) {
   const canDrive = state.phase === 'race' || state.phase === 'finished';
   for (const k of karts) {
-    if (k.ai && DEBUG && dbg.parked) {
+    if (k.ai && DEBUG && dbg.on && dbg.parked) {
       Object.assign(k.ctl, { steer: 0, gas: false, brake: true }); // parked rival (debug panel)
     } else if (k.ai) {
       updateAI(k, dt, canDrive);
