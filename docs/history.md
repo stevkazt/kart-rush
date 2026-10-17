@@ -292,6 +292,8 @@ User asked for game-experience tweaks after the build 39 race analysis (3 races 
   (125 km/h hits now keep ~120). Walls: one upright box per 4 samples, 0.6 thick x 1.2 high, sunk 0.5 m, 0.3 m overlap each end (`buildWalls`); on a bank the kart is tilted 12 deg against an upright wall.
   User ruled out taller walls. Build 64.4 adds `railpost` events (into = how head-on, vin/along/want/v0 km/h, v1 = speed 0.35 s later, fwd): READ THESE FIRST in the next canyon race
   to see whether the glide runs and what kills the speed afterwards (re-contact? solver? something at idx 870-990, maybe bridge colliders). Unproven idea: tilted kart vs upright wall on banks.
+- Railpost result (64.5): the glide always runs (v0 ~80-100 km/h); the kart dies when its nose still faces the rail, because the tyre grip eats the sideways glide in 0.35 s.
+  64.6 snapped the nose 85% along the rail on hard hits. The user rejected it ("bounce back feels weird") and it was reverted in 64.7. The user's view: stalls mostly happen when they keep pushing into the wall, so it's acceptable. Debug races are now logged (`debug: true`).
 - Title screen shows `build <VERSION_N>` (e.g. 64.4, in main.js): main number = sw.js VERSION, sub-build bumped on every Claude change; race logs carry it.
 - DEBUG (`DEBUG` const; on in the hosted copy too): panel opened from the menu chip / pause button. Debug options apply only to a race started with START DEBUG RACE, or changed from pause
   (`dbg.on`); the normal START RACE calls `dbgClear()`. Options: TRACK (menu only), RIVALS Race/Parked, LAPS 1/3 (`CFG.laps`), START AT / GO TO spots, ITEMS (multi-select, carried in rotation), NOW (boost, spin).

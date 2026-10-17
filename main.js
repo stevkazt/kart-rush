@@ -353,7 +353,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '64.4'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '64.7'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -3364,10 +3364,10 @@ function setVolume(bus, v, save = true) {
 // instead of only the headless autopilot. Never sent from GitHub Pages (or any https host).
 const tele = { on: location.protocol === 'http:', race: null, nextT: 0 };
 function teleStart() {
-  if (!tele.on || dbgActive()) return; // debug races stay out of the race log
+  if (!tele.on) return; // debug races are logged too, flagged debug: true
   tele.nextT = 0;
   tele.race = {
-    build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id,
+    build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id, ...(dbgActive() && { debug: true }),
     steering: savedSteering(), laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
     karts: karts.map((k) => ({ name: k.name, ...(k.ai && { style: k.style, role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
       lineUse: +k.ai.lineUse.toFixed(2) }) })),
