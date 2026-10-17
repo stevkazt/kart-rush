@@ -139,7 +139,9 @@ check touch and feel.
 
 ## Open items (details in docs/history.md)
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
-- **Builds 40-44 are uncommitted** (instant boosts, ghost look fix, rocket start, star passes through karts; see "Builds 40-44" in docs/history.md). Next: the user's own buttons races, then rail/steering options.
+- **State 2026-10-17 (build 64.4):** everything committed; pushed to origin up to 9c2f444 (build 62); **64.1-64.4 are NOT pushed** (ask the user). See "Builds 61-64.4" in docs/history.md.
+- **Open: wall stalls on the canyon** (banks, whoops, post-bridge idx 870-990). Next step: read the `railpost` events in the user's next canyon race (history.md says how). The user tests on the phone: don't run headless physics unless asked; taller walls are ruled out.
+- Next options: check the mushroom-at-wall trick on the Test Lab; the user's own buttons races; rail/steering options.
 - Builds 37-39 are committed locally (HEAD cd8f031), **not pushed**, and not all phone-tested: 8 characters, Hex trickster AI, in-game keyboard, screen flip, settings fix, Rex (veteran look: only the visor flicker kept, scars removed on request), Pip chibi, Koda goggles.
 - Analyse the user's next 4-5 real races (checklist: "What to check" in history.md); watch ghost-on events, boxes per race, hits on the player.
 - Ideas awaiting the user's pick: throw items forwards/backwards, remove side rails, personalities that change (track specialists, rivalry, cup), bully items, landing after the canyon jump.

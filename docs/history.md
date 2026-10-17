@@ -281,3 +281,22 @@ User asked for game-experience tweaks after the build 39 race analysis (3 races 
   (invisible, no collisions), START AT / GO TO spots, an item you always carry, Boost / Spin out now. Debug races skip telemetry.
 - Test Lab track (`debug: true`, 669 m flat): south straight with bump + pads, banked sweeper, ice north straight, R13 corner,
   R12 S-chicane, R14 + R20 corners. `spots` = control point indices. Offline check: `dev/track-check.py`.
+
+## Builds 61-64.4 (2026-10-17): rails on the canyon, debug options, version label
+- Rail code (all in `applyStabilityAssist`, tuning in `CFG.kart`): `railPush` 2 (solver may push a sunk kart out at up to 2 m/s, the rest of the rebound is cut every
+  step from `world.contacts`), `railTurn` 8 (nose-into-rail kart swung along it), `railClimb` 1 (upward speed in rail contact capped at road slope + 1),
+  `railFree` 7 / `railFreeBelow` 3 (player pinned on a rail with gas held is nudged along the road), `railGlide` 0.6 (a hit keeps 60% of the speed that went into the
+  rail as speed along it, towards where the kart points; head-on hits used to leave ~0). Stuck rescue counts a pedal released <1.5 s ago.
+- Canyon race analysis (builds 43/44/64.3): hits are logged with `idx`, `up` (tilt), `vy`. Most hits are level (up ~1, vy <1.5), so climbing is rare (only whoops 438-444, jump 1088).
+  Stalls (speed -> ~0 within 1 s) cluster at **bank 1 (idx ~117-153), bank 2 (~1160-1179), whoops (~459) and the post-bridge descent (idx 870-990)**; glide fixed most other hits
+  (125 km/h hits now keep ~120). Walls: one upright box per 4 samples, 0.6 thick x 1.2 high, sunk 0.5 m, 0.3 m overlap each end (`buildWalls`); on a bank the kart is tilted 12 deg against an upright wall.
+  User ruled out taller walls. Build 64.4 adds `railpost` events (into = how head-on, vin/along/want/v0 km/h, v1 = speed 0.35 s later, fwd): READ THESE FIRST in the next canyon race
+  to see whether the glide runs and what kills the speed afterwards (re-contact? solver? something at idx 870-990, maybe bridge colliders). Unproven idea: tilted kart vs upright wall on banks.
+- Title screen shows `build <VERSION_N>` (e.g. 64.4, in main.js): main number = sw.js VERSION, sub-build bumped on every Claude change; race logs carry it.
+- DEBUG (`DEBUG` const; on in the hosted copy too): panel opened from the menu chip / pause button. Debug options apply only to a race started with START DEBUG RACE, or changed from pause
+  (`dbg.on`); the normal START RACE calls `dbgClear()`. Options: TRACK (menu only), RIVALS Race/Parked, LAPS 1/3 (`CFG.laps`), START AT / GO TO spots, ITEMS (multi-select, carried in rotation), NOW (boost, spin).
+  Debug races and the Test Lab skip telemetry start and never set records. Scrolling needs the `#debug-card` exception in the global touchmove blocker.
+- Speed blur = real post pass (see Build 60), strengths: cannon 1, boost .55, star .3, rocket start .3, times a speed factor (`fxTo` in updateCamera).
+- Pushed up to 9c2f444 (build 62). **Unpushed:** 64.1-64.4 (rail glide/no-climb/unstick, version label, debug laps + multi-items, railpost diagnostics).
+- Lesson: `node --check main.js` misses module syntax errors; use `node --input-type=module --check < main.js`. Don't run headless physics tests unless asked (the user tests on the phone).
+- Kristian's list (all done): softer rails, boost feedback (blur + FOV), rubber band (reverse: AIs far ahead ease off; Difficulty Easy/Medium/Hard in Settings, `DIFF`). Unchecked: using a mushroom against a wall.
