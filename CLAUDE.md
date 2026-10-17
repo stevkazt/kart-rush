@@ -25,8 +25,9 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 
 ## Files
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
-- Overlay = `#menu-screen` (title, START, SETTINGS, and three pick rows TRACK / DRIVER / KART that open
-  `#pick-screen`; the how-to-play card was removed in build 31) and `#results-screen` (place, time, best lap, standings with gaps,
+- Overlay = `#menu-screen` (the lobby, build 32: header chips "Hi, <name>" + SETTINGS; logo, race pill, START on
+  the left; open middle; RACE SETUP card on the right = track card with map + record footer, then DRIVER | PAINT
+  tiles, each opening `#pick-screen`) and `#results-screen` (place, time, best lap, standings with gaps,
   RACE AGAIN / MENU, confetti on a win). `showMenu()` / `showResults()`; `#app.overlay-on` hides HUD + controls.
   Records in localStorage `kartrush.records` `{race, lap}`. Engines duck (`soundMix.duck`) behind menus.
   `#pause-screen` (RESUME / RESTART / MENU): `pauseGame()` from the pause button, Esc/P, or the app going to the
@@ -88,6 +89,28 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   #app from `screen.*`. Now testing status-bar-style `black` instead of `black-translucent` (the page starts below
   the status bar). Real landscape (rotation unlocked) never had the bug. The title screen shows `build N · host · app` (bump N with `sw.js` VERSION): if the
   phone shows an old N, it is running a stored copy (the home-screen app once never contacted the server at all).
+- **Lobby camera (build 32):** in the menu phase `updateCamera` runs `lobbyCamera` (slow 3/4 turntable of the
+  player's kart from the outside of the grid, fov 42) instead of `chaseCamera`; `camera.setViewOffset` shifts the
+  view by `lobbyShift` (from `layoutLobby`: middle of the gap between `.lobby-cta` and `.setup`) so the kart sits
+  in the open middle. `chaseCamera` clears the offset and resets fov 66 on the first race frame. This is where
+  the planned 3D characters get shown off (they ride in the kart). `#overlay.lobby-on` = lighter backdrop.
+  Narrow phones: `@container` query on `.lobby-main` (works when #app is rotated).
+- **Icons (build 32):** `ui-icons.js` `icon(name)` returns inline SVG (no emoji, no files): biomes (pine,
+  cactus, snowflake; `CFG.tracks[].icon`), gear, pencil, speaker, muted, joystick, arrows, items (mushroom,
+  banana, shield, star: the item button's innerHTML via `SVG_ITEMS`; shells + bullet stay CSS-drawn), and role
+  icons (all-rounder, ace, defender, wild, bully, steady: unused for now, kept for a possible rivals display).
+  `<i data-icon>` in HTML filled by `fillIcons()` at boot. No emoji left in the UI.
+- **Driver looks (build 32):** `CFG.racers[].look` = helmet, visor, helmet mark + markColor: the driver's
+  identity whatever the paint. 3D helmet + visor take it (paint roles 'helmet' / 'visor'; `kartColors(colors,
+  look)` = the 5-colour list `paintKart` takes). 2D avatar `driverSvg(r)` (head + shoulders, mark = stripe /
+  twin / moon / bolt / fin / dots) on the driver tile and picker. Keep using `look` for the 3D characters.
+  **The player's driver is looks only** (user: role labels on your own driver "will create confusion thinking I
+  can be a bully but my character behaves the same"): the picker and DRIVER tile show avatar, name and a
+  flavour `tag` ("The shark"), never a role or gameplay blurb. No stat bars either. Personalities belong to the
+  AI (`ai.styles`; the replacement AI takes the picked driver's, see castDrivers).
+  Track maps (`trackShape`): checkered start line + yellow chevron for the direction. Paint cards: spotlight +
+  floor so dark paints read; default paint is called "Team" (the driver's own colours).
+  Settings: title + groups in a card; ALL SOUND Off dims the volume row (`#volume-row.dim`).
 - **Title picks (build 31):** `openPicker('track' | 'driver' | 'kart')` fills `#pick-list` with cards in one
   horizontally swipeable strip (`.pick-grid`, tracks 1 row, drivers / paints 2 rows; edges fade when it
   overflows), so new tracks / drivers just extend it. A tap picks at once; DONE -> `showMenu()`. `onTap` ignores a
@@ -95,8 +118,10 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   drawn from the control points (`trackShape`, cached; length), theme tint (`data-theme`), record.
   **Driver:** `CFG.racers` = 6 named drivers (Nova, the old red "YOU" kart, has the default AI style), each with
   `role` + `blurb` for the card. `karts[0]` is still the player; `castDrivers()` makes it the picked driver and
-  gives the other five the remaining names + colours (AI personality follows the name in `placeOnGrid`). Standings
-  still say YOU. **Kart:** `CFG.paints` = body + accent schemes (`Team` = the driver's own; suit stays the
+  gives the other five the remaining names + colours. **The AI field's personalities never change** (user: "the
+  difficulty shouldn't change based on what racer I pick"): the spare driver (`CFG.racers[0]`, Nova) drives with
+  the picked driver's style (`k.style`, used by `newAI` in `placeOnGrid`; telemetry `style`). Pick Rex = Nova
+  drives as the ace. AI logic reads only the style, never names. Standings show the player's name. **Kart:** `CFG.paints` = body + accent schemes (`Team` = the driver's own; suit stays the
   driver's). Looks only. `paintKart(k, colors)` recolours the baked mesh in place: `buildKart` tags parts with a
   role ('body' / 'accent' / 'driver', `PAINT_ROLES`) and `bakeMeshes` keeps it per vertex
   (`geometry.userData.paint`). Saved: `kartrush.driver`, `kartrush.paint`; telemetry has `player: {driver, paint}`
@@ -403,6 +428,13 @@ shells keep hitting the player after they cross the line (ignore finished karts 
 **Build 31 (2026-10-17, committed locally df1a84f, NOT pushed):** Frost Peak far-peak flicker fixed (snow cap was coplanar with the
 rock cone: z-fighting; user confirmed). GUI: title picks (track / driver / kart paint), how-to-play removed, mute
 moved into Settings. Not tried on the phone yet.
+
+**Build 32 (2026-10-17, committed locally, NOT pushed):** lobby reorganised (see Files: lobby camera,
+icons, driver looks), drivers looks-only with flavour tags, item button icons as SVG, and the replacement AI
+takes the picked driver's personality (castDrivers). Checked headless at 667x375, 844x390, 932x430; not tried
+on the phone. Ask the user about: the turntable kart in the lobby (nice or distracting?), fit around the
+notch, the driver tag lines (placeholders), what the age on the hello screen is for. Open idea not chosen: a
+Rivals row (the 5 AIs with role icons) on the setup card.
 
 **Note (user 2026-10-17): remove the side rails.** They make every track look the same. Not started; the rails
 are also the walls karts collide with (+ rail reset, `wallHitLoss`, AI recovery, jump `jumpWallHeight`), so

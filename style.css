@@ -285,8 +285,8 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
   animation: item-ready 0.8s ease-in-out infinite alternate;
 }
 @keyframes item-ready { to { box-shadow: 0 0 18px 4px rgba(255, 225, 74, 0.8), 0 6px 0 rgba(0, 0, 0, 0.35); } }
-#btn-item[data-item="mushroom"]::before { content: "\1F344"; }
-#btn-item[data-item="banana"]::before { content: "\1F34C"; }
+/* mushroom / banana / shield / star / triple: inline SVG set by updateItemVisuals (ui-icons.js) */
+#btn-item .ico { width: 1.3em; height: 1.3em; pointer-events: none; filter: drop-shadow(0 0.04em 0.05em rgba(0, 0, 0, 0.55)); }
 #btn-item[data-item="green"]::before,
 #btn-item[data-item="red"]::before {
   content: "";
@@ -306,9 +306,6 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
   background: radial-gradient(circle at 35% 30%, #b8d0ff, #1747c9);
   box-shadow: -0.3em -0.15em 0 -0.12em #fff, 0.3em -0.15em 0 -0.12em #fff; /* little wings */
 }
-#btn-item[data-item="shield"]::before { content: "\1F6E1\FE0F"; }
-#btn-item[data-item="star"]::before { content: "\2B50"; }
-#btn-item[data-item="triple"]::before { content: "\1F344"; }
 #btn-item[data-item="bullet"]::before {
   content: "";
   width: 0.95em;
@@ -696,46 +693,143 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 }
 #stick-knob.held { transition: none; filter: brightness(1.2); }
 
-/* ============ Title screen picks + picker screen ============ */
-.picks { display: flex; flex-direction: column; gap: clamp(6px, calc(var(--app-h) * 0.02), 10px); }
-.pick-row {
-  display: flex;
+/* ============ Lobby (title screen) ============
+ * Header chips on top, logo + START on the left, the middle left open for the 3D kart (lobby camera),
+ * RACE SETUP on the right. */
+#overlay.lobby-on {
+  background:
+    linear-gradient(90deg, rgba(14, 12, 40, 0.88) 0%, rgba(20, 16, 60, 0.45) 30%, rgba(20, 16, 60, 0.05) 45%,
+      rgba(20, 16, 60, 0.05) 55%, rgba(14, 12, 40, 0.55) 66%, rgba(14, 12, 40, 0.8) 100%);
+}
+.screen.lobby {
+  position: relative;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  max-width: none;
+  height: 100%;
+}
+.lobby-top { display: flex; justify-content: space-between; align-items: center; flex: 0 0 auto; }
+.chip {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: clamp(5px, calc(var(--app-h) * 0.018), 9px) 12px clamp(5px, calc(var(--app-h) * 0.018), 9px) 8px;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: 16px;
+  background: rgba(10, 12, 36, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.chip[hidden] { display: none; }
+.chip:active { transform: translateY(2px); }
+.chip .ico { width: 15px; height: 15px; }
+#hello-edit .ico { color: #ffe14a; }
+.lobby-top .btn-settings { margin: 0 0 0 auto; }
+
+.lobby-main { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; gap: 12px; }
+.lobby-cta { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.lobby-stage { flex: 1 1 auto; align-self: stretch; min-width: 60px; }
+.race-pill {
+  margin: clamp(8px, calc(var(--app-h) * 0.03), 14px) 0 clamp(12px, calc(var(--app-h) * 0.05), 22px);
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.btn-start { font-size: clamp(20px, calc(var(--app-h) * 0.065), 26px); padding: 14px 34px; }
+#overlay .lobby h1 { font-size: clamp(38px, calc(var(--app-h) * 0.15), 68px); }
+
+.screen .setup {
+  flex: 0 0 auto;
+  width: clamp(250px, 36vw, 330px);
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, calc(var(--app-h) * 0.02), 9px);
+  padding: 10px 12px 12px !important;
+}
+.setup-title { font-size: 10px; letter-spacing: 3px; font-weight: 800; opacity: 0.55; }
+.setup button { cursor: pointer; text-align: left; }
+.setup-track {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 9px;
+  padding: 7px 8px 0;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.07);
   border: 2px solid rgba(255, 255, 255, 0.1);
-  text-align: left;
-  cursor: pointer;
+  overflow: hidden;
 }
-.pick-row:active { transform: translateY(2px); background: rgba(255, 255, 255, 0.14); }
+.setup-track .pick-art { width: clamp(66px, calc(var(--app-h) * 0.21), 92px); height: clamp(42px, calc(var(--app-h) * 0.135), 59px); }
+.setup-record {
+  grid-column: 1 / -1;
+  margin: 7px -8px 0;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffe14a;
+}
+.setup-record span { color: #fff; opacity: 0.55; font-size: 9px; letter-spacing: 1.5px; margin: 0 3px 0 6px; }
+.setup-record span:first-child { margin-left: 0; }
+.setup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(5px, calc(var(--app-h) * 0.02), 9px); }
+.setup-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 6px 7px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  text-align: center !important;
+  min-width: 0;
+}
+.setup-track:active, .setup-tile:active { transform: translateY(2px); background: rgba(255, 255, 255, 0.14); }
+.setup-tile small { font-size: 9px; letter-spacing: 2px; font-weight: 800; opacity: 0.55; }
+.setup-tile .pick-art { width: auto; height: clamp(34px, calc(var(--app-h) * 0.12), 50px); background: radial-gradient(ellipse at 50% 60%, rgba(255, 255, 255, 0.16), transparent 70%); }
+.setup-tile .pick-art svg { width: auto; height: 100%; }
+.setup-tile b { font-size: 15px; font-weight: 900; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.setup-tile em { font-style: normal; }
+.driver-tag { font-size: 11px; font-weight: 700; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.swatches { display: flex; gap: 4px; }
+.swatches i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.7); }
+
+/* shared bits of the track row and the picker cards */
 .pick-art {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(64px, calc(var(--app-h) * 0.2), 88px);
-  height: clamp(42px, calc(var(--app-h) * 0.13), 56px);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 .pick-art svg { width: 100%; height: 100%; }
-.pick-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
-.pick-text small { font-size: 10px; letter-spacing: 2px; opacity: 0.55; font-weight: 800; }
-.pick-text b { font-size: clamp(15px, calc(var(--app-h) * 0.05), 19px); font-weight: 900; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.pick-text small { font-size: 9px; letter-spacing: 2px; opacity: 0.55; font-weight: 800; }
+.pick-text b { display: flex; align-items: center; gap: 5px; font-size: clamp(14px, calc(var(--app-h) * 0.042), 16px); font-weight: 900; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick-text b .ico { width: 16px; height: 16px; flex: 0 0 auto; }
 .pick-text em { font-size: 12px; font-style: normal; opacity: 0.7; white-space: nowrap; }
-.chev { font-size: 30px; line-height: 1; opacity: 0.5; font-weight: 300; }
+.chev { font-size: 24px; line-height: 1; opacity: 0.5; font-weight: 300; margin-left: -4px; }
+#build { left: 0; bottom: -6px; }
 
 /* Theme tint behind the track drawings */
-[data-theme="meadow"] .track-art, .pick-row[data-theme="meadow"] .pick-art { background: linear-gradient(160deg, #5fae4a, #2f7a35); }
-[data-theme="desert"] .track-art, .pick-row[data-theme="desert"] .pick-art { background: linear-gradient(160deg, #e8a95e, #b5652f); }
-[data-theme="snow"] .track-art, .pick-row[data-theme="snow"] .pick-art { background: linear-gradient(160deg, #d6e6f5, #8fb0cf); }
+[data-theme="meadow"] .track-art { background: linear-gradient(160deg, #5fae4a, #2f7a35); }
+[data-theme="desert"] .track-art { background: linear-gradient(160deg, #e8a95e, #b5652f); }
+[data-theme="snow"] .track-art { background: linear-gradient(160deg, #d6e6f5, #8fb0cf); }
 .track-art { border-radius: 10px; }
 .track-art .road-edge { fill: none; stroke: rgba(0, 0, 0, 0.35); stroke-width: 6; stroke-linejoin: round; }
 .track-art .road { fill: none; stroke: #f4f4f4; stroke-width: 3; stroke-linejoin: round; }
-.track-art .start { fill: #ffe14a; stroke: #3a1d00; stroke-width: 1.2; }
+.track-art .dir { fill: none; stroke: #ffe14a; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 .screen-col { flex-direction: column; min-width: 0; gap: clamp(8px, calc(var(--app-h) * 0.035), 16px); }
 .pick-title {
@@ -785,15 +879,15 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 .pick-card:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3); }
 .pick-card.on { border-color: #ffe14a; background: rgba(60, 50, 20, 0.8); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3), 0 0 16px rgba(255, 225, 74, 0.35); }
 .pick-card b { font-size: 15px; font-weight: 900; font-style: italic; white-space: nowrap; }
-.pick-card b i { font-style: normal; margin-right: 5px; }
+.pick-card b { display: inline-flex; align-items: center; gap: 5px; }
+.pick-card b .ico { width: 17px; height: 17px; }
 .pick-card small { font-size: 11px; opacity: 0.7; white-space: nowrap; }
 .pick-card.on b { color: #ffe14a; }
 .pick-track .track-art { width: 100%; height: auto; aspect-ratio: 100 / 64; max-height: calc(var(--app-h) * 0.32); }
 .pick-driver .pick-card { flex-direction: row; gap: 10px; padding: 6px 12px 6px 8px; text-align: left; }
-.pick-driver .kart-art { flex: 0 0 auto; width: clamp(60px, calc(var(--app-h) * 0.19), 80px); height: auto; }
+.pick-driver .driver-art { flex: 0 0 auto; width: clamp(44px, calc(var(--app-h) * 0.14), 58px); height: auto; border-radius: 50%; background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.03) 70%); }
 .pick-driver span { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .pick-driver small { white-space: normal; }
-.pick-driver .role { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 800; opacity: 0.85; color: #5cc8ff; }
 .pick-kart .kart-art { width: clamp(64px, calc(var(--app-h) * 0.2), 92px); height: auto; }
 
 /* ============ Hello screen (name + age) ============ */
@@ -826,3 +920,31 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 .greeting[hidden] { display: none; }
 .greeting:active { transform: translateY(2px); }
 .greeting + .tagline { margin-top: 8px; }
+
+/* Paint picker: a soft spotlight + floor under each kart so dark paints (Midnight, Coal) stand out */
+.pick-kart .pick-card { background: radial-gradient(ellipse at 50% 42%, rgba(160, 180, 255, 0.22), rgba(10, 12, 36, 0.78) 68%); }
+.pick-kart .pick-card.on { background: radial-gradient(ellipse at 50% 42%, rgba(255, 225, 74, 0.28), rgba(60, 50, 20, 0.85) 68%); }
+
+/* ============ Settings: card + icons + master mute ============ */
+.settings-card { flex: 0 0 auto; max-width: none; padding: clamp(10px, calc(var(--app-h) * 0.035), 16px) 26px 4px !important; }
+.settings-card .setting-row { justify-content: center; }
+.trk .ico { width: 15px; height: 15px; vertical-align: -3px; }
+#volume-row { transition: opacity 0.2s; }
+#volume-row.dim { opacity: 0.4; pointer-events: none; }
+.btn-small .ico { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
+.ico { display: inline-block; width: 1em; height: 1em; vertical-align: middle; }
+
+/* Narrow phones (iPhone SE landscape ~667 px): sized by the lobby's own width, so it also holds when #app is
+ * rotated (portrait), where the viewport width says nothing about the landscape layout */
+.lobby-main { container-type: inline-size; }
+@container (max-width: 700px) {
+  .lobby-stage { min-width: 0; flex-basis: 20px; }
+  .screen .setup { width: 262px; padding: 8px 10px 10px !important; }
+  .setup-track { column-gap: 7px; padding: 6px 6px 0; }
+  .setup-track .pick-art { width: 58px; height: 40px; }
+  .setup-record { margin: 6px -6px 0; padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+  .setup-record span { letter-spacing: 0.5px; margin: 0 2px 0 4px; }
+  .lobby-cta .race-pill { font-size: 11px; padding: 3px 10px; }
+  .btn-start { padding: 12px 26px; }
+  #overlay .lobby h1 { font-size: 46px; }
+}

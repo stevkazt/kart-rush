@@ -77,22 +77,35 @@
 
     <!-- ===== Menu / results overlay ===== -->
     <div id="overlay">
-      <!-- Title screen: start on the left, the three picks (each opens #pick-screen) on the right -->
-      <div id="menu-screen" class="screen">
-        <div class="side">
-          <h1>KART<span>RUSH</span></h1>
-          <button id="hello-edit" class="greeting" hidden></button>
-          <p class="tagline">3 laps &middot; 5 rivals &middot; you start last</p>
-          <button id="btn-start" class="btn-primary">START RACE</button>
-          <button class="btn-small btn-settings">&#9881;&#65039; SETTINGS</button>
-          <p class="record" id="menu-record" hidden></p>
+      <!-- Lobby: header (profile, settings), logo + START on the left, the open middle frames the player's kart
+           (lobby camera, updateCamera), RACE SETUP on the right (each card opens #pick-screen) -->
+      <div id="menu-screen" class="screen lobby">
+        <div class="lobby-top">
+          <button id="hello-edit" class="chip" hidden></button>
+          <button class="chip btn-settings"><i data-icon="gear"></i>SETTINGS</button>
+        </div>
+        <div class="lobby-main">
+          <div class="lobby-cta">
+            <h1>KART<span>RUSH</span></h1>
+            <p class="race-pill">3 laps &middot; 5 rivals &middot; you start last</p>
+            <button id="btn-start" class="btn-primary btn-start">START RACE</button>
+          </div>
+          <div class="lobby-stage"></div>
+          <div class="card setup">
+            <div class="setup-title">RACE SETUP</div>
+            <button class="setup-track" data-pick="track">
+              <span class="pick-art"></span>
+              <span class="pick-text"><small>TRACK</small><b></b><em></em></span>
+              <span class="chev">&#8250;</span>
+              <span class="setup-record" id="menu-record"></span>
+            </button>
+            <div class="setup-pair">
+              <button class="setup-tile" data-pick="driver"><small>DRIVER</small><span class="pick-art"></span><b></b><em class="driver-tag"></em></button>
+              <button class="setup-tile" data-pick="kart"><small>PAINT</small><span class="pick-art"></span><b></b><em class="swatches"></em></button>
+            </div>
+          </div>
         </div>
         <p id="build"></p>
-        <div class="card picks">
-          <button class="pick-row" data-pick="track"><span class="pick-art"></span><span class="pick-text"><small>TRACK</small><b></b><em></em></span><span class="chev">&#8250;</span></button>
-          <button class="pick-row" data-pick="driver"><span class="pick-art"></span><span class="pick-text"><small>DRIVER</small><b></b><em></em></span><span class="chev">&#8250;</span></button>
-          <button class="pick-row" data-pick="kart"><span class="pick-art"></span><span class="pick-text"><small>KART</small><b></b><em></em></span><span class="chev">&#8250;</span></button>
-        </div>
       </div>
 
       <!-- First launch (or EDIT from the title): name + age, saved per device (kartrush.profile) -->
@@ -141,51 +154,52 @@
             <button id="btn-restart" class="btn-secondary">RESTART</button>
             <button id="btn-quit" class="btn-secondary">MENU</button>
           </div>
-          <button class="btn-small btn-settings">&#9881;&#65039; SETTINGS</button>
+          <button class="btn-small btn-settings"><i data-icon="gear"></i>SETTINGS</button>
         </div>
       </div>
       <!-- Settings (from the title or pause screen; saved per device) -->
-      <div id="settings-screen" class="screen" hidden>
-        <div class="side">
-          <div class="paused">SETTINGS</div>
+      <div id="settings-screen" class="screen screen-col" hidden>
+        <div class="pick-title">SETTINGS</div>
+        <div class="card settings-card">
           <div class="setting-row">
-          <div class="setting">
-            <span class="setting-label">STEERING</span>
-            <div id="steer-pick" class="track-pick">
-              <button class="trk" data-steer="buttons"><i>&#9664;&#9654;</i>Buttons</button>
-              <button class="trk" data-steer="joystick"><i>&#128377;&#65039;</i>Joystick</button>
+            <div class="setting">
+              <span class="setting-label">STEERING</span>
+              <div id="steer-pick" class="track-pick">
+                <button class="trk" data-steer="buttons"><i data-icon="arrows"></i>Buttons</button>
+                <button class="trk" data-steer="joystick"><i data-icon="joystick"></i>Joystick</button>
+              </div>
+            </div>
+            <div class="setting">
+              <span class="setting-label">ALL SOUND</span>
+              <div id="mute-pick" class="track-pick">
+                <button class="trk" data-muted="0"><i data-icon="speaker"></i>On</button>
+                <button class="trk" data-muted="1"><i data-icon="muted"></i>Off</button>
+              </div>
             </div>
           </div>
-          <div class="setting">
-            <span class="setting-label">ALL SOUND</span>
-            <div id="mute-pick" class="track-pick">
-              <button class="trk" data-muted="0"><i>&#128266;</i>On</button>
-              <button class="trk" data-muted="1"><i>&#128263;</i>Off</button>
+          <!-- dimmed while ALL SOUND is off -->
+          <div id="volume-row" class="setting-row">
+            <div class="setting">
+              <span class="setting-label">MUSIC</span>
+              <div class="track-pick vol-pick" data-bus="music">
+                <button class="trk" data-vol="0">Off</button>
+                <button class="trk" data-vol="0.35">Low</button>
+                <button class="trk" data-vol="0.65">Mid</button>
+                <button class="trk" data-vol="1">Full</button>
+              </div>
+            </div>
+            <div class="setting">
+              <span class="setting-label">SOUND EFFECTS</span>
+              <div class="track-pick vol-pick" data-bus="sfx">
+                <button class="trk" data-vol="0">Off</button>
+                <button class="trk" data-vol="0.35">Low</button>
+                <button class="trk" data-vol="0.65">Mid</button>
+                <button class="trk" data-vol="1">Full</button>
+              </div>
             </div>
           </div>
-          </div>
-          <div class="setting-row">
-          <div class="setting">
-            <span class="setting-label">MUSIC</span>
-            <div class="track-pick vol-pick" data-bus="music">
-              <button class="trk" data-vol="0">Off</button>
-              <button class="trk" data-vol="0.35">Low</button>
-              <button class="trk" data-vol="0.65">Mid</button>
-              <button class="trk" data-vol="1">Full</button>
-            </div>
-          </div>
-          <div class="setting">
-            <span class="setting-label">SOUND EFFECTS</span>
-            <div class="track-pick vol-pick" data-bus="sfx">
-              <button class="trk" data-vol="0">Off</button>
-              <button class="trk" data-vol="0.35">Low</button>
-              <button class="trk" data-vol="0.65">Mid</button>
-              <button class="trk" data-vol="1">Full</button>
-            </div>
-          </div>
-          </div>
-          <button id="btn-settings-back" class="btn-primary">BACK</button>
         </div>
+        <button id="btn-settings-back" class="btn-primary">BACK</button>
       </div>
       <div id="confetti" aria-hidden="true"></div>
     </div>

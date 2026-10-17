@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { sound } from './sound.js';
+import { icon, fillIcons } from './ui-icons.js';
 
 /* ==========================================================================
  * 0. CONFIG
@@ -35,7 +36,7 @@ const CFG = {
   // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges).
   tracks: {
     meadow: {
-      name: 'Green Valley', icon: '\u{1F333}', theme: 'meadow',
+      name: 'Green Valley', icon: 'pine', theme: 'meadow',
       // ~850 m: main straight, fast right, boost straight, a 12-13 m hairpin (several points along it: a
       // single apex point makes a cusp), flowing chicane, middle S-bends, fast sweeper, a 16 m kink on
       // the left, back to the line. >= 26 m between different parts of the loop.
@@ -52,7 +53,7 @@ const CFG = {
       pads: [[200, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]
     },
     canyon: {
-      name: 'Canyon Run', icon: '\u{1F335}', theme: 'desert',
+      name: 'Canyon Run', icon: 'cactus', theme: 'desert',
       // ~1130 m figure-8. Start straight (y 0), banked right-hander, under the bridge through a slot
       // canyon, climb with whoops, 12 m uphill hairpin, crest on the mesa (y 9), over the bridge (9 m
       // above the lower road), jump on the way down, banked downhill sweeper to the line.
@@ -71,7 +72,7 @@ const CFG = {
       pads: [[40, 0], [480, -2], [985, 0]],
     },
     frost: {
-      name: 'Frost Peak', icon: '\u{2744}\u{FE0F}', theme: 'snow',
+      name: 'Frost Peak', icon: 'snowflake', theme: 'snow',
       // ~930 m. Start straight beside the frozen lake (y 0), banked left sweeper, climbing S-bends through
       // the pines, a 13 m hairpin at the top (y 10.5), back along the ridge, a fast downhill with a crest,
       // then across the lake on ice: a gentle S (tightest ~32 m) on two thirds of the grip, back to the line.
@@ -148,15 +149,26 @@ const CFG = {
     boostSpeed: 6,
   },
 
-  // The six drivers. Colours: [body, accent, driver]. The player picks one on the title screen (Driver);
+  // The six drivers. Colours: [body, accent, driver suit]. The player picks one on the title screen (Driver);
   // the other five race as AI with their personality from ai.styles (Nova has the defaults).
+  // look = the driver's own identity, whatever paint the kart has: helmet + visor colours (also on the 3D
+  // helmet), and a helmet mark for the 2D avatar (stripe / twin / moon / bolt / fin / dots). Meant to carry
+  // over to the planned 3D characters. tag = a character line for the picker: flavour only, never a gameplay
+  // claim (the player's pick is looks only; the personality goes to the AI that replaces them, see castDrivers).
+  // The personalities live in ai.styles.
   racers: [
-    { name: 'Nova', colors: [0xe8322f, 0xffd23a, 0x2f6bff], role: 'All-rounder', blurb: 'Balanced, no tricks' },
-    { name: 'Rex', colors: [0x2f6bff, 0xffffff, 0xffd23a], role: 'Ace', blurb: 'Fast lines, rarely slips' },
-    { name: 'Luna', colors: [0x9b4dff, 0x5cc8ff, 0xffffff], role: 'Defender', blurb: 'Blocks on the straights' },
-    { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f], role: 'Wild card', blurb: 'Flat out, all over the road' },
-    { name: 'Mako', colors: [0x2fbf4a, 0xffffff, 0x333333], role: 'Bully', blurb: 'Always armed, lays traps' },
-    { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff], role: 'Steady', blurb: 'Clean and patient' },
+    { name: 'Nova', colors: [0xe8322f, 0xffd23a, 0x2f6bff], tag: 'The rookie',
+      look: { helmet: 0xf2f2f2, visor: 0x2f6bff, mark: 'stripe', markColor: 0xe8322f } },
+    { name: 'Rex', colors: [0x2f6bff, 0xffffff, 0xffd23a], tag: 'The veteran',
+      look: { helmet: 0x1e2a5a, visor: 0xffc21a, mark: 'twin', markColor: 0xffffff } },
+    { name: 'Luna', colors: [0x9b4dff, 0x5cc8ff, 0xffffff], tag: 'Night-sky racer',
+      look: { helmet: 0xe9e4ff, visor: 0x5cc8ff, mark: 'moon', markColor: 0x9b4dff } },
+    { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f], tag: 'Born at full throttle',
+      look: { helmet: 0x26262c, visor: 0xff5a1f, mark: 'bolt', markColor: 0xffd23a } },
+    { name: 'Mako', colors: [0x2fbf4a, 0xffffff, 0x333333], tag: 'The shark',
+      look: { helmet: 0x2d6b3a, visor: 0xd23a3a, mark: 'fin', markColor: 0xf2f2f2 } },
+    { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff], tag: 'Smallest kart in the paddock',
+      look: { helmet: 0xffb3d9, visor: 0x9b4dff, mark: 'dots', markColor: 0xffffff } },
   ],
   // Kart paint for the player (Kart picker): [body, accent]; null = the driver's own colours. Looks only.
   paints: [
@@ -1657,7 +1669,8 @@ const BUBBLE_MAT = new THREE.ShaderMaterial({
     }`,
 });
 
-const PAINT_ROLES = ['body', 'accent', 'driver']; // the kart parts paintKart recolours (see buildKart)
+const SVG_ITEMS = { mushroom: icon('mushroom'), triple: icon('mushroom'), banana: icon('banana'), shield: icon('shield'), star: icon('star') };
+const PAINT_ROLES = ['body', 'accent', 'driver', 'helmet', 'visor']; // the parts paintKart recolours (see buildKart)
 const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0)); // names + colours are set again by castDrivers
 const kart = karts[0];
 world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
@@ -1671,8 +1684,11 @@ for (const k of karts) {
   });
 }
 
-function makeRacer({ name, colors }, isPlayer) {
-  return Object.assign(buildKart(colors), {
+/** [body, accent, suit] + the driver's helmet and visor: the full colour list paintKart takes. */
+function kartColors(colors, look) { return [...colors, look.helmet, look.visor]; }
+
+function makeRacer({ name, colors, look }, isPlayer) {
+  return Object.assign(buildKart(kartColors(colors, look)), {
     skid: [{ x: 0, y: 0, z: 0, on: false }, { x: 0, y: 0, z: 0, on: false }], // last skid-mark point per rear wheel
     name, isPlayer,
     color: cssHex(colors[0]),
@@ -1686,7 +1702,7 @@ function makeRacer({ name, colors }, isPlayer) {
 
 function cssHex(n) { return '#' + n.toString(16).padStart(6, '0'); }
 
-/** Recolours a baked kart in place: colors = [body, accent, driver]. */
+/** Recolours a baked kart in place: colors = [body, accent, suit, helmet, visor] (kartColors). */
 function paintKart(k, colors) {
   const geo = k.bodyMesh.geometry, attr = geo.attributes.color, roles = geo.userData.paint, c = new THREE.Color();
   for (let i = 0; i < roles.length; i++) {
@@ -1698,13 +1714,16 @@ function paintKart(k, colors) {
   k.color = cssHex(colors[0]);
 }
 
-/** The player (karts[0]) becomes the picked driver in the picked paint; the other five drivers race as AI
- * (their personality follows the name: newAI in placeOnGrid). */
+/** The player (karts[0]) becomes the picked driver in the picked paint; the other five drivers race as AI.
+ * The AI field always has the same personalities whoever you pick (user: "the difficulty shouldn't change
+ * based on what racer I pick"): the spare driver (CFG.racers[0], Nova) takes over the picked driver's style.
+ * k.style = the CFG.ai.styles key newAI uses in placeOnGrid. */
 function castDrivers() {
-  const me = playerDriver();
+  const me = playerDriver(), spare = CFG.racers[0];
   [me, ...CFG.racers.filter((r) => r !== me)].forEach((r, i) => {
     karts[i].name = r.name;
-    paintKart(karts[i], i === 0 ? playerColors() : r.colors);
+    karts[i].style = r === spare ? me.name : r.name;
+    paintKart(karts[i], i === 0 ? playerColors() : kartColors(r.colors, r.look));
   });
 }
 
@@ -1784,8 +1803,8 @@ function buildKart(colors) {
   add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6);   // seat back
   add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05); // engine
   add(new THREE.CylinderGeometry(0.33, 0.4, 0.6, 8), 'driver', 0, y0 + 0.38, -0.3); // driver
-  const helmet = add(new THREE.IcosahedronGeometry(0.33, 1), 0xffffff, 0, y0 + 0.92, -0.3);
-  add(new THREE.BoxGeometry(0.44, 0.15, 0.1), 0x1c2340, 0, 0.0, 0.29, helmet); // visor
+  const helmet = add(new THREE.IcosahedronGeometry(0.33, 1), 'helmet', 0, y0 + 0.92, -0.3);
+  add(new THREE.BoxGeometry(0.44, 0.15, 0.1), 'visor', 0, 0.0, 0.29, helmet); // visor
   add(new THREE.BoxGeometry(0.7, 0.07, 0.07), 'body', 0, 0.17, 0, helmet);   // stripe
   const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2);
   wheel.rotation.x = -0.9;
@@ -2303,7 +2322,7 @@ function initControls() {
   hud.item.addEventListener('pointerdown', (e) => { e.preventDefault(); input.item = true; hud.item.classList.add('pressed'); });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.item.addEventListener(t, () => hud.item.classList.remove('pressed')));
 
-  for (const row of document.querySelectorAll('.pick-row')) onTap(row, () => { sound.click(); openPicker(row.dataset.pick); });
+  for (const row of document.querySelectorAll('.setup [data-pick]')) onTap(row, () => { sound.click(); openPicker(row.dataset.pick); });
   onTap($('btn-pick-done'), () => { sound.click(); showMenu(); });
   onTap($('btn-hello'), submitHello);
   $('hello-form').addEventListener('submit', (e) => { e.preventDefault(); submitHello(); });
@@ -2327,7 +2346,10 @@ function initControls() {
   }
 
   // --- Sound: on/off in Settings (sound.js remembers it); any touch re-wakes audio that iOS suspended (calls, app switch)
-  const showMute = () => { for (const b of $('mute-pick').children) b.classList.toggle('on', (b.dataset.muted === '1') === sound.muted); };
+  const showMute = () => {
+    for (const b of $('mute-pick').children) b.classList.toggle('on', (b.dataset.muted === '1') === sound.muted);
+    $('volume-row').classList.toggle('dim', sound.muted); // levels don't matter while everything is off
+  };
   for (const b of $('mute-pick').children) onTap(b, () => { sound.setMuted(b.dataset.muted === '1'); showMute(); sound.click(); });
   showMute();
   // (also the first tap on the title screen, which starts its music: iOS allows no sound before a tap)
@@ -2388,8 +2410,10 @@ function onResize() {
   app.style.setProperty('--app-h', `${h}px`);
   renderer.setSize(w, h);
   camera.aspect = w / h;
+  if (camera.view?.enabled) camera.setViewOffset(w, h, lobbyShift, 0, w, h);
   camera.updateProjectionMatrix();
   minimap.layout();
+  layoutLobby();
 }
 
 /* ==========================================================================
@@ -2430,7 +2454,7 @@ function placeOnGrid() {
     setGhost(k, false);
     const back = G.firstRow + Math.floor(slot / 2) * G.rowGap + (slot % 2) * G.rowGap * 0.5;
     const lane = slot % 2 ? -G.colOffset : G.colOffset;
-    k.ai = k.isPlayer ? null : newAI(lane, k.name);
+    k.ai = k.isPlayer ? null : newAI(lane, k.style);
     k.topMult = 1;
     resetKart(k, track.N - Math.round(back / track.spacing), lane);
   });
@@ -2656,14 +2680,12 @@ function showMenu() {
   fx.reset();
   placeOnGrid();
   camState.snap = true;
-  const rec = loadRecords()[track.id] || {};
-  hud.menuRecord.hidden = !rec.race;
-  if (rec.race) hud.menuRecord.textContent = `Your record ${fmtTime(rec.race)} · best lap ${fmtTime(rec.lap)}`;
   hud.confetti.replaceChildren();
   refreshPickRows();
   if (!profile) return showHello(); // first launch: name + age before anything else
   $('hello-edit').hidden = false;
-  $('hello-edit').textContent = `Hi, ${profile.name}! \u270F\uFE0F`;
+  requestAnimationFrame(layoutLobby);
+  $('hello-edit').innerHTML = `Hi, ${escapeHtml(profile.name)}!${icon('pencil')}`;
   showOverlay(hud.menuScreen);
 }
 
@@ -2733,22 +2755,46 @@ const picks = { driver: savedPick(DRIVER_KEY, CFG.racers), paint: savedPick(PAIN
 function playerDriver() { return CFG.racers.find((r) => r.name === picks.driver); }
 function playerColors(paint = picks.paint) {
   const d = playerDriver(), p = CFG.paints.find((o) => o.name === paint).colors;
-  return p ? [p[0], p[1], d.colors[2]] : d.colors;
+  return kartColors(p ? [p[0], p[1], d.colors[2]] : d.colors, d.look);
 }
 
-/** Side view of a kart in [body, accent, driver] colours. */
-function kartSvg([body, accent, driver]) {
-  const [b, a, d] = [body, accent, driver].map(cssHex);
-  return `<svg class="kart-art" viewBox="0 0 72 44" aria-hidden="true">
-    <rect x="3" y="9" width="15" height="4" rx="1.5" fill="${a}"/><rect x="9" y="12" width="3" height="10" fill="#555"/>
-    <path d="M8 22 H50 L64 25 Q67 26 67 29 V32 H6 Q4 32 4 29 V25 Q4 22 8 22 Z" fill="${b}"/>
+/** Side view of a kart (colours as kartColors), standing on a faint studio floor so dark paints still read. */
+function kartSvg([body, accent, suit, helmet = 0xffffff, visor = 0x1c2340]) {
+  const [b, a, d, h, v] = [body, accent, suit, helmet, visor].map(cssHex);
+  return `<svg class="kart-art" viewBox="0 0 72 46" aria-hidden="true">
+    <ellipse cx="36" cy="42" rx="33" ry="3.2" fill="#fff" opacity="0.13"/>
+    <rect x="3" y="9" width="15" height="4" rx="1.5" fill="${a}" stroke="#fff" stroke-opacity="0.25" stroke-width="0.6"/><rect x="9" y="12" width="3" height="10" fill="#555"/>
+    <path d="M8 22 H50 L64 25 Q67 26 67 29 V32 H6 Q4 32 4 29 V25 Q4 22 8 22 Z" fill="${b}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.7"/>
     <rect x="22" y="20" width="22" height="7" rx="2" fill="${a}"/>
     <rect x="28" y="11" width="11" height="12" rx="3" fill="${d}"/>
-    <circle cx="34" cy="8" r="6.5" fill="#fff"/><rect x="35" y="6" width="6.5" height="3.5" rx="1.5" fill="#1c2340"/>
-    <rect x="28" y="3.2" width="11" height="1.8" fill="${b}"/>
+    <circle cx="34" cy="8" r="6.5" fill="${h}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.6"/><rect x="35" y="6" width="6.5" height="3.5" rx="1.5" fill="${v}"/>
     <rect x="62" y="29" width="7" height="3" rx="1" fill="#333"/>
-    <circle cx="15" cy="34" r="7.5" fill="#222"/><circle cx="15" cy="34" r="3" fill="#777"/>
-    <circle cx="55" cy="35" r="6.5" fill="#222"/><circle cx="55" cy="35" r="2.6" fill="#777"/>
+    <circle cx="15" cy="34" r="7.5" fill="#222"/><circle cx="15" cy="34" r="3" fill="#888"/>
+    <circle cx="55" cy="35" r="6.5" fill="#222"/><circle cx="55" cy="35" r="2.6" fill="#888"/>
+  </svg>`;
+}
+
+/** Head-and-shoulders avatar from a driver's look: suit, helmet, visor and helmet mark. Placeholder for the
+ * planned 3D characters, built from the same CFG.racers[].look data. */
+function driverSvg(r) {
+  const L = r.look, [h, v, m, suit] = [L.helmet, L.visor, L.markColor, r.colors[2]].map(cssHex);
+  const mark = {
+    stripe: `<rect x="21.5" y="7.5" width="5" height="12" rx="1.5" fill="${m}"/>`,
+    twin: `<rect x="17" y="8.5" width="3.2" height="11" rx="1.2" fill="${m}"/><rect x="27.8" y="8.5" width="3.2" height="11" rx="1.2" fill="${m}"/>`,
+    moon: `<circle cx="18" cy="13" r="4.5" fill="${m}"/><circle cx="20" cy="12" r="4" fill="${h}"/>`,
+    bolt: `<path d="M26 6.5 L19 14.5 H23.5 L21 20.5 L29 12 H24.5 Z" fill="${m}"/>`,
+    fin: `<path d="M18 9.5 L25 1.5 L29 9.5 Z" fill="${h}" stroke="${m}" stroke-width="1.3" stroke-linejoin="round"/>
+      <path d="M15 18 l2 2 l2-2 l2 2 l2-2" fill="none" stroke="${m}" stroke-width="1.2"/>`,
+    dots: `<circle cx="18" cy="12" r="2" fill="${m}"/><circle cx="24" cy="9" r="2" fill="${m}"/><circle cx="30" cy="12" r="2" fill="${m}"/>`,
+  }[L.mark] ?? '';
+  return `<svg class="driver-art" viewBox="0 0 48 48" aria-hidden="true">
+    <path d="M6 48 C6 38 13 34 24 34 C35 34 42 38 42 48 Z" fill="${suit}" stroke="#fff" stroke-opacity="0.3"/>
+    <path d="M19 34.5 L24 40 L29 34.5" fill="none" stroke="#fff" stroke-opacity="0.5" stroke-width="1.4"/>
+    <circle cx="24" cy="20" r="14" fill="${h}" stroke="#fff" stroke-opacity="0.35" stroke-width="0.8"/>
+    ${mark}
+    <rect x="12.5" y="18.5" width="23" height="9" rx="4.5" fill="${v}"/>
+    <path d="M15.5 21 H24" stroke="#fff" stroke-opacity="0.55" stroke-width="1.5" stroke-linecap="round"/>
+    <ellipse cx="18" cy="11" rx="3.2" ry="1.8" fill="#fff" opacity="0.35" transform="rotate(-30 18 11)"/>
   </svg>`;
 }
 
@@ -2763,12 +2809,20 @@ function trackShape(id) {
   const minX = Math.min(...xs), minZ = Math.min(...zs), w = Math.max(...xs) - minX, h = Math.max(...zs) - minZ;
   const W = 100, H = 64, pad = 7, sc = Math.min((W - pad * 2) / w, (H - pad * 2) / h);
   const ox = (W - w * sc) / 2, oz = (H - h * sc) / 2;
-  const xy = (p) => `${(ox + (p.x - minX) * sc).toFixed(1)} ${(oz + (p.z - minZ) * sc).toFixed(1)}`;
+  const px = (p) => [ox + (p.x - minX) * sc, oz + (p.z - minZ) * sc];
+  const xy = (p) => px(p).map((v) => v.toFixed(1)).join(' ');
   const d = 'M' + pts.map(xy).join(' L') + ' Z';
+  // heading (deg) along the loop at sample i, for the start line and the direction arrow
+  const heading = (i) => { const [x0, y0] = px(pts[i]), [x1, y1] = px(pts[i + 2]); return (Math.atan2(y1 - y0, x1 - x0) * 180) / Math.PI; };
+  const at = (i, inner) => `<g transform="translate(${xy(pts[i]).replace(' ', ',')}) rotate(${heading(i).toFixed(1)})">${inner}</g>`;
+  let checks = '';
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) {
+    checks += `<rect x="${c * 1.6 - 1.6}" y="${r * 1.6 - 3.2}" width="1.6" height="1.6" fill="${(r + c) % 2 ? '#111' : '#fff'}"/>`;
+  }
   return (trackShapes[id] = {
     length: Math.round(curve.getLength()),
     svg: `<svg class="track-art" viewBox="0 0 ${W} ${H}" aria-hidden="true"><path d="${d}" class="road-edge"/>
-      <path d="${d}" class="road"/><circle cx="${xy(pts[0]).split(' ')[0]}" cy="${xy(pts[0]).split(' ')[1]}" r="3.2" class="start"/></svg>`,
+      <path d="${d}" class="road"/>${at(0, checks)}${at(9, '<path d="M-2 -2.6 L1.6 0 L-2 2.6" class="dir"/>')}</svg>`,
   });
 }
 function recordText(id) {
@@ -2776,19 +2830,24 @@ function recordText(id) {
   return rec?.race ? `Record ${fmtTime(rec.race)}` : 'No record yet';
 }
 
-/** The three rows on the title screen show what's picked. */
+/** RACE SETUP on the lobby: the picked track (with its record), driver and paint. */
 function refreshPickRows() {
-  const row = (kind, art, name, sub) => {
-    const el = document.querySelector(`.pick-row[data-pick="${kind}"]`);
+  const t = CFG.tracks[track.id], d = playerDriver(), card = (kind) => document.querySelector(`.setup [data-pick="${kind}"]`);
+  const fill = (kind, art, name, sub) => {
+    const el = card(kind);
     el.querySelector('.pick-art').innerHTML = art;
     el.querySelector('b').textContent = name;
-    el.querySelector('em').textContent = sub;
+    el.querySelector('em').innerHTML = sub;
   };
-  const t = CFG.tracks[track.id], d = playerDriver();
-  row('track', trackShape(track.id).svg, t.name, `${trackShape(track.id).length} m · ${CFG.laps} laps`);
-  row('driver', kartSvg(d.colors), d.name, d.role);
-  row('kart', kartSvg(playerColors()), picks.paint === 'Team' ? `${d.name}'s colours` : picks.paint, 'Paint');
-  document.querySelector('.pick-row[data-pick="track"]').dataset.theme = t.theme;
+  fill('track', trackShape(track.id).svg, '', `${trackShape(track.id).length} m · ${CFG.laps} laps`);
+  card('track').querySelector('b').innerHTML = `${icon(t.icon)}${t.name}`;
+  card('track').dataset.theme = t.theme;
+  const rec = loadRecords()[track.id];
+  hud.menuRecord.innerHTML = rec?.race
+    ? `<span>RECORD</span> ${fmtTime(rec.race)} <span>BEST LAP</span> ${fmtTime(rec.lap)}` : '<span>NO RECORD YET</span>';
+  fill('driver', driverSvg(d), d.name, d.tag);
+  const c = playerColors();
+  fill('kart', kartSvg(c), picks.paint, `<i style="background:${cssHex(c[0])}"></i><i style="background:${cssHex(c[1])}"></i>`);
 }
 
 /** Picker screen for 'track' | 'driver' | 'kart': tapping a card picks it straight away; DONE goes back. */
@@ -2799,7 +2858,7 @@ function openPicker(kind) {
   const options = {
     track: () => Object.entries(CFG.tracks).map(([id, t]) => ({
       on: () => track.id === id, theme: t.theme, pick: () => selectTrack(id),
-      html: `${trackShape(id).svg}<b><i>${t.icon}</i>${t.name}</b><small>${trackShape(id).length} m · ${recordText(id)}</small>`,
+      html: `${trackShape(id).svg}<b>${icon(t.icon)}${t.name}</b><small>${trackShape(id).length} m · ${recordText(id)}</small>`,
     })),
     driver: () => CFG.racers.map((r) => ({
       on: () => picks.driver === r.name,
@@ -2809,7 +2868,7 @@ function openPicker(kind) {
         castDrivers();
         placeOnGrid();
       },
-      html: `${kartSvg(r.colors)}<span><b>${r.name}</b><small class="role">${r.role}</small><small>${r.blurb}</small></span>`,
+      html: `${driverSvg(r)}<span><b>${r.name}</b><small>${r.tag}</small></span>`,
     })),
     kart: () => CFG.paints.map((p) => ({
       on: () => picks.paint === p.name,
@@ -2818,7 +2877,7 @@ function openPicker(kind) {
         try { localStorage.setItem(PAINT_KEY, p.name); } catch { /* storage blocked */ }
         paintKart(kart, playerColors());
       },
-      html: `${kartSvg(playerColors(p.name))}<b>${p.name === 'Team' ? `${playerDriver().name}'s` : p.name}</b>`,
+      html: `${kartSvg(playerColors(p.name))}<b>${p.name}</b>`,
     })),
   }[kind]();
   const cards = options.map((o) => {
@@ -2878,7 +2937,7 @@ function teleStart() {
   tele.race = {
     build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id,
     steering: savedSteering(), laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
-    karts: karts.map((k) => ({ name: k.name, ...(k.ai && { role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
+    karts: karts.map((k) => ({ name: k.name, ...(k.ai && { style: k.style, role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
       lineUse: +k.ai.lineUse.toFixed(2) }) })),
     // every second: t, then per kart [metres raced, km/h, place, AI target speed as % of top], then the player's
     // pedals (g = gas, b = brake, - = none)
@@ -2920,6 +2979,7 @@ function showOverlay(screen) {
   for (const el of [hud.menuScreen, hud.helloScreen, hud.pickScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen]) el.hidden = el !== screen;
   hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
+  hud.overlay.classList.toggle('lobby-on', screen === hud.menuScreen); // lighter backdrop: the 3D kart shows through
   hud.overlay.classList.remove('hidden');
 }
 
@@ -3927,7 +3987,10 @@ function updateItemVisuals(dt) {
     rouletteT += dt;
     shown = ITEM_TYPES[Math.floor(rouletteT * 14) % ITEM_TYPES.length];
   }
-  if (hud.item.dataset.item !== shown) hud.item.dataset.item = shown;
+  if (hud.item.dataset.item !== shown) {
+    hud.item.dataset.item = shown;
+    hud.item.innerHTML = SVG_ITEMS[shown] ?? ''; // the shells and the bullet are drawn in CSS
+  }
   const count = kart.item === 'triple' && kart.itemRoll <= 0 ? `x${kart.itemCount}` : '';
   if (hud.item.dataset.count !== count) hud.item.dataset.count = count;
   hud.item.classList.toggle('ready', !!kart.item && kart.itemRoll <= 0);
@@ -3959,6 +4022,58 @@ function updateCamera(dt) {
   const yaw = Math.atan2(fwd.x, fwd.z);
   const bp = b.interpolatedPosition; // match the drawn kart (see syncMeshes)
   const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
+
+  if (state.phase === 'menu') lobbyCamera(dt, bp, yaw);
+  else chaseCamera(dt, bp, yaw, speedRatio);
+
+  // Shadow camera follows the kart
+  // ...snapped to whole shadow-map texels in the light's view, or shadow edges crawl as the kart moves
+  shadowSnap.copy(bp).applyQuaternion(lightQInv);
+  const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+  shadowSnap.x = Math.round(shadowSnap.x / texel) * texel;
+  shadowSnap.y = Math.round(shadowSnap.y / texel) * texel;
+  shadowSnap.applyQuaternion(lightQ);
+  sun.target.position.copy(shadowSnap);
+  sun.position.copy(shadowSnap).add(SUN_OFFSET);
+}
+
+/** Lobby: a slow 3/4 turntable of the player's kart from the outside of the grid (the kart is the showcase;
+ * the planned 3D characters ride in it). The projection is shifted so the kart sits in the gap between the
+ * lobby's columns (lobbyShift, measured in layoutLobby). The chase camera snaps back at the race start. */
+const LOBBY_FOV = 42;
+let lobbyShift = 0, lobbyClock = 0;
+function lobbyCamera(dt, bp, yaw) {
+  lobbyClock += dt;
+  const i = kart.trackIdx, n = track.normals[i];
+  const out = Math.sign(lateral(i, bp) || 1); // the grid side away from the centre line: no karts there
+  const a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22), dist = 9;
+  const fx = Math.sin(yaw), fz = Math.cos(yaw);
+  camera.position.set(
+    bp.x + (fx * Math.cos(a) + n.x * out * Math.sin(a)) * dist,
+    bp.y + 2.3,
+    bp.z + (fz * Math.cos(a) + n.z * out * Math.sin(a)) * dist,
+  );
+  camState.look.set(bp.x, bp.y + 0.9, bp.z);
+  camera.lookAt(camState.look);
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  if (camera.fov !== LOBBY_FOV || camera.view?.offsetX !== lobbyShift) {
+    camera.fov = LOBBY_FOV;
+    camera.setViewOffset(w, h, lobbyShift, 0, w, h);
+  }
+  camState.snap = true; // whatever comes next starts from a clean chase view
+}
+
+/** Where the open middle of the lobby is: shift the 3D view so the kart lands there (px, + = kart moves left). */
+function layoutLobby() {
+  const cta = document.querySelector('.lobby-cta'), setup = document.querySelector('.setup');
+  if (!cta.offsetWidth) return; // lobby not shown
+  const left = cta.offsetLeft + cta.offsetWidth, right = setup.offsetLeft;
+  lobbyShift = Math.round(app.clientWidth / 2 - (left + right) / 2);
+}
+
+function chaseCamera(dt, bp, yaw, speedRatio) {
+  const C = CFG.camera;
+  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = 66; camera.updateProjectionMatrix(); }
 
   if (camState.snap) {
     camState.yaw = yaw;
@@ -3995,16 +4110,6 @@ function updateCamera(dt) {
     camera.fov = lerp(camera.fov, targetFov, 1 - Math.exp(-dt * 4));
     camera.updateProjectionMatrix();
   }
-
-  // Shadow camera follows the kart
-  // ...snapped to whole shadow-map texels in the light's view, or shadow edges crawl as the kart moves
-  shadowSnap.copy(bp).applyQuaternion(lightQInv);
-  const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
-  shadowSnap.x = Math.round(shadowSnap.x / texel) * texel;
-  shadowSnap.y = Math.round(shadowSnap.y / texel) * texel;
-  shadowSnap.applyQuaternion(lightQ);
-  sun.target.position.copy(shadowSnap);
-  sun.position.copy(shadowSnap).add(SUN_OFFSET);
 }
 
 const SMOKE = [0.86, 0.86, 0.9], DUST = [0.6, 0.5, 0.32];
@@ -4292,7 +4397,8 @@ function escapeHtml(t) { return t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 31 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 32 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+fillIcons();
 loadTrack(savedTrack());
 castDrivers();
 onResize();
