@@ -512,7 +512,7 @@ now hit them in 1st). Small sample (3 races) and build 34 also grew the hit radi
 being easier to dodge. Blue in race 22 hit them in 3rd (blast radius 5 m near the leader, or 1 s sample lag).
 Keep watching with the build 35 item sizes.
 
-**Build 36 (2026-10-17, NOT committed yet; user: "execute those changes that need no extra data"):**
+**Build 36 (2026-10-17, builds 34-36 committed locally as d7cb604, NOT pushed; user: "execute those changes that need no extra data"):**
 - **Finished karts are immune** to every item (`spinOut` returns false when `k.finished`; shell + banana hit
   checks skip them too). Fixes the red shell hitting Luna 11 s after she finished.
 - **Red shells never hit their owner** (Bolt hit by his own); a green bouncing back still can (Mario Kart).
