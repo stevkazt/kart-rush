@@ -432,8 +432,9 @@ moved into Settings. Not tried on the phone yet.
 **Build 32 (2026-10-17, committed locally, NOT pushed):** lobby reorganised (see Files: lobby camera,
 icons, driver looks), drivers looks-only with flavour tags, item button icons as SVG, and the replacement AI
 takes the picked driver's personality (castDrivers). Checked headless at 667x375, 844x390, 932x430; not tried
-on the phone. Ask the user about: the turntable kart in the lobby (nice or distracting?), fit around the
-notch, the driver tag lines (placeholders), what the age on the hello screen is for. Open idea not chosen: a
+on the phone. User: the turntable kart in the lobby "is something good" (keep). Age on the hello screen is for nothing
+for now (just stored; don't build on it unless asked). Still to ask: fit around the notch, the driver tag
+lines (placeholders). Open idea not chosen: a
 Rivals row (the 5 AIs with role icons) on the setup card.
 
 **Note (user 2026-10-17): remove the side rails.** They make every track look the same. Not started; the rails
