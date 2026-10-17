@@ -673,6 +673,9 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
 .setting { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 8px; }
 .setting-label { font-size: 11px; letter-spacing: 3px; opacity: 0.6; font-weight: 800; }
 .setting .track-pick { margin: 0 0 12px; }
+.setting-row { display: flex; gap: 44px; }
+.vol-pick { gap: 5px; }
+.vol-pick .trk { padding: 7px 10px; }
 
 /* ============ Joystick steering (Settings -> Joystick) ============ */
 #joystick {

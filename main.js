@@ -142,7 +142,9 @@ const CFG = {
   },
 
   ai: {
-    skill: [0.88, 0.98],    // fraction of top speed each AI aims for (rolled per race)
+    skill: [0.97, 1.05],    // fraction of top speed each AI aims for (rolled per race). Was 0.88-0.98 with a
+                            // rubber band; with it gone (build 29) the user's clean laps were ~10% quicker
+                            // than the AIs' (meadow 29.5-30 s vs 32.3-35), and the player gets boosts on top
     cornerGrip: [20, 25],   // lateral accel (m/s^2) each AI dares in corners (rolled per race; kart limit ~22 at speed)
     laneRange: 2.5,         // how far an AI wanders either side of its own line (m)
     lineUse: [0.15, 0.85],  // how much of the racing line each AI takes (rolled per race; 0 = centre line)
@@ -155,10 +157,28 @@ const CFG = {
     lookAhead: [8, 15],     // pure-pursuit look-ahead (m), at standstill -> top speed
     steerGain: 2.2,
     mistakeEvery: [6, 15],  // seconds between mistakes (wobble or lift)
-    rubberBand: 0.004,      // speed change per metre of gap to the player
-    rubberMin: 0.85,
-    rubberMax: 1.06,
     finishedPace: 0.7,      // lap-of-honour speed after crossing the line
+    startDelay: [0.05, 0.4],// reaction time at GO (s)
+    // racecraft, 0..1: overtake = goes for the inside of the next corner and stays on the gas closer behind;
+    // defend = moves across to block a faster kart closing from behind (on straights); aggression = shells
+    // at any kart ahead (not only the player), bananas for anyone on its tail, crowds karts alongside.
+    // hoard = keeps shield / banana / red until they're needed.
+    overtake: 0.5, defend: 0.3, aggression: 0.3, hoard: false, wild: false,
+    // Personalities, fixed per driver (user: wants the feeling "this guy is so annoying" / "this one is
+    // really good"; each will get a matching look later). Anything left out comes from the defaults above.
+    styles: {
+      Rex: { role: 'ace', skill: [1.04, 1.08], cornerGrip: [23.5, 25], lineUse: [0.85, 1], bias: 1, laneRange: 1,
+        mistakeEvery: [20, 35], startDelay: [0.05, 0.15], overtake: 1, defend: 0.5, aggression: 0.4 },
+      Luna: { role: 'defender', skill: [1.02, 1.06], cornerGrip: [23, 24.5], lineUse: [0.75, 0.95], bias: 1.5,
+        laneRange: 1.2, mistakeEvery: [18, 30], startDelay: [0.05, 0.2], overtake: 0.7, defend: 1, aggression: 0.2, hoard: true },
+      Mako: { role: 'bully', skill: [0.98, 1.02], cornerGrip: [21.5, 23.5], lineUse: [0.4, 0.7], bias: 3,
+        overtake: 0.8, defend: 0.3, aggression: 1 },
+      Pip: { role: 'steady', skill: [0.95, 0.99], cornerGrip: [21, 23], lineUse: [0.5, 0.7], bias: 2, laneRange: 1.5,
+        mistakeEvery: [25, 40], overtake: 0.3, defend: 0.8, aggression: 0, hoard: true },
+      // fast, brakes late (brakeOver), wide random lines, wobbles a lot
+      Bolt: { role: 'wild', skill: [1.03, 1.08], cornerGrip: [22, 25], lineUse: [0, 1], bias: 5, laneRange: 4,
+        brakeOver: 6, mistakeEvery: [3, 7], startDelay: [0, 0.6], overtake: 1, defend: 0, aggression: 0.6, wild: true },
+    },
   },
 
   items: {
@@ -762,11 +782,12 @@ const THEMES = {
     build: buildMeadow,
   },
   desert: {
-    // sunset: low warm sun from the west, haze the colour of the horizon
-    sky: 0xf4a46e, fog: [0xf0a173, 70, 360], hemi: [0xffd7b0, 0x9a5536, 1.15], sun: [0xffb066, 2.6], sunOffset: [-80, 40, 45],
+    // golden afternoon: warm sun ~50 deg up from the west, blue sky, sandy haze at the horizon. Was a sunset
+    // (sun 23 deg, orange light, near-black road): the user found it too dark and tiring on the eyes
+    sky: 0x9cc8ea, fog: [0xf1d9bb, 90, 380], hemi: [0xfff2e0, 0xc89a72, 1.35], sun: [0xfff0d8, 2.4], sunOffset: [-80, 110, 45],
     palette: {
-      road: [0x4e4747, 0x534c4b], dash: 0xf5e2b8, curb: [0xd9472b, 0xf3ead8],
-      rail: [0x7a4426, 0xe6c590], arch: [0x7a4a2a, 0xd9472b],
+      road: [0x7a736c, 0x7f7871], dash: 0xfaf0d8, curb: [0xd9472b, 0xf3ead8],
+      rail: [0xb98a5e, 0xf2e3c4], arch: [0x7a4a2a, 0xd9472b],
     },
     build: buildDesert,
   },
@@ -860,7 +881,7 @@ function makeNoise(rand) {
 const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 /**
- * Desert canyon at sunset. The ground is a height field: flat at road height beside the road, then a sandy
+ * Desert canyon on a golden afternoon. The ground is a height field: flat at road height beside the road, then a sandy
  * slope and red rock walls 13-30 m high. Each point takes the lowest of (nearby road height + rise with
  * distance), so where two parts of the track are close at different heights the ground follows the lower
  * one: the lower road runs through a slot under the bridge, and a higher road on a ridge gets a stone
@@ -963,13 +984,13 @@ function buildDesert(data) {
   terrain.receiveShadow = true;
   trackRoot.add(terrain);
 
-  // ---- Sky: a gradient dome that follows the camera, and the setting sun ----
+  // ---- Sky: a gradient dome that follows the camera, and the sun ----
   const skyGeo = new THREE.SphereGeometry(450, 32, 16);
   const skyCol = [];
-  const HORIZON = new THREE.Color(0xf6a76c), PINK = new THREE.Color(0xd9708a), TOP = new THREE.Color(0x3b3a7a);
+  const HORIZON = new THREE.Color(0xf1d9bb), MID = new THREE.Color(0xb9d8ef), TOP = new THREE.Color(0x5f9fdc);
   for (let i = 0; i < skyGeo.attributes.position.count; i++) {
     const t = Math.max(0, skyGeo.attributes.position.getY(i) / 450);
-    cc.copy(HORIZON).lerp(PINK, smoothstep(0.02, 0.25, t)).lerp(TOP, smoothstep(0.2, 0.75, t));
+    cc.copy(HORIZON).lerp(MID, smoothstep(0.02, 0.25, t)).lerp(TOP, smoothstep(0.2, 0.75, t));
     skyCol.push(cc.r, cc.g, cc.b);
   }
   skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyCol, 3));
@@ -979,7 +1000,7 @@ function buildDesert(data) {
   const sunDir = SUN_OFFSET.clone().normalize();
   const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(22, 24), new THREE.MeshBasicMaterial({ color: 0xfff1c4, fog: false, depthWrite: false }));
   const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(70, 24), new THREE.MeshBasicMaterial({
-    color: 0xffb070, transparent: true, opacity: 0.35, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    color: 0xffe2b0, transparent: true, opacity: 0.35, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
   sunDisc.renderOrder = sunGlow.renderOrder = -1;
   trackRoot.add(sky, sunGlow, sunDisc);
 
@@ -1752,24 +1773,30 @@ function buildItemVisuals() {
     return tex;
   };
 
-  // Item boxes: one instanced mesh, spun every frame
-  const boxTex = canvasTex(64, 64, (g) => {
-    const grad = g.createLinearGradient(0, 0, 64, 64);
-    grad.addColorStop(0, '#ff5fb0'); grad.addColorStop(0.5, '#ffd23a'); grad.addColorStop(1, '#5cc8ff');
-    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
-    g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(3, 3, 58, 58);
-    g.fillStyle = '#fff'; g.font = 'bold 44px system-ui, sans-serif';
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 32, 35);
+  // Item boxes: one instanced mesh, spun every frame (user: boxes were "barely there" at 1.1 m with a lit
+  // texture; the desert light made them blend in). Self-lit so any theme shows them. A rainbow glow sphere
+  // around them was tried and removed (user: just the box).
+  const boxTex = canvasTex(128, 128, (g) => {
+    const grad = g.createLinearGradient(0, 0, 128, 128);
+    grad.addColorStop(0, '#ff3fa4'); grad.addColorStop(0.35, '#ffb21a'); grad.addColorStop(0.65, '#3fe07a');
+    grad.addColorStop(1, '#2fa8ff');
+    g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = '#fff'; g.lineWidth = 14; g.strokeRect(7, 7, 114, 114);
+    g.font = 'bold 92px system-ui, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 10; g.strokeStyle = '#3a1d5c'; g.strokeText('?', 64, 70);
+    g.fillStyle = '#fff'; g.fillText('?', 64, 70);
   });
   const boxes = [];
   for (const idx of boxRows) for (const lane of I.boxLanes) {
     const l = clampLane(idx, lane, 1.2); // rows on narrower bits squeeze in
-    const pos = roadPoint(idx, l, 1.0);
+    const pos = roadPoint(idx, l, 1.25);
     boxes.push({ pos, baseY: pos.y, idx, lane: l, hidden: 0 });
   }
   const boxMesh = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(1.1, 1.1, 1.1),
-    new THREE.MeshLambertMaterial({ map: boxTex, transparent: true, opacity: 0.9 }),
+    new THREE.BoxGeometry(1.5, 1.5, 1.5),
+    new THREE.MeshLambertMaterial({ map: boxTex, emissiveMap: boxTex, emissive: 0xffffff, emissiveIntensity: 0.55,
+      transparent: true, opacity: 0.95 }),
     boxes.length);
   // Its bounding sphere is computed once, from whatever the instances are at the first draw (the boot
   // warm-up, all at the origin), so culling would hide every box away from there. 1 draw call: never cull.
@@ -2008,6 +2035,10 @@ function initControls() {
   for (const b of $('steer-pick').children) onTap(b, () => { sound.click(); setSteering(b.dataset.steer); });
   onTap($('btn-settings-back'), () => { sound.click(); showOverlay(settingsFrom); });
   setSteering(savedSteering(), false);
+  for (const pick of document.querySelectorAll('.vol-pick')) {
+    for (const b of pick.children) onTap(b, () => { setVolume(pick.dataset.bus, +b.dataset.vol); sound.click(); });
+    setVolume(pick.dataset.bus, savedVolume(pick.dataset.bus), false);
+  }
 
   // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
   const muteBtn = $('btn-mute');
@@ -2084,6 +2115,7 @@ function onResize() {
  * 3. GAME FLOW (race start, grid, laps, positions, reset)
  * ========================================================================== */
 function startRace() {
+  teleSend('restart'); // a race restarted from pause / results before the AIs were home
   const el = document.documentElement;
   if (el.requestFullscreen && !document.fullscreenElement) {
     el.requestFullscreen().then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
@@ -2101,6 +2133,7 @@ function startRace() {
   clearItems();
   fx.reset();
   placeOnGrid();
+  teleStart();
   camState.snap = true;
   showCountdown('3');
   sound.beep();
@@ -2114,7 +2147,7 @@ function placeOnGrid() {
     Object.assign(k, freshDriveState());
     const back = G.firstRow + Math.floor(slot / 2) * G.rowGap + (slot % 2) * G.rowGap * 0.5;
     const lane = slot % 2 ? -G.colOffset : G.colOffset;
-    k.ai = k.isPlayer ? null : newAI(lane);
+    k.ai = k.isPlayer ? null : newAI(lane, k.name);
     k.topMult = 1;
     resetKart(k, track.N - Math.round(back / track.spacing), lane);
   });
@@ -2164,6 +2197,7 @@ function updateGameFlow(dt) {
   for (const k of karts) updateKartProgress(k, dt, racing);
   updatePlaces(dt);
   updateItems(dt, racing);
+  if (racing) teleSample();
   input.reset = false;
   input.item = false;
 }
@@ -2198,15 +2232,23 @@ function updateKartProgress(k, dt, racing) {
   // Off the road (over a rail, off a jump): well below the road surface for a moment
   const below = surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
   k.fallT = below ? k.fallT + dt : 0;
+  // On top of a rail or past it (user: "I was literally over a rail and it let me run over it"). Pressed
+  // flat against a rail the kart's centre stays >= 0.8 m (its half width) inside the rail's road face, so a
+  // centre within 0.2 m of that face can only be a kart riding on the rail or gone over: put it back.
+  const lat = lateral(idx, k.body.position);
+  const railFace = (lat > 0 ? track.wL[idx] : track.wR[idx]) + CFG.track.curb;
+  k.railT = Math.abs(lat) > railFace - 0.2 && k.bullet <= 0 ? (k.railT || 0) + dt : 0;
+  const onRail = k.railT > 0.3;
   // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
   // reversing uphill barely moves: the AIs' watchdog does the same for them
   const trying = k.isPlayer && !k.ai && racing && !k.finished && k.spin <= 0 && (input.gas || input.brake);
   k.stuckT = trying && Math.abs(k.speed) < CFG.kart.rescueSpeed ? (k.stuckT || 0) + dt : 0;
   const rescue = k.stuckT > CFG.kart.rescueTime;
-  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.fallT > 0.6 || rescue || k.ai?.resetNow;
+  const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.fallT > 0.6 || onRail || rescue || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
-    k.lastReset = k.ai?.resetNow || (k.fallT > 0.6 ? 'fell' : k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : rescue ? 'stuck' : 'button');
+    k.lastReset = k.ai?.resetNow || (onRail ? 'rail' : k.fallT > 0.6 ? 'fell' : k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : rescue ? 'stuck' : 'button');
     k.stuckT = 0;
+    if (state.phase !== 'countdown') teleEvent('reset', k, { why: k.lastReset });
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     resetKart(k, k.trackIdx, lane);
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
@@ -2216,6 +2258,7 @@ function updateKartProgress(k, dt, racing) {
 
 function completeLap(k) {
   k.halfway = false;
+  teleEvent('lap', k, { lap: k.lap });
   if (k.isPlayer) {
     const lapTime = state.raceTime - state.lapStart;
     showSplit(lapTime, state.bestLap);
@@ -2229,13 +2272,15 @@ function completeLap(k) {
   }
   if (k.lap >= CFG.laps) finishKart(k);
   else k.lap++;
-  if (k.ai) k.ai.bias = rand(-CFG.ai.bias, CFG.ai.bias); // a new favourite side each lap
+  if (k.ai) k.ai.bias = rand(-k.ai.style.bias, k.ai.style.bias); // a new favourite side each lap
 }
 
 function finishKart(k) {
   k.finished = true;
   k.finishTime = state.raceTime;
   k.place = ++state.finishedCount;
+  teleEvent('finish', k, { place: k.place });
+  if (karts.every((o) => o.finished)) teleSend('done');
   if (k.isPlayer) {
     state.phase = 'finished';
     k.ai = newAI(0); // the CPU drives the player's lap of honour
@@ -2309,6 +2354,7 @@ function selectTrack(id) {
 
 /** Title screen. The karts sit on the grid behind it. */
 function showMenu() {
+  teleSend('left');
   Object.assign(state, { phase: 'menu', resultsShown: false });
   sound.music('menu');
   clearItems();
@@ -2363,6 +2409,53 @@ function setSteering(mode, save = true) {
   input.left = input.right = false;
   releaseStick();
 }
+// Volume levels: 'music' and 'sfx' (effects + engines + drift squeal), 0..1 in four steps
+const volKey = (bus) => `kartrush.volume.${bus}`;
+function savedVolume(bus) {
+  try { const v = parseFloat(localStorage.getItem(volKey(bus))); return Number.isFinite(v) ? v : 1; } catch { return 1; }
+}
+function setVolume(bus, v, save = true) {
+  if (save) try { localStorage.setItem(volKey(bus), String(v)); } catch { /* storage blocked */ }
+  sound.setVolume(bus, v);
+  for (const b of document.querySelector(`.vol-pick[data-bus="${bus}"]`).children) b.classList.toggle('on', +b.dataset.vol === v);
+}
+// ---------- Race telemetry: when the game comes from the Mac's LAN server (dev/serve.py), each race is sent
+// there at the end and appended to dev/telemetry/races.jsonl, so tuning can use real races on the phone
+// instead of only the headless autopilot. Never sent from GitHub Pages (or any https host).
+const tele = { on: location.protocol === 'http:', race: null, nextT: 0 };
+function teleStart() {
+  if (!tele.on) return;
+  tele.nextT = 0;
+  tele.race = {
+    build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id,
+    steering: savedSteering(), laps: CFG.laps,
+    karts: karts.map((k) => ({ name: k.name, ...(k.ai && { role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
+      lineUse: +k.ai.lineUse.toFixed(2) }) })),
+    // every second: t, then per kart [metres raced, km/h, place, AI target speed as % of top], then the player's
+    // pedals (g = gas, b = brake, - = none)
+    samples: [], events: [],
+  };
+}
+function teleEvent(type, k, data = {}) {
+  if (!tele.race) return;
+  tele.race.events.push({ t: +state.raceTime.toFixed(2), type, kart: karts.indexOf(k), ...data });
+}
+function teleSample() {
+  if (!tele.race || state.raceTime < tele.nextT) return;
+  tele.nextT = state.raceTime + 1;
+  tele.race.samples.push([+state.raceTime.toFixed(1), ...karts.map((k) => [Math.round(k.progress * track.spacing),
+    Math.round(k.speed * 3.6), k.place, k.ai ? Math.round(k.topMult * 100) : 0]),
+    input.gas ? 'g' : input.brake ? 'b' : '-']);
+}
+function teleSend(end) {
+  const race = tele.race;
+  tele.race = null;
+  if (!race || state.raceTime < 5) return; // quit straight away: nothing worth keeping
+  race.end = end;
+  race.result = karts.map((k) => ({ finished: k.finished, time: k.finished ? +k.finishTime.toFixed(2) : null, place: k.place }));
+  fetch('/telemetry', { method: 'POST', body: JSON.stringify(race) }).catch(() => {});
+}
+
 function showSettings() {
   settingsFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
   showOverlay(hud.settingsScreen);
@@ -2382,6 +2475,7 @@ function showOverlay(screen) {
 }
 
 function pauseGame() {
+  teleEvent('pause', kart);
   if (state.paused || !(state.phase === 'race' || state.phase === 'countdown')) return;
   state.paused = true;
   for (const key of Object.keys(input)) input[key] = false; // held buttons would stay held otherwise
@@ -2470,25 +2564,29 @@ function nearestTrackIndex(pos, hint) {
  * 3b. AI DRIVERS
  * Pure pursuit toward a point ahead on the AI's racing lane, braking for corners from the
  * track's curvature. Each AI rolls its own pace and corner bravery per race, wanders between
- * lanes, dodges slower karts, makes the odd mistake, and is rubber-banded to the player.
+ * lanes, dodges slower karts and makes the odd mistake. No rubber band (removed in build 29: user's races
+ * showed AIs ahead holding back at 85% pace so the field bunched up around the player; user wants a level
+ * field, every AI at its own pace whatever the player does).
  * ========================================================================== */
 const rand = (a, b) => a + Math.random() * (b - a);
 const aiFwd = new CANNON.Vec3();
 
-function newAI(lane) {
-  const A = CFG.ai;
+function newAI(lane, name) {
+  const st = { ...CFG.ai, ...CFG.ai.styles[name] }; // this driver's personality over the defaults
   return {
-    skill: rand(...A.skill), grip: rand(...A.cornerGrip), lineUse: rand(...A.lineUse), bias: rand(-A.bias, A.bias),
+    style: st,
+    skill: rand(...st.skill), grip: rand(...st.cornerGrip), lineUse: rand(...st.lineUse), bias: rand(-st.bias, st.bias),
     lane, laneTarget: 0, laneTimer: rand(2, 5), // lane = offset from this AI's racing line (starts at its grid slot)
-    mistake: null, mistakeTimer: rand(...A.mistakeEvery),
-    startDelay: rand(0.05, 0.4), // reaction time at GO
+    mistake: null, mistakeTimer: rand(...st.mistakeEvery),
+    defendT: 0, defendCool: 0, defendLane: 0,
+    startDelay: rand(...st.startDelay), // reaction time at GO
     stuckT: 0, backT: 0, stuckCount: 0, wrongT: 0, resetNow: false, resets: 0,
     watchT: 0, watchProgress: -Infinity,
   };
 }
 
 function updateAI(k, dt, canDrive) {
-  const A = CFG.ai, K = CFG.kart, ai = k.ai, ctl = k.ctl, b = k.body;
+  const K = CFG.kart, ai = k.ai, A = ai.style, ctl = k.ctl, b = k.body;
   const { N, samples, normals, tangents, spacing, radius } = track;
   ctl.steer = 0; ctl.gas = false; ctl.brake = false;
   if (!canDrive) return;
@@ -2525,6 +2623,26 @@ function updateAI(k, dt, canDrive) {
       }
     }
   }
+  // Defending: a faster kart closing in behind on a straight -> move across onto its line for a moment
+  // (then a cool-down, so it's a block, not weaving)
+  ai.defendT -= dt;
+  ai.defendCool -= dt;
+  if (A.defend > 0 && ai.defendCool <= 0 && !k.finished) {
+    let straight = true;
+    for (let s = 5; s * spacing < 35; s += 5) if (radius[(idx + s) % N] < 50) straight = false;
+    for (const o of straight ? karts : []) {
+      if (o === k || o.spin > 0) continue;
+      const dx = o.body.position.x - b.position.x, dz = o.body.position.z - b.position.z;
+      const ahead = dx * fwd.x + dz * fwd.z;
+      if (ahead < -2.5 && ahead > -12 && o.speed > k.speed + 0.5 && Math.random() < A.defend * dt * 3) {
+        ai.defendLane = clampLane(idx, myLane + dx * n.x + dz * n.z);
+        ai.defendT = rand(1, 1.8);
+        ai.defendCool = rand(4, 7);
+        break;
+      }
+    }
+  }
+  if (ai.defendT > 0) goal = ai.defendLane;
   // Steer round bananas
   for (const d of drops) {
     const dx = d.pos.x - b.position.x, dz = d.pos.z - b.position.z;
@@ -2543,13 +2661,21 @@ function updateAI(k, dt, canDrive) {
     const side = dx * n.x + dz * n.z; // + = the other kart is to our left
     const closing = k.speed - o.speed;
     if (ahead > 2 && ahead < Math.max(10, closing * 1.2) && Math.abs(side) < 2.6 && closing > -1) {
-      const dir = myLane + side > 0 ? -1 : 1; // pass on the roomier side of them
+      let dir = myLane + side > 0 ? -1 : 1; // pass on the roomier side of them...
+      if (A.overtake > 0.6) {
+        // ...or, for the racers, down the inside of the next corner (the racing line's apex side), if there's room
+        const inside = Math.sign(track.line[(idx + Math.round(35 / spacing)) % N]);
+        const lane = myLane + side + inside * 3.2;
+        if (inside && clampLane(idx, lane) === lane) dir = inside;
+      }
       goal = clampLane(idx, myLane + side + dir * 3.2);
-      if (ahead < 5 && Math.abs(side) < 1.8) blocked = true; // right on their bumper: ease off
+      // right on their bumper: ease off (the racers keep the gas on closer in)
+      if (ahead < (A.overtake > 0.6 ? 3.5 : 5) && Math.abs(side) < 1.8) blocked = true;
     } else if (Math.abs(ahead) <= 2.5 && Math.abs(side) < 3.2) {
-      // side by side: keep ~3 m apart (unless that would put us into the wall)
+      // side by side: keep ~3 m apart (the bully only ~2 m: leaning on you) unless that would put us into the wall
+      const gap = A.aggression > 0.7 ? 2 : 3.2;
       const away = side > 0 ? -1 : 1;
-      if (clampLane(idx, myLane + away) === myLane + away) push += away * (3.2 - Math.abs(side));
+      if (Math.abs(side) < gap && clampLane(idx, myLane + away) === myLane + away) push += away * (gap - Math.abs(side));
     }
   }
   const relGoal = (goal === null ? ai.laneTarget : goal - base(idx)) + push;
@@ -2564,11 +2690,8 @@ function updateAI(k, dt, canDrive) {
   const d = wrapAngle(Math.atan2(tx - b.position.x, tz - b.position.z) - Math.atan2(fwd.x, fwd.z));
   let steer = clamp(-d * A.steerGain, -1, 1);
 
-  // --- Speed: own pace x rubber band, capped so it can still brake for every corner ahead
-  const rubber = state.phase === 'race' && !k.finished
-    ? clamp(1 - (k.progress - kart.progress) * spacing * A.rubberBand, A.rubberMin, A.rubberMax)
-    : 1;
-  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill * rubber);
+  // --- Speed: own pace, capped so it can still brake for every corner ahead
+  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill);
   let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
   for (let s = 2; s * spacing < 45; s += 2) {
@@ -2580,7 +2703,7 @@ function updateAI(k, dt, canDrive) {
   const target = Math.min(pace, corner);
   k.topMult = target / K.maxSpeed;
   ctl.gas = !blocked;          // the engine cuts out above target on its own (driveKart)
-  // Brake only for corners. Being over its own pace (after a boost pad, or the rubber band) is just a lift:
+  // Brake only for corners. Being over its own pace (after a boost pad) is just a lift:
   // braking for that looked like slamming on the brakes on a straight.
   ctl.brake = k.speed > corner + A.brakeOver && k.boost <= 0; // full brakes against a boost tip the kart over
 
@@ -2589,8 +2712,8 @@ function updateAI(k, dt, canDrive) {
     ai.mistakeTimer -= dt;
     if (ai.mistakeTimer <= 0) {
       ai.mistakeTimer = rand(...A.mistakeEvery);
-      ai.mistake = Math.random() < 0.5
-        ? { t: rand(0.25, 0.5), steer: Math.random() < 0.5 ? -0.8 : 0.8 }
+      ai.mistake = Math.random() < (A.wild ? 0.8 : 0.5) // the wild card mostly wobbles, and longer
+        ? { t: A.wild ? rand(0.3, 0.7) : rand(0.25, 0.5), steer: Math.random() < 0.5 ? -0.8 : 0.8 }
         : { t: rand(0.5, 1.0), lift: true };
     }
     if (ai.mistake) {
@@ -2676,6 +2799,7 @@ function useItem(k) {
   const h = Math.hypot(fwd.x, fwd.z) || 1;
   const fx = fwd.x / h, fz = fwd.z / h;
   const item = k.item;
+  teleEvent('use', k, { item, place: k.place });
   if (item === 'triple') {
     if (k.tripleT > 0) return; // a quick double tap shouldn't burn two
     k.tripleT = I.tripleGap;
@@ -2777,6 +2901,7 @@ function shieldBurst(k) {
 function spinOut(k, by, what, time = CFG.items.spinTime) {
   if (k.spin > 0 || k.star > 0 || k.bullet > 0) return false;
   if (k.shield > 0) {
+    teleEvent('blocked', k, { by: by ? karts.indexOf(by) : -1, what });
     k.shield = 0;
     shieldBurst(k);
     if (k.isPlayer) { showMessage('BLOCKED!'); sound.shieldPop(); }
@@ -2785,6 +2910,7 @@ function spinOut(k, by, what, time = CFG.items.spinTime) {
   }
   k.spin = k.spinTotal = time;
   k.hitBy = `${what} from ${by?.name}`;
+  teleEvent('hit', k, { by: by ? karts.indexOf(by) : -1, what });
   k.boost = 0;
   k.driftCharge = 0;
   // Lose half the speed at once, then slide on: stopping dead got karts rear-ended into the air
@@ -2877,6 +3003,7 @@ function updateItems(dt, racing) {
       box.hidden = I.boxRespawn;
       if (!k.item && !k.finished) {
         k.item = rollItem(k.place);
+        teleEvent('box', k, { item: k.item, place: k.place });
         k.itemCount = k.item === 'triple' ? 3 : 1;
         k.itemRoll = I.rollTime;
         if (k.ai) k.ai.itemT = rand(0.4, 2.5);
@@ -3008,7 +3135,7 @@ function shellIncoming(k) {
  * the shield when a shell (or a star / bullet) is coming, star / bullet / blue shell straight away.
  */
 function updateAIItem(k, dt) {
-  const ai = k.ai;
+  const ai = k.ai, st = ai.style;
   if (!k.item || k.itemRoll > 0 || k.finished || k.spin > 0 || k.bullet > 0) return;
   ai.itemT -= dt;
   if (ai.itemT > 0) return;
@@ -3018,24 +3145,28 @@ function updateAIItem(k, dt) {
   if (k.item === 'mushroom' || k.item === 'triple') {
     let tight = Infinity;
     for (let s = 10; s * spacing < 40; s += 3) tight = Math.min(tight, radius[(k.trackIdx + s) % N]);
-    use = tight > 60 || ai.itemT < -6;
+    use = tight > 60 || ai.itemT < (st.wild ? -1 : -6);
+  } else if (k.item === 'red' && (st.hoard || st.overtake > 0.9)) {
+    // the careful ones wait until a kart ahead is close enough for the shell to lock on
+    use = ai.itemT < -10 || karts.some((o) => o !== k && o.progress > k.progress && (o.progress - k.progress) * spacing < 40);
   } else if (k.item === 'red' || k.item === 'blue' || k.item === 'star' || k.item === 'bullet') {
     use = true;
   } else if (k.item === 'shield') {
-    use = shellIncoming(k) || ai.itemT < -4 || karts.some((o) => (o.star > 0 || o.bullet > 0) && o !== k &&
+    use = shellIncoming(k) || ai.itemT < (st.hoard ? -25 : -4) || karts.some((o) => (o.star > 0 || o.bullet > 0) && o !== k &&
       o.body.position.distanceSquared(k.body.position) < 20 * 20);
   } else {
     const wantBehind = k.item === 'banana';
-    use = ai.itemT < (wantBehind ? -7 : -10);
+    use = ai.itemT < (wantBehind ? (st.hoard ? -20 : -7) : -10);
+    const tail = st.aggression > 0.7 ? 20 : 14; // the bully drops it for anyone within 20 m
     for (const o of karts) {
       if (o === k) continue;
       const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
       const ahead = dx * fwd.x + dz * fwd.z;
       const side = Math.abs(dx * fwd.z - dz * fwd.x);
       if (wantBehind) {
-        if (ahead < -2 && ahead > -14 && side < 3) use = true;
-      } else if (ahead > 3 && ahead < 30 && side < ahead * 0.12 + 0.6 && (o.isPlayer || ai.itemT < -5)) {
-        use = true; // shells go at the player; other AIs only once it's been held a while
+        if (ahead < -2 && ahead > -tail && side < 3) use = true;
+      } else if (ahead > 3 && ahead < 30 && side < ahead * 0.12 + 0.6 && (o.isPlayer || st.aggression > 0.7 || ai.itemT < -5)) {
+        use = true; // shells go at the player (the bully: at anyone); other AIs only once it's been held a while
       }
     }
   }
@@ -3198,6 +3329,7 @@ function applyStabilityAssist(k) {
   // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
   if (k.wallTouch) {
     const hit = clamp((k.wallHit - 1.5) * K.wallHitLoss, 0, K.wallHitMax);
+    if (k.isPlayer && hit > 0.03) teleEvent('rail', k, { loss: +hit.toFixed(2), kmh: Math.round(k.speed * 3.6) });
     const scale = (1 - hit) * (1 - K.wallScrape * CFG.physicsStep);
     body.velocity.x *= scale;
     body.velocity.z *= scale;
@@ -3313,8 +3445,8 @@ function updateItemVisuals(dt) {
   boxEuler.set(0.5, itemClock * 1.6, 0.3);
   boxQuat.setFromEuler(boxEuler);
   boxes.forEach((bx, i) => {
-    // Taken boxes are hidden, then pop back in over the last 0.3 s
-    const sc = bx.hidden > 0.3 ? 0 : 1 - bx.hidden / 0.3;
+    // Taken boxes are hidden, then pop back in over the last 0.3 s; a slow pulse while they're up
+    const sc = (bx.hidden > 0.3 ? 0 : 1 - bx.hidden / 0.3) * (1 + 0.07 * Math.sin(itemClock * 4 + i));
     boxScale.setScalar(sc);
     bx.pos.y = bx.baseY + Math.sin(itemClock * 2 + i) * 0.15;
     boxMesh.setMatrixAt(i, boxMatrix.compose(bx.pos, boxQuat, boxScale));
@@ -3682,7 +3814,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 28 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 29 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
 onResize();
 showMenu();

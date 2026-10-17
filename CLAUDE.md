@@ -8,6 +8,14 @@ jsDelivr via the import map in `index.html`. No build step. The user plays it on
 cd kart-racer && python3 dev/serve.py 8000   # http.server + Cache-Control: no-store (plain http.server let iOS keep stale copies)
 # phone (same Wi-Fi): http://<mac LAN IP>:8000   ->  ipconfig getifaddr en0
 ```
+**Race telemetry (build 29): the best data source.** Over plain http (the LAN server), every race the user plays
+is POSTed to `/telemetry` at its end (or on restart / quit after 5 s) and `serve.py` appends it to
+`dev/telemetry/races.jsonl` (gitignored). One JSON per line: build, track, steering, each kart's name + AI role /
+skill / grip / lineUse, result, `events` (lap, finish, box, use, hit + by/what, blocked, reset + why, rail
+(player, speed loss), pause) and `samples` every second (per kart: metres raced, km/h, place, AI target % of top;
+then the player's pedal). The user prefers this to headless runs ("your tests take too long and my races give
+better data"): analyse their races with a short python script; only smoke-test headless. Something else (a uvicorn
+app) listens on 127.0.0.1:8000, so curl the LAN IP, not localhost. `serve.py` changes need a restart of it.
 **Hosted (2026-10-15):** public repo `github.com/stevkazt/kart-rush`, GitHub Pages from `main` /,
 live at https://stevkazt.github.io/kart-rush/. **Deploy = `git push`** (Pages rebuilds in ~1 min); bump `VERSION`
 in `sw.js` first so installed phones pick up the new files. The user installs it via Safari, Share, then Add to Home Screen; over
@@ -144,7 +152,23 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   lift. That was the "braking on straights": hotspots were 25-35 m after each boost pad. AI lift = `ai.coast: 4`
   (~6 m/s^2; the old coastBrake 12 was ~18 m/s^2, as hard as braking). Measured: AI braking 1-2% -> ~0% of the
   time; AIs are quicker (whole field within ~3-5 s of the autopilot, which now finishes mid-pack).
-- **AI:** pure pursuit to a look-ahead point on the AI's lane; target speed = top x skill x rubber band, capped
+- **AI personalities (build 29), fixed per driver name** (user wants "this guy is so annoying" / "this one is
+  really good"; each will get a matching look later, keep them tied to the names): `CFG.ai.styles` over the
+  `CFG.ai` defaults, merged in `newAI(lane, name)` into `ai.style` (updateAI reads `A = ai.style`). Rex = ace
+  (1.04-1.08 pace, tight line, rare mistakes, overtakes down the inside), Luna = defender (fast, blocks karts
+  closing behind on straights: `defendT/defendCool`, hoards shield/banana/red), Mako = bully (shells at anyone
+  ahead, bananas for anyone within 20 m behind, crowds karts alongside to 2 m), Pip = steady (slower, very few
+  mistakes, hoards), Bolt = wild (fast, `brakeOver` 6 so he runs wide, random lines, wobbles every 3-7 s).
+  Racecraft knobs 0..1: `overtake`, `defend`, `aggression`, plus `hoard`, `wild`. First phone race: "so much
+  better"; Rex won with a 28.4 s lap (user's best 29.6), field spread ~120 m instead of a pack. Watch: Rex too
+  strong? Mako never near the player (slow start, mid pace) so not felt as a bully.
+- **No rubber band (build 29).** The user's races showed AIs ahead holding at 85% pace (rubberMin) waiting for the
+  player and all at 1.06 when behind: the field bunched round the player. User: rubber off "feels more natural",
+  "leave it off". AI pace now comes from the personalities alone.
+- **Rail reset (build 29):** a kart whose centre is within 0.2 m of a rail's road face or beyond (on top of it or
+  over it) for 0.3 s is put back (`k.railT`, reset reason 'rail'); pressed flat against a rail the centre stays
+  0.8 m inside. User: "I was literally over a rail and it let me run over it".
+- **AI:** pure pursuit to a look-ahead point on the AI's lane; target speed = top x skill (no rubber band), capped
   by `track.radius` corner speeds; lane wander, dodging slower karts ahead, random wobble/lift mistakes;
   back-up + reset recovery and a 4 s no-progress watchdog. After the player finishes, the CPU drives their kart.
 - **Places:** `k.progress` = (lap-1)*N + idx + fraction past the sample (build 23), with idx counted negative
@@ -255,6 +279,13 @@ check touch and feel.
   got shield, star, triple mushroom, blue shell, bullet + per-place odds (build 25). New bubble "awesome". Slide
   steering across both arrows: "bad idea" (reverted in build 27; don't retry without a new design). Instead asked
   for a settings menu with buttons or a normal joystick (build 28): judge the joystick after real use.
+- 2026-10-17 (build 29): canyon was "too dark", forced the eyes: now a golden afternoon (sun ~50 deg, blue sky,
+  dusty grey road, pale rails): "much better". Item boxes "barely there": 1.5 m, self-lit, bold "?" texture. A rainbow
+  glow sphere around them was rejected ("take that off"); the box is "too shiny for the style" but keep it (may move
+  the game toward that style). Engine annoying again: softer tone (1/k^2 harmonics, sine tremolo, lower lowpass)
+  was enough; Settings got the usual MUSIC + SOUND EFFECTS levels (Off/Low/Mid/Full; effects cover engines) instead
+  of an engine slider. Plays with the joystick now. Asked whether portrait could work: not as is (narrow view,
+  crowded HUD); a medium job if wanted.
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
@@ -298,6 +329,10 @@ arrows (finger side of the midpoint = direction, so you change direction without
 it keeps steering either way all the time" (any touch on the pad, even the gap, steered). Keep two separate hold
 buttons (`bindHold`). Phone-tested items: no complaints yet; open questions are item strength / odds balance.
 Watch: canyon post-jump flips with the faster items (2 in 7 headless races); balance of the odds.
+
+**Build 29 (2026-10-17, committed locally, NOT pushed):** brighter canyon, bigger item boxes, softer engine,
+music / effects volume, race telemetry, rubber band removed, rail reset, AI personalities + racecraft. All
+phone-tested and liked.
 
 **Next**, roughly in order (agreed 2026-10-16):
 - Another themed track (idea: snowy night with falling snow + an icy section).

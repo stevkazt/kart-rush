@@ -5,6 +5,7 @@
  *   sound.<sfx>()             one-shots: beep, go, bump, boost, charged, lap, finalLap, finish, ...
  *   sound.music(mode)         'race' / 'menu' music loop, or false to stop
  *   sound.setMuted(bool)      remembered in localStorage
+ *   sound.setVolume(bus, v)   'music' | 'sfx' (effects, engines, drift squeal), 0..1 (Settings; the game remembers it)
  * ========================================================================== */
 
 const MUTE_KEY = 'kart-rush-muted';
@@ -14,6 +15,7 @@ let ctx = null;
 let out, sfxBus, musicBus, engineBus, noiseBuf;
 let player, rivals = [], drift;
 let muted = readMuted();
+const level = { music: 1, sfx: 1 };
 
 function readMuted() {
   try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; }
@@ -30,8 +32,8 @@ function unlock() {
     out = gainNode(muted ? 0 : VOL.master, ctx.destination);
     const comp = ctx.createDynamicsCompressor();
     comp.connect(out);
-    sfxBus = gainNode(VOL.sfx, comp);
-    musicBus = gainNode(VOL.music, comp);
+    sfxBus = gainNode(VOL.sfx * level.sfx, comp);
+    musicBus = gainNode(VOL.music * level.music, comp);
     engineBus = gainNode(1, comp);
     noiseBuf = makeNoise();
     player = makeEngine(VOL.engine, 0);
@@ -63,15 +65,16 @@ function noiseSource(loop = false) {
 }
 
 /**
- * Kart engine: a soft buzz (harmonics rolling off faster than a sawtooth's, which grated at a steady pitch)
- * plus a sub an octave down, through a lowpass, with a "putt" tremolo. Pitch follows revs, not speed:
- * see engineRevs.
+ * Kart engine: a soft hum (harmonics rolling off as 1/k^2, between a sawtooth's 1/k, which grated at a steady
+ * pitch, and a sine) plus a sub an octave down, through a lowpass, with a gentle "putt" tremolo. Pitch
+ * follows revs, not speed: see engineRevs. Build 29 made it softer again (user: annoying after the items
+ * came in): 1/k^1.5 -> 1/k^2, square tremolo -> sine and shallower, lowpass ~35% lower.
  */
 let engineWave = null;
 function makeEngine(level, detune) {
   if (!engineWave) {
-    const n = 24, real = new Float32Array(n), imag = new Float32Array(n);
-    for (let k = 1; k < n; k++) imag[k] = 1 / k ** 1.5;
+    const n = 16, real = new Float32Array(n), imag = new Float32Array(n);
+    for (let k = 1; k < n; k++) imag[k] = 1 / k ** 2;
     engineWave = ctx.createPeriodicWave(real, imag);
   }
   const pan = ctx.createStereoPanner();
@@ -92,7 +95,7 @@ function makeEngine(level, detune) {
   b.connect(bLevel);
   // Tremolo LFO: modulates trem.gain around 1
   const lfo = ctx.createOscillator();
-  lfo.type = 'square';
+  lfo.type = 'sine';
   const lfoDepth = gainNode(0.3, trem.gain);
   lfo.connect(lfoDepth);
   [a, b, lfo].forEach((o) => o.start());
@@ -135,8 +138,8 @@ function setEngine(e, { ratio, throttle, air = false, vol, pan = 0 }, dt) {
   e.a.frequency.setTargetAtTime(f, t, k);
   e.b.frequency.setTargetAtTime(f * 0.5, t, k);
   e.lfo.frequency.setTargetAtTime(f / 4, t, k);
-  e.lfoDepth.gain.setTargetAtTime(0.1 + 0.25 * Math.max(0, 1 - e.rpm), t, k);
-  e.filter.frequency.setTargetAtTime(340 + e.rpm * 480 + throttle * 160, t, k);
+  e.lfoDepth.gain.setTargetAtTime(0.06 + 0.14 * Math.max(0, 1 - e.rpm), t, k);
+  e.filter.frequency.setTargetAtTime(260 + e.rpm * 320 + throttle * 100, t, k);
   // present when the revs move (pulling away, shifts, corners, jumps), ~60% at a steady cruise
   const presence = 0.6 + 0.4 * e.change;
   const shiftDip = e.shift > 0 ? 0.6 : 1;
@@ -165,7 +168,7 @@ function update(dt, mix) {
   if (!ctx || ctx.state !== 'running') return;
   const t = ctx.currentTime;
   setEngine(player, { ...mix.player, vol: mix.live ? 1 : 0.6 }, dt);
-  engineBus.gain.setTargetAtTime(mix.duck ? 0.12 : 1, t, mix.duck ? 0.5 : 0.15); // engines fade behind menus
+  engineBus.gain.setTargetAtTime(level.sfx * (mix.duck ? 0.12 : 1), t, mix.duck ? 0.5 : 0.15); // engines fade behind menus
 
   while (rivals.length < mix.rivals.length) rivals.push(makeEngine(VOL.rivals, (rivals.length + 1) * 23));
   mix.rivals.forEach((r, i) => {
@@ -350,6 +353,13 @@ function scheduleMusic() {
   }
 }
 
+function setVolume(bus, v) {
+  level[bus] = v;
+  if (!ctx) return;
+  if (bus === 'music') musicBus.gain.setTargetAtTime(VOL.music * v, ctx.currentTime, 0.03);
+  else sfxBus.gain.setTargetAtTime(VOL.sfx * v, ctx.currentTime, 0.03); // engines: update() reads level.sfx
+}
+
 function setMuted(m) {
   muted = m;
   try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch { /* private mode */ }
@@ -366,4 +376,4 @@ document.addEventListener('visibilitychange', () => {
 /** Pause: freeze all audio (unlock() resumes it). */
 function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }
 
-export const sound = { unlock, suspend, update, music, setMuted, get muted() { return muted; }, get context() { return ctx; }, ...sfx };
+export const sound = { unlock, suspend, update, music, setMuted, setVolume, get muted() { return muted; }, get context() { return ctx; }, ...sfx };
