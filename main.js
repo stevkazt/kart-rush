@@ -91,6 +91,23 @@ const CFG = {
       boxRows: [60, 298, 420, 760],                 // 298 added in build 36
       pads: [[30, -3], [430, 0], [585, 2], [955, 0]],
     },
+    // Test Lab (debug builds only, http): flat 669 m loop to test walls, boosts and items. South straight
+    // (bump, pads), banked left sweeper (R31), north straight on ice, 90deg R13 corner, S chicane (R12),
+    // 90deg R14 corner, R20 corner back to the line. `spots`: control point indices the debug panel jumps to.
+    lab: {
+      name: 'Test Lab', icon: 'gear', theme: 'meadow', debug: true,
+      points: [
+        [-20, -80], [30, -80], [80, -80], [115, -65], [130, -30], [130, 10], [130, 30], [125, 41],
+        [114, 46], [84, 46], [56, 46], [34, 56], [12, 46], [-10, 36], [-32, 46], [-58, 46],
+        [-82, 46], [-95, 40], [-100, 28], [-100, 0], [-100, -48], [-90, -71], [-66, -80], [-42, -80],
+      ],
+      spots: [['Start', 0], ['Sweeper', 3], ['Straight', 5], ['Corner 90', 7], ['Chicane', 11], ['Corner W', 17], ['Corner SW', 21]],
+      bumps: [[60, 14, 0.8]],
+      banks: [[165, 35, 10]],
+      ice: [[205, 255]],
+      boxRows: [80, 215, 310, 470, 600],
+      pads: [[20, 0], [230, -2], [300, 2], [560, 0]],
+    },
   },
 
   kart: {
@@ -329,6 +346,9 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 1a. Renderer, scene, camera, lights ----------
 const app = $('app');
+// Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
+// Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
+const DEBUG = true;
 const VERSION_N = 44; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -336,6 +356,51 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+
+
+// Speed blur (boost / cannon / star): the scene is drawn to a texture, then smeared outward from the screen
+// centre, stronger toward the edges, with a touch of colour fringing. Only used while the effect is on, so
+// normal racing is drawn straight to the screen as before.
+const blurTarget = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+const blurPass = {
+  cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+  scene: new THREE.Scene(),
+  mat: new THREE.ShaderMaterial({
+    uniforms: { tex: { value: blurTarget.texture }, strength: { value: 0 }, aspect: { value: 1.7 } },
+    depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `
+      uniform sampler2D tex; uniform float strength; uniform float aspect; varying vec2 vUv;
+      void main() {
+        vec2 c = vec2(0.5, 0.52);
+        vec2 off = vUv - c;
+        float d = length(off * vec2(aspect, 1.0));
+        float edge = smoothstep(0.18, 0.95, d);
+        vec2 dir = -off * edge * strength * 0.16;
+        vec3 sum = vec3(0.0);
+        float wsum = 0.0;
+        for (int i = 0; i < 10; i++) {
+          float t = float(i) / 9.0, w = 1.0 - t * 0.55;
+          vec2 p = vUv + dir * t;
+          vec3 s = vec3(texture2D(tex, p + dir * 0.06 * t).r, texture2D(tex, p).g, texture2D(tex, p - dir * 0.06 * t).b);
+          sum += s * w; wsum += w;
+        }
+        vec3 col = sum / wsum;
+        col += vec3(0.05, 0.08, 0.14) * edge * strength; // a cool lift at the rim
+        gl_FragColor = vec4(col, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  }),
+};
+blurPass.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blurPass.mat));
+blurPass.scene.children[0].frustumCulled = false;
+function sizeBlurTarget() {
+  const s = renderer.getDrawingBufferSize(new THREE.Vector2());
+  blurTarget.setSize(s.x, s.y);
+  blurPass.mat.uniforms.aspect.value = s.x / s.y;
+}
+sizeBlurTarget();
+renderer.info.autoReset = false; // the telemetry's draw-call counts cover both passes; reset once per frame in render()
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8fd8ff);
@@ -2290,7 +2355,7 @@ const hud = {
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
   item: $('btn-item'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
-  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), helpScreen: $('help-screen'), knob: $('stick-knob'), pickScreen: $('pick-screen'),
+  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), debugScreen: $('debug-screen'), helpScreen: $('help-screen'), knob: $('stick-knob'), pickScreen: $('pick-screen'),
   helloScreen: $('hello-screen'),
 };
 
@@ -2534,6 +2599,7 @@ function onResize() {
   app.style.height = `${h}px`;
   app.style.setProperty('--app-h', `${h}px`);
   renderer.setSize(w, h);
+  sizeBlurTarget();
   camera.aspect = w / h;
   if (camera.view?.enabled) camera.setViewOffset(w, h, lobbyShift, 0, w, h);
   camera.updateProjectionMatrix();
@@ -2589,6 +2655,7 @@ function startRace() {
   try { localStorage.setItem(SITOUT_KEY, sitOut); } catch { /* storage blocked */ }
   castDrivers();
   placeOnGrid();
+  dbgApplyStart();
   teleStart();
   camState.snap = true;
   showCountdown('3');
@@ -3070,7 +3137,7 @@ function openPicker(kind) {
   hud.pickScreen.classList.toggle('staged', staged);
   $('pick-title').textContent = { track: 'CHOOSE A TRACK', driver: 'CHOOSE YOUR DRIVER', kart: 'PAINT YOUR KART' }[kind];
   const options = {
-    track: () => Object.entries(CFG.tracks).map(([id, t]) => ({
+    track: () => Object.entries(CFG.tracks).filter(([, t]) => !t.debug || DEBUG).map(([id, t]) => ({
       on: () => track.id === id, theme: t.theme, pick: () => selectTrack(id),
       html: `${trackShape(id).svg}<b>${icon(t.icon)}${t.name}</b><small>${trackShape(id).length} m · ${recordText(id)}</small>`,
     })),
@@ -3167,6 +3234,90 @@ function setDifficulty(d, save = true) {
 }
 for (const b of $('diff-pick').children) onTap(b, () => { sound.click(); setDifficulty(b.dataset.diff); });
 setDifficulty(difficulty, false);
+
+// ---------- Debug panel (DEBUG builds: the plain-http LAN server only) ----------
+// Menu / pause -> DEBUG. Pick the track (menu only), park the rivals (invisible, no collisions), a start spot
+// (applied at the start of a race, or at once when paused), an item you always carry (refilled after each use)
+// and one-shot effects. Races played with any of it on are not sent to the telemetry log.
+const dbg = { parked: false, spot: null, item: null };
+const dbgActive = () => DEBUG && (track.id === 'lab' || dbg.parked || dbg.spot || dbg.item);
+let dbgFrom = null;
+function dbgSpots() {
+  const def = CFG.tracks[track.id], N = track.N;
+  if (def.spots) { // control point -> nearest road sample
+    return def.spots.map(([name, pi]) => {
+      const [px, pz] = def.points[pi];
+      let best = 0, bd = Infinity;
+      track.samples.forEach((s, i) => { const d = (s.x - px) ** 2 + (s.z - pz) ** 2; if (d < bd) { bd = d; best = i; } });
+      return { name, idx: best };
+    });
+  }
+  return [['Start', 0], ['1/4', 0.25], ['1/2', 0.5], ['3/4', 0.75]].map(([name, f]) => ({ name, idx: Math.round(N * f) % N }));
+}
+function dbgGoto(spot) {
+  dbg.spot = spot;
+  if (state.phase === 'race' || state.paused) { // in a race: jump now, facing along the road
+    resetKart(kart, spot.idx, 0);
+    camState.snap = true;
+  }
+}
+function dbgGive(kind) {
+  dbg.item = kind;
+  if (kind && (state.phase === 'race' || state.phase === 'countdown')) { kart.item = kind; kart.itemRoll = 0; kart.itemCount = kind === 'triple' ? 3 : 1; }
+}
+function dbgApplyStart() { // right after the grid is set up for a race
+  if (dbg.spot) resetKart(kart, dbg.spot.idx, 0);
+  if (dbg.item) dbgGive(dbg.item);
+}
+function dbgTick() { // every frame
+  for (const k of karts) {
+    if (k.isPlayer) continue;
+    const park = DEBUG && dbg.parked;
+    if (k.group.visible === park) k.group.visible = !park;
+    if (k.body.collisionResponse === park) k.body.collisionResponse = !park;
+  }
+  if (dbg.item && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) { kart.item = dbg.item; kart.itemRoll = 0; kart.itemCount = dbg.item === 'triple' ? 3 : 1; }
+}
+function dbgRender() {
+  const card = $('debug-card'), rows = [];
+  const row = (label, opts) => {
+    const el = document.createElement('div');
+    el.className = 'setting-row';
+    el.innerHTML = `<div class="setting"><span class="setting-label">${label}</span><div class="track-pick"></div></div>`;
+    const box = el.querySelector('.track-pick');
+    for (const o of opts) {
+      const b = document.createElement('button');
+      b.className = 'trk' + (o.on ? ' on' : '');
+      b.textContent = o.text;
+      onTap(b, () => { sound.click(); o.pick(); dbgRender(); });
+      box.append(b);
+    }
+    rows.push(el);
+  };
+  const racing = state.paused || state.phase === 'race';
+  if (!racing) row('TRACK', Object.entries(CFG.tracks).map(([id, t]) => ({ text: t.name, on: track.id === id, pick: () => { dbg.spot = null; selectTrack(id); } })));
+  row('RIVALS', [{ text: 'Race', on: !dbg.parked, pick: () => { dbg.parked = false; } }, { text: 'Parked', on: dbg.parked, pick: () => { dbg.parked = true; } }]);
+  row(racing ? 'GO TO' : 'START AT', [{ text: 'Grid', on: !dbg.spot, pick: () => { dbg.spot = null; } },
+    ...dbgSpots().map((s) => ({ text: s.name, on: dbg.spot?.idx === s.idx, pick: () => dbgGoto(s) }))]);
+  row('ITEM', [{ text: 'Normal', on: !dbg.item, pick: () => dbgGive(null) },
+    ...ITEM_TYPES.map((t) => ({ text: t, on: dbg.item === t, pick: () => dbgGive(t) }))]);
+  if (racing) row('NOW', [
+    { text: 'Boost', on: false, pick: () => { kart.boost = CFG.kart.boostDuration * 1.3; } },
+    { text: 'Spin out', on: false, pick: () => spinOut(kart, null, 'debug') },
+    { text: 'Reset lap time', on: false, pick: () => { state.lapStart = state.raceTime; } },
+  ]);
+  card.replaceChildren(...rows);
+}
+function showDebug() {
+  dbgFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
+  dbgRender();
+  showOverlay(hud.debugScreen);
+}
+if (DEBUG) {
+  document.querySelectorAll('.btn-debug').forEach((b) => { b.hidden = false; onTap(b, () => { sound.click(); showDebug(); }); });
+  onTap($('btn-debug-back'), () => { sound.click(); showOverlay(dbgFrom); });
+}
+
 // Screen flip (Settings -> SCREEN): under portrait lock the game is turned 90deg clockwise; flipped turns it
 // the other way, for holding the phone the other way round. Saved in kartrush.flip.
 const FLIP_KEY = 'kartrush.flip';
@@ -3192,7 +3343,7 @@ function setVolume(bus, v, save = true) {
 // instead of only the headless autopilot. Never sent from GitHub Pages (or any https host).
 const tele = { on: location.protocol === 'http:', race: null, nextT: 0 };
 function teleStart() {
-  if (!tele.on) return;
+  if (!tele.on || dbgActive()) return; // debug races stay out of the race log
   tele.nextT = 0;
   tele.race = {
     build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id,
@@ -3236,7 +3387,7 @@ function releaseStick() {
 
 /** Shows one overlay screen (menu / results / pause / settings) and hides the HUD behind it. */
 function showOverlay(screen) {
-  for (const el of [hud.menuScreen, hud.helloScreen, hud.pickScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen, hud.helpScreen]) el.hidden = el !== screen;
+  for (const el of [hud.menuScreen, hud.helloScreen, hud.pickScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen, hud.helpScreen, hud.debugScreen]) el.hidden = el !== screen;
   hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
   hud.overlay.classList.toggle('lobby-on', screen === hud.menuScreen); // lighter backdrop: the 3D kart shows through
@@ -4084,13 +4235,16 @@ function updateAIItem(k, dt) {
 /* ==========================================================================
  * 4. PHYSICS STEP
  * ========================================================================== */
+const speedFx = { v: 0 }; // 0..1 strength of the radial blur (see render())
 const tmpVec = new CANNON.Vec3();
 const tmpFwd = new CANNON.Vec3();
 
 function stepPhysics(dt) {
   const canDrive = state.phase === 'race' || state.phase === 'finished';
   for (const k of karts) {
-    if (k.ai) {
+    if (k.ai && DEBUG && dbg.parked) {
+      Object.assign(k.ctl, { steer: 0, gas: false, brake: true }); // parked rival (debug panel)
+    } else if (k.ai) {
       updateAI(k, dt, canDrive);
     } else {
       k.ctl.steer = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + input.axis, -1, 1);
@@ -4565,6 +4719,12 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
   );
   camera.lookAt(camState.look);
 
+  // Radial blur strength: full on a boost or the cannon, lighter with the star; fades in fast, out slower
+  // Cannon = full. Boosts / star / rocket start scale with how fast the kart really is (a pad at low speed barely blurs).
+  const fast = clamp((Math.abs(kart.speed) / (CFG.kart.maxSpeed + CFG.kart.boostSpeed) - 0.55) / 0.45, 0, 1);
+  const fxTo = kart.bullet > 0 ? 1 : kart.rocketT > 0 ? 0.3 * fast : kart.boost > 0 ? 0.55 * fast : kart.star > 0 ? 0.3 * fast : 0;
+  speedFx.v += (fxTo - speedFx.v) * (1 - Math.exp(-dt * (fxTo > speedFx.v ? 12 : 4)));
+
   // Speed-based FOV kick
   const targetFov = C.fov + Math.min(C.fovMax, speedRatio * C.fovSpeed + (kart.boost > 0 ? C.fovBoost : 0));
   if (Math.abs(camera.fov - targetFov) > 0.05) {
@@ -4744,6 +4904,7 @@ function updateSound(dt) {
 }
 
 function render(dt) {
+  dbgTick();
   syncMeshes();
   updateCamera(dt);
   updateEffects(dt);
@@ -4751,7 +4912,16 @@ function render(dt) {
   updateItemVisuals(dt);
   theme.update(dt);
   updateHUD();
-  renderer.render(scene, camera);
+  renderer.info.reset();
+  if (speedFx.v > 0.02) {
+    renderer.setRenderTarget(blurTarget);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    blurPass.mat.uniforms.strength.value = speedFx.v;
+    renderer.render(blurPass.scene, blurPass.cam);
+  } else {
+    renderer.render(scene, camera);
+  }
   updateSound(dt);
 }
 
@@ -4817,6 +4987,8 @@ function warmUpShaders() {
   updateCamera(0);
   renderer.compile(scene, camera); // everything, even what's off screen (item boxes, pads)
   renderer.render(scene, camera);  // + the shadow-pass programs
+  renderer.setRenderTarget(blurTarget); renderer.render(scene, camera); renderer.setRenderTarget(null); // blur pass programs
+  renderer.render(blurPass.scene, blurPass.cam);
   extras.forEach((m) => scene.remove(m));
   shown.forEach((o) => { o.visible = false; });
 }

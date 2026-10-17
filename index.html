@@ -85,6 +85,7 @@
           <button id="hello-edit" class="chip" hidden></button>
           <button class="chip btn-help" aria-label="How to play">?</button>
           <button class="chip btn-settings"><i data-icon="gear"></i>SETTINGS</button>
+          <button class="chip btn-debug" hidden>DEBUG</button>
         </div>
         <div class="lobby-main">
           <div class="lobby-cta">
@@ -166,6 +167,7 @@
           </div>
           <button class="btn-small btn-help" aria-label="How to play">? HOW TO PLAY</button>
           <button class="btn-small btn-settings"><i data-icon="gear"></i>SETTINGS</button>
+          <button class="btn-small btn-debug" hidden>DEBUG</button>
         </div>
       </div>
       <!-- How to play (from the title or pause screen) -->
@@ -188,6 +190,12 @@
             </div>
           </div>
         </div>
+      </div>
+      <!-- Debug panel (LAN http server only): track, rivals, start spot, items, effects -->
+      <div id="debug-screen" class="screen screen-col" hidden>
+        <div class="pick-title">DEBUG</div>
+        <div id="debug-card" class="card settings-card dbg"></div>
+        <button id="btn-debug-back" class="btn-primary">BACK</button>
       </div>
       <!-- Settings (from the title or pause screen; saved per device) -->
       <div id="settings-screen" class="screen screen-col" hidden>

@@ -272,3 +272,12 @@ User asked for game-experience tweaks after the build 39 race analysis (3 races 
 - Boost FOV kick +7 (max +10): cheap stand-in for the motion blur he asked for.
 - Difficulty (Settings): Hard = no rubber band, Medium = AIs >30 m ahead of the player lose up to 4% (full at 150 m), Easy = 9% and AIs 4% slower (`DIFF`).
 - Lesson: `node --check main.js` does NOT catch module syntax errors; use `node --input-type=module --check < main.js`.
+
+## Build 60 (2026-10-17): speed blur, DEBUG panel, Test Lab
+- Speed blur: real radial blur post-pass (`blurPass`, scene -> half-float target -> smear from the centre, 10 taps, colour fringe) only while
+  an effect is on. Strength: cannon 1, boost .55, star/rocket start .3, each x a speed factor. `renderer.info.autoReset = false`, reset per frame.
+  An always-on oversized CSS overlay (first try) broke iOS painting (blank band): never keep big composited layers alive.
+- DEBUG panel (menu chip / pause button; `DEBUG` const in main.js, on in the hosted copy too): track (menu only), rivals Race/Parked
+  (invisible, no collisions), START AT / GO TO spots, an item you always carry, Boost / Spin out now. Debug races skip telemetry.
+- Test Lab track (`debug: true`, 669 m flat): south straight with bump + pads, banked sweeper, ice north straight, R13 corner,
+  R12 S-chicane, R14 + R20 corners. `spots` = control point indices. Offline check: `dev/track-check.py`.
