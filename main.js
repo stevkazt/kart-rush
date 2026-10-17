@@ -370,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '67'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '68'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -4015,7 +4015,10 @@ function useItem(k, flip = false) { // flip = the opposite throw: green shell ba
     const FLY = 0.6, spd = Math.hypot(b.velocity.x, b.velocity.z);
     const dd = flip ? 14 + spd * FLY : -2.5; // flip = lobbed ahead: lands 14 m past where the kart will be by then (build 66.3)
     const pos = new THREE.Vector3(b.position.x + fx * dd, 0, b.position.z + fz * dd); // clear of the banana
-    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.14; // on the road, even mid-air; lifted so it doesn't look sunk into the asphalt
+    if (flip) { // lands on the road at the sample ahead (the kart's own sample has the wrong height on slopes and banks: it sank under the asphalt), keeping the kart's lane
+      const li = (k.trackIdx + Math.max(1, Math.round(dd / track.spacing))) % track.N;
+      roadPoint(li, clampLane(li, lateral(k.trackIdx, b.position), 0.5), 0.14, pos);
+    } else pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.14; // on the road, even mid-air; lifted so it doesn't look sunk into the asphalt
     const drop = { mesh: spawnModel(item, pos), pos, owner: k, age: 0, kind: item };
     if (flip) { // throw motion: the mesh arcs from the kart's hands to the landing spot, spinning, and only counts once it lands
       drop.fly = { t: 0, dur: FLY, from: new THREE.Vector3(b.position.x + fx * 1.2, b.position.y + 1.6, b.position.z + fz * 1.2) };
@@ -4616,7 +4619,7 @@ function updateItems(dt, racing) {
     if (d.fly) { // in the air: parabola, tumbling, no hits until it lands (then a small bounce puff)
       const f = d.fly, u = Math.min(1, (f.t += dt) / f.dur);
       d.mesh.position.set(f.from.x + (d.pos.x - f.from.x) * u, f.from.y + (d.pos.y - f.from.y) * u + Math.sin(u * Math.PI) * 4.5, f.from.z + (d.pos.z - f.from.z) * u);
-      d.mesh.rotation.x += dt * 14;
+      if (d.kind !== 'bomb') d.mesh.rotation.x += dt * 14; // the bomb stays upright in flight so its landing spot reads clearly
       if (u < 1) continue;
       d.mesh.position.copy(d.pos); d.mesh.rotation.x = 0; d.fly = null; d.age = Math.max(d.age, 0.8);
       if (near(d.owner, 70)) sound.drop();
@@ -5230,7 +5233,7 @@ function updateItemVisuals(dt) {
   });
   boxMesh.instanceMatrix.needsUpdate = true;
   padTex.offset.y = (padTex.offset.y + dt * 1.5) % 1;
-  for (const d of drops) d.mesh.rotation.y += dt * 0.5;
+  for (const d of drops) if (!d.fly) d.mesh.rotation.y += dt * 0.5; // no idle spin while in the air
 
   // Item slot: spins through the icons while rolling, then shows the item
   let shown = kart.item || '';
