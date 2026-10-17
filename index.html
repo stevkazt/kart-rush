@@ -122,11 +122,17 @@
         <button id="btn-hello" class="btn-primary">LET'S RACE</button>
       </div>
 
-      <!-- Track / driver / kart picker (filled by openPicker) -->
+      <!-- Track / driver / kart picker (filled by openPicker). Driver + paint: split stage (.staged): the live 3D
+           kart on the open left (#pick-stage: drag to turn it), the cards on the right -->
       <div id="pick-screen" class="screen screen-col" hidden>
-        <div id="pick-title" class="pick-title"></div>
-        <div id="pick-list" class="pick-list"></div>
-        <button id="btn-pick-done" class="btn-primary">DONE</button>
+        <div id="pick-stage" class="pick-stage">
+          <div class="stage-label"><b id="stage-name"></b><small id="stage-tag"></small></div>
+        </div>
+        <div class="pick-panel">
+          <div id="pick-title" class="pick-title"></div>
+          <div id="pick-list" class="pick-list"></div>
+          <button id="btn-pick-done" class="btn-primary">DONE</button>
+        </div>
       </div>
 
       <!-- After the race -->

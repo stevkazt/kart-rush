@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const [, , debugPort, mode, arg] = process.argv;
 const here = path.dirname(fileURLToPath(import.meta.url));
+const tag = process.env.SHOT_TAG ? `${process.env.SHOT_TAG}-` : ''; // screenshot file name prefix (build + commit)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const tabs = await (await fetch(`http://127.0.0.1:${debugPort}/json`)).json();
@@ -31,11 +32,16 @@ await new Promise((r) => { ws.onopen = r; });
 const ev = async (x) => (await send('Runtime.evaluate', { expression: x })).result?.value;
 
 await send('Runtime.enable');
+// DRIVER=Luna: race / pose as that driver (the player's pick is read from localStorage at boot)
+await send('Page.enable');
+// a saved profile so the lobby opens (not the hello screen)
+await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.getItem('kartrush.profile') || localStorage.setItem('kartrush.profile', '{"name":"Test","age":30}')` });
+if (process.env.DRIVER) await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.driver', ${JSON.stringify(process.env.DRIVER)})` });
 await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/index.html${process.env.TRACK ? `?track=${process.env.TRACK}` : ''}` });
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-if (mode !== 'studio') await ev(`document.getElementById('btn-start').click()`);
+if (mode !== 'studio' && mode !== 'pick') await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -65,8 +71,13 @@ if (mode === 'autopilot' || mode === 'trace') {
     const [idx, lane = 0] = spec.split(':').map(Number);
     await ev(`__resetKart(__k, ${idx}, ${lane}); __snap()`);
     await sleep(2500);
+    // ITEMS=1: parked items on the road ahead (kart-local x, z; y = the ground under the kart) to judge their size
+    if (process.env.ITEMS) await ev(`(() => { window.__parked?.forEach((m) => m.removeFromParent());
+      window.__parked = [['green', 2, 7], ['red', -2.5, 10], ['banana', 0.8, 5], ['banana', 3, 14], ['mushroom', -1, 18]].map(([kind, x, z]) =>
+        __spawn(kind, __k.group.localToWorld(__k.group.position.clone().set(x, -0.61, z)))); })()`);
+    await sleep(300);
     const s = await send('Page.captureScreenshot');
-    fs.writeFileSync(path.join(process.env.OUT_DIR, `shot-${idx}.png`), Buffer.from(s.data, 'base64'));
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}shot-${idx}${process.env.ITEMS ? '-items' : ''}.png`), Buffer.from(s.data, 'base64'));
   }
 } else if (mode === 'studio') {
   // camera + look-at in kart-local space (kart faces +Z, left = +X), fov, and a forced rider pose (null = live)
@@ -74,10 +85,12 @@ if (mode === 'autopilot' || mode === 'trace') {
     front: [[1.4, 1.5, 2.2], [0, 0.9, -0.3], 30, null],
     side: [[2.6, 1.2, -0.3], [0, 0.85, -0.5], 32, null],
     back: [[-0.9, 1.9, -3.4], [0, 0.9, -0.6], 30, null],
-    chase: [[0, 2.6, -4.6], [0, -0.9, 6], 66, { speed: 1, steer: 0, drift: 0, boost: 0 }],
+    chase: [[0, 3.5, -4.6], [0, -0.1, 8], 66, { speed: 1, steer: 0, drift: 0, boost: 0 }],
     fast: [[-1.2, 1.8, -3.2], [0, 0.9, -0.6], 32, { speed: 1, steer: 0, drift: 0, boost: 1 }],
     turn: [[0, 1.9, -3.4], [0, 0.9, -0.6], 30, { speed: 0.8, steer: 1, drift: 0.6, boost: 0 }],
     face: [[0.5, 1.15, 1.3], [0, 1.0, -0.2], 26, null],
+    profile: [[6, 0.6, 0], [0, 0.3, 0], 30, null], // whole kart side-on: chassis vs driver proportions
+    items: [[1.2, 1.4, 1.2], [1.2, -0.5, 5], 40, null], // item close-up: a banana, green, red parked ahead (on the road)
   };
   await ev(`(() => { document.getElementById('overlay').style.display = 'none';
     const r0 = __r.render.bind(__r);
@@ -88,10 +101,34 @@ if (mode === 'autopilot' || mode === 'trace') {
       if (v[3]) for (let i = 0; i < 20; i++) __k.rider.update?.(1 / 120, v[3]); }
       r0(sc, c); }; })()`);
   for (const name of arg.split(',')) {
+    if (name === 'items') await ev(`[['banana', 1.2, 4.5], ['green', 2.6, 6.5], ['red', -0.3, 7]].forEach(([kind, x, z]) =>
+      __spawn(kind, __k.group.localToWorld(__k.group.position.clone().set(x, -0.61, z))))`);
     await ev(`window.__view = ${JSON.stringify(STUDIO[name])}`);
     await sleep(2000);
     const s = await send('Page.captureScreenshot');
-    fs.writeFileSync(path.join(process.env.OUT_DIR, `studio-${name}.png`), Buffer.from(s.data, 'base64'));
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}studio-${name}.png`), Buffer.from(s.data, 'base64'));
+  }
+} else if (mode === 'pick') {
+  // lobby picker screens: open driver / kart / track, screenshot, tap the 3rd card, screenshot again
+  const tap = async (sel) => {
+    const r = JSON.parse(await ev(`JSON.stringify(document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect())`));
+    const x = r.x + r.width / 2, y = r.y + r.height / 2;
+    for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+  };
+  const shot = async (name) => {
+    const s = await send('Page.captureScreenshot');
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}pick-${name}.png`), Buffer.from(s.data, 'base64'));
+  };
+  await sleep(1500);
+  for (const kind of arg.split(',')) {
+    await tap(`.setup [data-pick="${kind}"]`);
+    await sleep(2500);
+    await shot(kind);
+    await tap('#pick-list .pick-card:nth-child(3)');
+    await sleep(2500);
+    await shot(`${kind}-picked`);
+    await tap('#btn-pick-done');
+    await sleep(1500);
   }
 } else if (mode === 'eval') {
   await sleep(5000); // countdown + ~1 s of racing
@@ -116,5 +153,5 @@ if (mode === 'autopilot' || mode === 'trace') {
 
 if (errors.length) console.log('PAGE ERRORS:\n' + errors.join('\n'));
 const shot = await send('Page.captureScreenshot');
-fs.writeFileSync(path.join(process.env.OUT_DIR, `${mode}.png`), Buffer.from(shot.data, 'base64'));
+fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}${mode}-final.png`), Buffer.from(shot.data, 'base64'));
 process.exit(0);

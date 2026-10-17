@@ -4,12 +4,16 @@
 #   dev/test.sh trace <probe.js> [seconds=40]  autopilot race + a probe script that pushes lines to __log
 #   dev/test.sh shots 300,880:3           screenshots with the player parked at sample idx[:lane] (OUT_DIR)
 #   dev/test.sh studio [front,side,back,fast,turn,chase,face]  lobby close-ups of the player's driver
+#   dev/test.sh pick [driver,kart,track]    lobby picker screens: open, screenshot, pick the 3rd card, screenshot
 #   dev/test.sh profile [seconds]           CPU profile of a race with drawing off (top functions by self time)
 #   dev/test.sh eval '<js expr>'          print a page expression ~1 s after GO (debug globals available)
 #   dev/test.sh tap [hold seconds ...]      steering response on open grass (default: 0.25 0.6 1.0)
 # Copies the game to a temp dir with debug globals injected, so the real files stay clean.
 # TRACK=canyon dev/test.sh ...  runs on another track (default: the meadow).
 # Screenshot of the final frame goes to $OUT_DIR (default: the temp dir), path printed at the end.
+# Screenshots worth keeping: dev/shot.sh (gitignored dev/shots/, named by build + commit).
+# DRIVER=Luna dev/test.sh studio  poses / races as that driver.
+# ITEMS=1 dev/test.sh shots 300  parks a green, red, banana and mushroom on the road ahead.
 set -euo pipefail
 GAME_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -22,7 +26,7 @@ if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
 fi
 cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/ui-icons.js "$GAME_DIR"/drivers.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;#' \
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -50,6 +54,8 @@ elif [ "$MODE" = "shots" ]; then
   run shots "$1"
 elif [ "$MODE" = "studio" ]; then
   run studio "${1:-front,side,back,fast,turn,chase,face}"
+elif [ "$MODE" = "pick" ]; then
+  run pick "${1:-driver,kart}"
 elif [ "$MODE" = "profile" ]; then
   run profile "${1:-8}"
 elif [ "$MODE" = "eval" ]; then

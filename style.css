@@ -134,10 +134,10 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #lapbox.final { color: #ffe14a; border-color: rgba(255, 225, 74, 0.6); }
 
 #speedo {
+  /* build 34: just right of the kart (the higher chase camera puts the kart where the readout was, mid-bottom) */
   position: absolute;
   bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: calc(50% + var(--app-h) * 0.17);
   text-align: center;
   font-weight: 900;
   font-style: italic;
@@ -920,6 +920,67 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 .greeting[hidden] { display: none; }
 .greeting:active { transform: translateY(2px); }
 .greeting + .tagline { margin-top: 8px; }
+
+/* Driver + paint pickers: split stage. Left ~42% left open for the live 3D kart (the lobby camera frames it
+ * there: lobbyCamera / stage), cards in a vertical grid on the right. Backdrop light on the left, dark on the right. */
+#overlay.stage-on { background: linear-gradient(to right, rgba(10, 14, 26, 0.15) 0%, rgba(10, 14, 26, 0.85) 50%, rgba(10, 14, 26, 0.92) 100%); }
+.pick-stage { display: none; }
+.pick-panel { display: contents; } /* track picker: the panel's children lay out as before */
+#pick-screen.staged { flex-direction: row; align-items: stretch; gap: 0; max-width: none; height: 100%; }
+#pick-screen.staged .pick-stage {
+  display: flex;
+  flex: 0 0 42%;
+  flex-direction: column;
+  justify-content: flex-start;  /* the name sits above the kart, never over it */
+  align-items: center;
+  padding-top: clamp(2px, calc(var(--app-h) * 0.02), 10px);
+  touch-action: none;
+  cursor: grab;
+}
+.stage-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 18px 6px;
+  border-radius: 16px;
+  background: rgba(10, 14, 26, 0.55);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+  transition: transform 0.15s ease-out;
+}
+.stage-label.pop { transform: scale(1.08); }
+.stage-label b { font-size: clamp(18px, calc(var(--app-h) * 0.06), 26px); font-weight: 900; font-style: italic; color: #ffe14a; line-height: 1.1; }
+.stage-label small { font-size: 12px; font-weight: 700; opacity: 0.8; }
+#pick-screen.staged .pick-panel {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, calc(var(--app-h) * 0.025), 12px);
+}
+#pick-screen.staged .pick-title { font-size: clamp(20px, calc(var(--app-h) * 0.065), 28px); }
+#pick-screen.staged .pick-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y;
+  scroll-snap-type: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+#pick-screen.staged .pick-grid { grid-auto-flow: row; grid-template-rows: none; grid-auto-columns: auto; width: 100%; box-sizing: border-box; }
+/* art-only cards (user: all the text goes with the 3D view): 3 per row */
+#pick-screen.staged .pick-driver .pick-grid,
+#pick-screen.staged .pick-kart .pick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#pick-screen.staged .pick-driver .pick-card { justify-content: center; padding: 6px; }
+#pick-screen.staged .pick-driver .driver-art { width: clamp(52px, calc(var(--app-h) * 0.18), 76px); }
+#pick-screen.staged .pick-kart .kart-art { width: clamp(70px, calc(var(--app-h) * 0.22), 100px); }
+#pick-screen.staged .pick-card b { font-size: 14px; }
+#pick-screen.staged .pick-card small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 /* Paint picker: a soft spotlight + floor under each kart so dark paints (Midnight, Coal) stand out */
 .pick-kart .pick-card { background: radial-gradient(ellipse at 50% 42%, rgba(160, 180, 255, 0.22), rgba(10, 12, 36, 0.78) 68%); }

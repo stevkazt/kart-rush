@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { sound } from './sound.js';
 import { icon, fillIcons } from './ui-icons.js';
-import { PAINT_ROLES, buildRider, driverAvatar, driverKartArt } from './drivers.js';
+import { PAINT_ROLES, buildRider, driverAvatar, driverKartArt, sweep } from './drivers.js';
 
 /* ==========================================================================
  * 0. CONFIG
@@ -50,7 +50,7 @@ const CFG = {
         [-85, 88], [-105, 62], [-112, 28], [-100, -3], [-112, -35], [-102, -75],
         [-70, -93],
       ],
-      boxRows: [95, 450, 670],                           // sample index of each row of item boxes
+      boxRows: [95, 241, 450, 670],                      // sample index of each row of item boxes (4th: build 36)
       pads: [[200, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]
     },
     canyon: {
@@ -69,7 +69,7 @@ const CFG = {
       bumps: [[440, 14, 0.7], [457, 14, 0.7], [700, 26, 1.9]],
       jumps: [[1074, 9, 1.1]],
       banks: [[110, 45, 12], [1140, 30, 8]],
-      boxRows: [230, 760, 1010],
+      boxRows: [230, 405, 760, 1010, 1185], // 5 rows: the longest track (405, 1185 added in build 36)
       pads: [[40, 0], [480, -2], [985, 0]],
     },
     frost: {
@@ -88,7 +88,7 @@ const CFG = {
       bumps: [[600, 20, 0.9]],
       banks: [[162, 25, 8]],
       ice: [[712, 905]],
-      boxRows: [60, 420, 760],
+      boxRows: [60, 298, 420, 760],                 // 298 added in build 36
       pads: [[30, -3], [430, 0], [585, 2], [955, 0]],
     },
   },
@@ -121,6 +121,11 @@ const CFG = {
     steerRate: 2.0,         // how fast a held button ramps toward full lock (per second)
     steerReturn: 7,         // how fast the wheel recentres on release / direction change
     wheelBase: 2.05,
+    // Drawn kart vs physics (build 34, user: the kart looked "too big, wide, and stretched out" next to the
+    // driver): the chassis and wheels are DRAWN this much smaller (scaled about the ground under the kart's
+    // centre) and the wheelbase a further 15% shorter. Physics (wheel spots, collider, grip) is unchanged, so
+    // the handling is the same. The driver keeps their size and sits lower by seatDrop.
+    look: { scale: 0.77, wheelbase: 0.85, groundY: -0.61, seatDrop: 0.15 },
 
     frontGrip: 2.6,
     rearGrip: 2.3,
@@ -237,7 +242,7 @@ const CFG = {
   items: {
     // rows of boxes and boost pads are per track (CFG.tracks)
     boxLanes: [-6, -2, 2, 6],         // lateral offsets of the boxes in a row (m)
-    boxRespawn: 3,                    // seconds until a taken box comes back
+    boxRespawn: 2,                    // seconds until a taken box comes back (3 until build 36: back-markers found empty rows)
     pickupRadius: 1.8,
     padLength: 4, padWidth: 3.2,
     rollTime: 0.9,                    // item roulette before an item can be used
@@ -246,7 +251,10 @@ const CFG = {
     shellSpeed: 38, shellLife: 6, shellBounces: 5,
     redSpeed: 40, redLife: 12, redHomeDist: 14,
     aiTargetPlayer: 140,              // AI red shells lock onto the player when they're up to this far ahead (m)
-    hitRadius: 1.4, bananaRadius: 1.2,
+    // Drawn size per kind. Build 34 (user: "way too small on a mobile screen") went to 2x; with the smaller
+    // drawn kart that was "too big and low definition" (build 35): now ~1.4x and smooth, higher-res models
+    modelScale: { green: 1.4, red: 1.4, banana: 1.3, blue: 1.25, mushroom: 1.15 },
+    hitRadius: 1.5, bananaRadius: 1.3, // were 1.4 / 1.2 before build 34, 1.7 / 1.5 in build 34
     shieldTime: 10,                   // bubble that blocks the next hit (any kind), gone after this anyway
     // invincible + faster; karts touched spin out. User (build 33 races): the star "should give more speed": at
     // +4 m/s with engine power only it held ~108 km/h and gained ~20 m over 6 s. Now pushed like a mushroom.
@@ -263,8 +271,8 @@ const CFG = {
       /* 2nd */ [10, 25, 25, 15, 18, 0, 7, 0, 0],
       /* 3rd */ [12, 12, 18, 25, 10, 5, 10, 8, 0],
       /* 4th */ [12, 6, 12, 25, 6, 10, 14, 10, 5],
-      /* 5th */ [12, 0, 8, 22, 5, 15, 15, 11, 12],
-      /* 6th */ [8, 0, 5, 20, 5, 18, 15, 11, 18],
+      /* 5th */ [15, 0, 8, 22, 0, 15, 17, 11, 12], // no shields at the back (build 36): useless there
+      /* 6th */ [11, 0, 5, 20, 0, 18, 17, 11, 18],
     ],
   },
 
@@ -277,13 +285,14 @@ const CFG = {
     // build 33 (user: the camera "pulls way too far back at top speed" to see the driver): 35% closer, and
     // the kart keeps about the same size on screen at any speed (was 7 m + 1.5 m at speed + ~4.5 m of lag)
     distance: 4.6,
-    height: 2.6,
+    height: 3.5,       // build 34 (user: Nova's ears hid the karts ahead): +35% (was 2.6), looks over the ears
     posLag: 6,
     maxLag: 0.5,       // the trailing position lag can't drift more than this (m) from the ideal spot
     speedPull: 0.3,    // extra distance at top speed (m)
     yawLag: 4,
-    lookAhead: 6,      // look-at point: down the road ahead of the kart, low enough that the kart sits in
-    lookHeight: -0.9,  // the lower-middle third ABOVE the km/h readout (aiming above the head hid it behind)
+    lookAhead: 8,      // look-at point down the road: the view centre sits ~16 deg down, so the ear tips (ray
+    lookHeight: -0.1,  // ~19 deg down) stay just below it and the road ahead is clear. Lower aims hid the
+                       // ears' view line above the centre; higher ones put the kart behind the km/h readout
     fov: 66, fovSpeed: 3, fovBoost: 2, fovMax: 5, // FOV kick: subtle, at most +5 deg
   },
 };
@@ -403,7 +412,7 @@ function staticChunks(material, per = 16) {
 function loadTrack(id) {
   if (itemVis) {
     clearItems();
-    for (const m of Object.values(itemVis.models)) { m.geo.dispose(); m.mat.dispose(); }
+    for (const m of Object.values(itemVis.models)) { m.geo.dispose(); m.outline.dispose(); m.mat.dispose(); }
   }
   trackRoot.traverse((o) => {
     o.geometry?.dispose();
@@ -1686,6 +1695,7 @@ world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
 // hardest one and let applyStabilityAssist apply it once, right after the solver in the same step.
 for (const k of karts) {
   k.body.addEventListener('collide', (e) => {
+    if (e.body.material === physMats.chassis) { k.bumpT = 0.6; return; } // kart-to-kart: riders react (Luna)
     if (e.body.material !== physMats.wall) return;
     k.wallTouch = true;
     k.wallHit = Math.max(k.wallHit, Math.abs(e.contact.getImpactVelocityAlongNormal()));
@@ -1731,12 +1741,12 @@ function paintKart(k, colors) {
 function setRider(k, r, colors) {
   if (k.rider?.name === r.name) return;
   if (k.rider) { k.rider.mesh.removeFromParent(); k.rider.dispose(); }
-  k.rider = buildRider(r, colors, CFG.kart.chassisYOffset);
+  k.rider = buildRider(r, colors, CFG.kart.chassisYOffset - CFG.kart.look.seatDrop); // snug in the small frame
   k.group.add(k.rider.mesh);
   k.alpha = undefined; // re-apply the ghost look to the new materials
 }
 
-const riderState = { speed: 0, steer: 0, drift: 0, boost: 0 };
+const riderState = { speed: 0, steer: 0, drift: 0, boost: 0, bump: 0 };
 /** Feeds a kart's driving state to its rider's animation hook (ears, scarf, tail, lean...). */
 function animateRider(k, dt) {
   if (!k.rider?.update) return;
@@ -1744,6 +1754,8 @@ function animateRider(k, dt) {
   riderState.steer = k.spin > 0 ? 0 : k.steerSmooth;
   riderState.drift = k.driftAmt;
   riderState.boost = k.boost > 0 || k.star > 0 ? 1 : 0;
+  riderState.bump = k.bumpT > 0 ? 1 : 0; // touched another kart in the last 0.6 s
+  k.bumpT = Math.max(0, (k.bumpT || 0) - dt);
   k.rider.update(dt, riderState);
 }
 
@@ -1769,6 +1781,7 @@ function freshDriveState() {
     boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
     item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, shield: 0, star: 0, bullet: 0, bulletLane: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
+    boxAt: -9, rowCheckIdx: undefined, bumpT: 0,
   };
 }
 
@@ -1830,25 +1843,33 @@ function buildKart(colors) {
     return mesh;
   };
   const y0 = K.chassisYOffset;
-  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), 'body', 0, y0 - 0.1, 0);      // floor pan
-  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), 'body', 0, y0 + 0.05, 1.1);  // nose
-  add(new THREE.BoxGeometry(1.9, 0.16, 0.25), 0x333333, 0, y0 - 0.12, 1.5);   // bumper
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', 0.72, y0 + 0.05, 0); // side pods
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', -0.72, y0 + 0.05, 0);
-  add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6);   // seat back
-  add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05); // engine
-  // (the driver is a separate rider mesh, per driver: setRider / drivers.js)
-  const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2);
+  // The chassis is modelled at full size in `frame`, which draws it smaller (K.look, scaled about the ground);
+  // the seat back + steering wheel fit the driver, so they keep their size in `cockpit` (lowered with the driver)
+  const L = K.look;
+  const frame = new THREE.Group(), cockpit = new THREE.Group();
+  frame.scale.set(L.scale, L.scale, L.scale * L.wheelbase);
+  frame.position.y = L.groundY * (1 - L.scale);
+  cockpit.position.y = -L.seatDrop;
+  group.add(frame, cockpit);
+  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), 'body', 0, y0 - 0.1, 0, frame);      // floor pan
+  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), 'body', 0, y0 + 0.05, 1.1, frame);  // nose
+  add(new THREE.BoxGeometry(1.9, 0.16, 0.25), 0x333333, 0, y0 - 0.12, 1.5, frame);   // bumper
+  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', 0.72, y0 + 0.05, 0, frame); // side pods
+  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', -0.72, y0 + 0.05, 0, frame);
+  add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05, frame); // engine
+  add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, 0.6, y0 + 0.35, -1.35, frame);  // spoiler struts
+  add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, -0.6, y0 + 0.35, -1.35, frame);
+  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), 'accent', 0, y0 + 0.6, -1.4, frame);    // spoiler
+  add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6, cockpit);   // seat back
+  // (the driver is a separate rider mesh, per driver: setRider / drivers.js; its paws hold this wheel)
+  const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2, cockpit);
   wheel.rotation.x = -0.9;
-  add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, 0.6, y0 + 0.35, -1.35);  // spoiler struts
-  add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, -0.6, y0 + 0.35, -1.35);
-  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), 'accent', 0, y0 + 0.6, -1.4);    // spoiler
 
   // Exhaust + boost flame
   const pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 6);
   pipeGeo.rotateX(Math.PI / 2);
-  add(pipeGeo, 0x444444, 0.22, y0 + 0.1, -1.4);
-  add(pipeGeo, 0x444444, -0.22, y0 + 0.1, -1.4);
+  add(pipeGeo, 0x444444, 0.22, y0 + 0.1, -1.4, frame);
+  add(pipeGeo, 0x444444, -0.22, y0 + 0.1, -1.4, frame);
   const flameGeo = new THREE.ConeGeometry(0.16, 0.9, 6);
   flameGeo.rotateX(-Math.PI / 2);
   const flameMat = new THREE.MeshBasicMaterial({ color: 0x66d9ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -1856,7 +1877,7 @@ function buildKart(colors) {
     const f = new THREE.Mesh(flameGeo, flameMat);
     f.position.set(x, y0 + 0.1, -1.95);
     f.visible = false;
-    group.add(f);
+    frame.add(f);
     return f;
   });
 
@@ -1866,7 +1887,7 @@ function buildKart(colors) {
     const sp = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), sparkMat);
     sp.position.set(x, -0.45, K.wheelRearZ - 0.45);
     sp.visible = false;
-    group.add(sp);
+    frame.add(sp);
     return sp;
   });
 
@@ -1894,20 +1915,20 @@ function buildKart(colors) {
     st.position.set(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55);
     stars.add(st);
   }
-  stars.position.set(0, y0 + 2.1, -0.3); // over the drivers' heads (Nova's ears reach ~1.9)
+  stars.position.set(0, y0 + 2.1 - L.seatDrop, -0.3); // over the drivers' heads (Nova's ears reach ~1.9)
   stars.visible = false;
   group.add(stars);
 
-  // --- Visuals: wheels (positioned from the physics wheel transforms) ---
+  // --- Visuals: wheels (positioned from the physics wheel transforms, pulled in to the drawn frame: syncMeshes) ---
   const tireMat = lambert(0x1f1f24);
   const hubMat = lambert(0xdddddd);
   const wheelMeshes = layout.map((_, i) => {
-    const width = i < 2 ? 0.34 : 0.44;
+    const width = (i < 2 ? 0.34 : 0.44) * L.scale, r = K.wheelRadius * L.scale;
     const g = new THREE.Group();
-    const tireGeo = new THREE.CylinderGeometry(K.wheelRadius, K.wheelRadius, width, 12);
+    const tireGeo = new THREE.CylinderGeometry(r, r, width, 12);
     tireGeo.rotateZ(Math.PI / 2); // cylinder axis Y -> axle axis X
     const tire = new THREE.Mesh(tireGeo, tireMat);
-    const hubGeo = new THREE.CylinderGeometry(0.18, 0.18, width + 0.02, 6);
+    const hubGeo = new THREE.CylinderGeometry(0.18 * L.scale, 0.18 * L.scale, width + 0.02, 6);
     hubGeo.rotateZ(Math.PI / 2);
     const hub = new THREE.Mesh(hubGeo, hubMat);
     g.add(tire, hub);
@@ -2157,8 +2178,10 @@ function buildItemVisuals() {
     return { idx, lane, len: Math.ceil(I.padLength / track.spacing) };
   });
 
-  // Banana + shell templates (baked to one mesh each; instances share geometry + material)
-  const template = (build) => {
+  // Banana + shell templates (baked to one mesh each; instances share geometry + material). Scaled per kind
+  // (I.modelScale) with the bottom at y 0 (they sit on the road), a faint glow of their colour and a dark
+  // outline (a slightly bigger back-face copy) so they stand out on grey asphalt at speed.
+  const template = (kind, glow, build) => {
     const g = new THREE.Group();
     build((geo, color, x, y, z) => {
       const m = new THREE.Mesh(geo, lambert(color));
@@ -2167,30 +2190,51 @@ function buildItemVisuals() {
       return m;
     });
     const mesh = bakeMeshes(g);
-    return { geo: mesh.geometry, mat: mesh.material };
+    mesh.material.flatShading = false; // smooth, like the characters (faceted read as low definition)
+    const geo = mesh.geometry, sc = I.modelScale[kind] ?? 1;
+    geo.computeBoundingBox();
+    geo.translate(0, -geo.boundingBox.min.y, 0);
+    geo.scale(sc, sc, sc);
+    mesh.material.emissive = new THREE.Color(glow);
+    geo.computeBoundingBox();
+    const box = geo.boundingBox, size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
+    const line = 0.05; // outline thickness (m)
+    const outline = geo.clone().translate(-mid.x, -mid.y, -mid.z)
+      .scale(1 + (2 * line) / size.x, 1 + (2 * line) / size.y, 1 + (2 * line) / size.z).translate(mid.x, mid.y, mid.z);
+    return { geo, mat: mesh.material, outline };
   };
-  const banana = template((add) => {
-    const body = add(new THREE.TorusGeometry(0.42, 0.14, 6, 10, Math.PI * 0.9), 0xffd23a, 0, 0.3, 0);
-    body.rotation.z = Math.PI * 0.05;
-    add(new THREE.CylinderGeometry(0.05, 0.06, 0.18, 5), 0x5a3a12, -0.44, 0.38, 0);
+  // Banana peel (build 36; the old arch of a banana looked stuck into the asphalt): a short upright stub with three
+  // peel flaps splayed out flat on the road, brown tips, so it clearly sits on top of the road
+  const banana = template('banana', 0x3a2c00, (add) => {
+    const stub = new THREE.CapsuleGeometry(0.11, 0.2, 6, 16);
+    add(stub, 0xffe38a, 0, 0.27, 0);                                              // the fruit, warm cream
+    add(new THREE.CylinderGeometry(0.03, 0.05, 0.1, 10), 0x5a3a12, 0, 0.5, 0);    // stem
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.3;
+      const flap = sweep([[0, 0.34, 0], [0.13, 0.3, 0], [0.26, 0.16, 0], [0.36, 0.05, 0], [0.42, 0.03, 0]],
+        (u) => 0.075 * (1 - 0.45 * u) + 0.01, 20, 12);
+      flap.scale(1, 0.55, 1.9); // flat and wide
+      add(flap, 0xffd23a, 0, 0, 0).rotation.y = a;
+      add(new THREE.SphereGeometry(0.045, 10, 8), 0x6b4a1a, Math.cos(a) * 0.42, 0.04, -Math.sin(a) * 0.42); // tip
+    }
   });
-  const shell = (color) => template((add) => {
-    add(new THREE.SphereGeometry(0.42, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), color, 0, 0.12, 0);
-    add(new THREE.CylinderGeometry(0.46, 0.46, 0.14, 10), 0xffffff, 0, 0.1, 0);
+  const shell = (kind, color, glow) => template(kind, glow, (add) => {
+    add(new THREE.SphereGeometry(0.42, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), color, 0, 0.12, 0);
+    add(new THREE.TorusGeometry(0.42, 0.07, 10, 32), 0xffffff, 0, 0.1, 0).rotation.x = Math.PI / 2; // rounded rim
   });
-  const mushroom = template((add) => {
-    add(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 8), 0xfff1d6, 0, 0.15, 0);
-    add(new THREE.SphereGeometry(0.34, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xe8322f, 0, 0.28, 0);
-    for (const [x, z] of [[0.18, 0.12], [-0.16, 0.14], [0, -0.22]]) add(new THREE.SphereGeometry(0.08, 6, 4), 0xffffff, x, 0.5, z);
+  const mushroom = template('mushroom', 0x2a0806, (add) => {
+    add(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 16), 0xfff1d6, 0, 0.15, 0);
+    add(new THREE.SphereGeometry(0.34, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0xe8322f, 0, 0.28, 0);
+    for (const [x, z] of [[0.18, 0.12], [-0.16, 0.14], [0, -0.22]]) add(new THREE.SphereGeometry(0.08, 10, 6), 0xffffff, x, 0.5, z);
   });
-  const blue = template((add) => {
-    add(new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x2a6bff, 0, 0.12, 0);
-    add(new THREE.CylinderGeometry(0.54, 0.54, 0.14, 12), 0xffffff, 0, 0.1, 0);
+  const blue = template('blue', 0x0a2266, (add) => {
+    add(new THREE.SphereGeometry(0.5, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0x2a6bff, 0, 0.12, 0);
+    add(new THREE.TorusGeometry(0.5, 0.075, 10, 32), 0xffffff, 0, 0.1, 0).rotation.x = Math.PI / 2;
     for (const x of [0.55, -0.55]) add(new THREE.BoxGeometry(0.7, 0.06, 0.35), 0xffffff, x * 1.4, 0.45, 0).rotation.z = x * 0.6;
   });
   return {
     boxes, boxMesh, pads, padTex,
-    models: { banana, green: shell(0x2fbf4a), red: shell(0xe8322f), mushroom, blue },
+    models: { banana, green: shell('green', 0x2fbf4a, 0x0d4a1a), red: shell('red', 0xe8322f, 0x5a0c0b), mushroom, blue },
   };
 }
 
@@ -2390,6 +2434,21 @@ function initControls() {
   // --- Block browser gestures (scroll, pinch, double-tap zoom, long-press menu) ---
   const block = (e) => e.preventDefault();
   document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.pick-list')) e.preventDefault(); }, { passive: false });
+  // split stage: drag sideways to turn the 3D kart (it swings gently by itself again after a few seconds)
+  const stageEl = $('pick-stage');
+  stageEl.addEventListener('pointerdown', (e) => {
+    stage.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, rot: stage.rot };
+    stageEl.setPointerCapture?.(e.pointerId);
+  });
+  stageEl.addEventListener('pointermove', (e) => {
+    if (stage.drag?.id !== e.pointerId) return;
+    // #app is turned 90deg in portrait: the screen's vertical is the game's horizontal there
+    const dx = app.classList.contains('rotated') ? e.clientY - stage.drag.y : e.clientX - stage.drag.x;
+    stage.rot = stage.drag.rot + (dx / Math.max(1, stageEl.offsetWidth)) * Math.PI * 1.6;
+  });
+  const endDrag = (e) => { if (stage.drag?.id === e.pointerId) { stage.drag = null; stage.idle = 0; } };
+  stageEl.addEventListener('pointerup', endDrag);
+  stageEl.addEventListener('pointercancel', endDrag);
   document.addEventListener('gesturestart', block);
   document.addEventListener('gesturechange', block);
   document.addEventListener('gestureend', block);
@@ -2496,6 +2555,7 @@ function placeOnGrid() {
 /** Puts a kart on the track at sample idx, `lane` metres left of the centre line, facing forward. */
 /** Ghost after a respawn: no contact with other karts (walls and road still count). */
 function setGhost(k, on) {
+  if (!!k.ghosted !== on) teleEvent('ghost', k, { on }); // build 36: to chase the respawn ghost bug
   k.body.collisionFilterMask = on ? -1 & ~KART_GROUP : -1;
   k.ghosted = on;
 }
@@ -2889,6 +2949,8 @@ function refreshPickRows() {
 function openPicker(kind) {
   const list = $('pick-list');
   list.className = `pick-list pick-${kind}`;
+  const staged = kind !== 'track'; // driver / paint: the live 3D kart on the left (split stage)
+  hud.pickScreen.classList.toggle('staged', staged);
   $('pick-title').textContent = { track: 'CHOOSE A TRACK', driver: 'CHOOSE YOUR DRIVER', kart: 'PAINT YOUR KART' }[kind];
   const options = {
     track: () => Object.entries(CFG.tracks).map(([id, t]) => ({
@@ -2903,7 +2965,7 @@ function openPicker(kind) {
         castDrivers();
         placeOnGrid();
       },
-      html: `${driverSvg(r)}<span><b>${r.name}</b><small>${r.tag}</small></span>`,
+      label: r.name, html: driverSvg(r), // art only: name + tag show with the 3D driver (user: all text there)
     })),
     kart: () => CFG.paints.map((p) => ({
       on: () => picks.paint === p.name,
@@ -2912,18 +2974,20 @@ function openPicker(kind) {
         try { localStorage.setItem(PAINT_KEY, p.name); } catch { /* storage blocked */ }
         paintKart(kart, playerColors());
       },
-      html: `${kartSvg(playerColors(p.name))}<b>${p.name}</b>`,
+      label: p.name, html: kartSvg(playerColors(p.name)), // the paint's name shows with the 3D kart
     })),
   }[kind]();
   const cards = options.map((o) => {
     const b = document.createElement('button');
     b.className = 'pick-card';
+    if (o.label) b.setAttribute('aria-label', o.label);
     if (o.theme) b.dataset.theme = o.theme;
     b.innerHTML = o.html;
     onTap(b, () => {
       sound.click();
       o.pick();
       cards.forEach((c, i) => c.classList.toggle('on', options[i].on()));
+      if (staged) { stage.pop = 1; stageLabel(kind); }
     });
     return b;
   });
@@ -2934,9 +2998,29 @@ function openPicker(kind) {
   grid.append(...cards);
   list.replaceChildren(grid);
   showOverlay(hud.pickScreen);
-  list.scrollLeft = 0;
+  if (staged) {
+    stage.on = true;
+    stage.rot = 0;
+    stage.idle = 0;
+    hud.overlay.classList.add('stage-on');
+    stageLabel(kind);
+  }
+  list.scrollLeft = list.scrollTop = 0;
   list.classList.toggle('scrolls', list.scrollWidth > list.clientWidth + 2);
   cards.find((c) => c.classList.contains('on'))?.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+
+/** The name under the 3D kart on the split stage: the driver and their flavour line (never a role: the
+ * player's driver is looks only), or the paint. */
+function stageLabel(kind) {
+  const d = playerDriver();
+  $('stage-name').textContent = kind === 'driver' ? d.name : picks.paint;
+  $('stage-tag').textContent = kind === 'driver' ? d.tag : `${d.name}'s kart`;
+  const el = $('stage-name').parentElement;
+  el.classList.remove('pop');
+  void el.offsetWidth; // restart the transition
+  el.classList.add('pop');
+  setTimeout(() => el.classList.remove('pop'), 150);
 }
 
 // ---------- Settings (per device). Steering: 'buttons' (the two arrows) or 'joystick' (analogue). ----------
@@ -3015,6 +3099,8 @@ function showOverlay(screen) {
   hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
   hud.overlay.classList.toggle('lobby-on', screen === hud.menuScreen); // lighter backdrop: the 3D kart shows through
+  hud.overlay.classList.remove('stage-on'); // openPicker puts it back for the split stage
+  stage.on = false;
   hud.overlay.classList.remove('hidden');
 }
 
@@ -3331,9 +3417,11 @@ function rollItem(place, k) {
   return 'mushroom';
 }
 
+const OUTLINE_MAT = new THREE.MeshBasicMaterial({ color: 0x14121c, side: THREE.BackSide });
 function spawnModel(kind, pos) {
-  const { geo, mat } = itemVis.models[kind];
+  const { geo, mat, outline } = itemVis.models[kind];
   const mesh = new THREE.Mesh(geo, mat);
+  mesh.add(new THREE.Mesh(outline, OUTLINE_MAT));
   mesh.position.copy(pos);
   mesh.castShadow = true;
   scene.add(mesh);
@@ -3386,7 +3474,7 @@ function useItem(k) {
     showMessage(k.isPlayer ? 'BLUE SHELL!' : `BLUE SHELL FROM ${k.name.toUpperCase()}!`);
     sound.blueLaunch();
   } else if (item === 'banana') {
-    const pos = new THREE.Vector3(b.position.x - fx * 2.4, 0, b.position.z - fz * 2.4);
+    const pos = new THREE.Vector3(b.position.x - fx * 2.5, 0, b.position.z - fz * 2.5); // clear of the banana
     pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)); // on the road, even mid-air
     drops.push({ mesh: spawnModel('banana', pos), pos, owner: k, age: 0 });
     if (k.isPlayer) sound.drop();
@@ -3395,7 +3483,7 @@ function useItem(k) {
     const ahead = red ? redShellTarget(k) : null;
     const speed = red ? I.redSpeed : I.shellSpeed;
     const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0, b.position.z + fz * 2.4);
-    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.15;
+    pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.03;
     shells.push({
       kind: item, mesh: spawnModel(item, pos), pos,
       vel: new THREE.Vector3(fx * speed, 0, fz * speed), idx: k.trackIdx,
@@ -3448,7 +3536,8 @@ function shieldBurst(k) {
  * takes the hit and pops. Returns whether the kart actually spun out.
  */
 function spinOut(k, by, what, time = CFG.items.spinTime) {
-  if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted) return false;
+  // finished karts are out of it (build 36: a red shell hit Luna 11 s after she had crossed the line)
+  if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted || k.finished) return false;
   if (k.shield > 0) {
     teleEvent('blocked', k, { by: by ? karts.indexOf(by) : -1, what });
     k.shield = 0;
@@ -3555,10 +3644,28 @@ function updateItems(dt, racing) {
         teleEvent('box', k, { item: k.item, place: k.place });
         k.itemCount = k.item === 'triple' ? 3 : 1;
         k.itemRoll = I.rollTime;
+        k.boxAt = state.raceTime;
         if (k.ai) k.ai.itemT = rand(0.4, 2.5);
         if (k.isPlayer) sound.itemBox(I.rollTime);
       }
       break;
+    }
+  }
+
+  // Telemetry (build 36, user: items "sometimes too much, sometimes nothing"): each box row the player passes
+  // without getting an item, and why: 'holding' an item, row 'empty' (taken, respawning) or 'missed' (drove by)
+  if (racing && !kart.finished) {
+    const at = kart.trackIdx, prev = kart.rowCheckIdx ?? at;
+    kart.rowCheckIdx = at;
+    const ahead = (at - prev + N) % N;
+    if (ahead > 0 && ahead < 20) {
+      for (const row of track.def.boxRows) {
+        const check = (row + 3) % N; // just past the row, after any pickup
+        if ((check - prev + N) % N === 0 || (check - prev + N) % N > ahead) continue;
+        if (state.raceTime - (kart.boxAt ?? -9) < 1.5) continue; // got one
+        const open = itemVis.boxes.some((bx) => bx.idx === row && bx.hidden <= 0);
+        teleEvent('boxmiss', kart, { row, why: kart.item ? 'holding' : open ? 'missed' : 'empty' });
+      }
     }
   }
 
@@ -3605,7 +3712,7 @@ function updateItems(dt, racing) {
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
     d.age += dt;
-    const hit = karts.find((k) => (k !== d.owner || d.age > 0.8) && flat2(k.body.position, d.pos) < I.bananaRadius ** 2);
+    const hit = karts.find((k) => (k !== d.owner || d.age > 0.8) && !k.finished && flat2(k.body.position, d.pos) < I.bananaRadius ** 2);
     if (hit) {
       spinOut(hit, d.owner, 'banana');
       scene.remove(d.mesh);
@@ -3652,14 +3759,16 @@ function updateItems(dt, racing) {
         if (s.kind === 'green') s.bounces++;
       }
     }
-    s.pos.y = surfaceY(s.idx, clampLane(s.idx, lateral(s.idx, s.pos), 0)) + 0.15; // shells hug the road
+    s.pos.y = surfaceY(s.idx, clampLane(s.idx, lateral(s.idx, s.pos), 0)) + 0.03; // shells ride on the road
     s.mesh.position.copy(s.pos);
     s.mesh.rotation.y += dt * 12;
 
     let gone = s.life <= 0 || s.bounces > I.shellBounces;
-    const hit = !gone && karts.find((k) => (k !== s.owner || s.age > 0.6) && flat2(k.body.position, s.pos) < I.hitRadius ** 2);
+    // a red shell never hits its owner (build 36: Bolt was hit by his own); a green one bouncing back still can
+    const hit = !gone && karts.find((k) => (k !== s.owner || (s.kind === 'green' && s.age > 0.6)) && !k.finished
+      && flat2(k.body.position, s.pos) < I.hitRadius ** 2);
     if (hit) { spinOut(hit, s.owner, s.kind); gone = true; }
-    const banana = gone ? -1 : drops.findIndex((d) => flat2(d.pos, s.pos) < 1.2);
+    const banana = gone ? -1 : drops.findIndex((d) => flat2(d.pos, s.pos) < 1.6);
     if (banana >= 0) {
       scene.remove(drops[banana].mesh);
       drops.splice(banana, 1);
@@ -3962,7 +4071,8 @@ const desiredCam = new THREE.Vector3();
 
 const spinQ = new THREE.Quaternion();
 const spinAxis = new THREE.Vector3();
-const interpQ = new THREE.Quaternion(), bodyP = new THREE.Vector3();
+const interpQ = new THREE.Quaternion(), bodyP = new THREE.Vector3(), rawQInv = new THREE.Quaternion();
+const drawQ = new THREE.Quaternion();
 
 /**
  * Meshes are drawn at the body's *interpolated* pose (between the last two fixed physics steps), not
@@ -3970,12 +4080,15 @@ const interpQ = new THREE.Quaternion(), bodyP = new THREE.Vector3();
  * frames: the kart and camera visibly hitch even at a steady frame rate.
  */
 function syncMeshes() {
+  const L = CFG.kart.look;
   for (const { body, vehicle, group, wheelMeshes, spin, spinTotal, bullet } of karts) {
     group.position.copy(body.interpolatedPosition);
     group.quaternion.copy(body.interpolatedQuaternion);
     // wheel transforms come from the raw pose: move them by (interpolated pose) * (raw pose)^-1
     bodyP.copy(body.position);
-    interpQ.copy(body.quaternion).invert().premultiply(group.quaternion);
+    rawQInv.copy(body.quaternion).invert();
+    interpQ.copy(rawQInv).premultiply(group.quaternion);
+    drawQ.copy(group.quaternion); // before the spin-out turn
     // Spin-out is visual only: turn the body and wheels about the kart's up axis (two full turns)
     const spinning = spin > 0;
     if (spinning) {
@@ -3989,7 +4102,12 @@ function syncMeshes() {
       const t = vehicle.wheelInfos[i].worldTransform;
       const w = wheelMeshes[i];
       w.visible = !(bullet > 0); // inside the bullet
-      w.position.copy(t.position).sub(bodyP).applyQuaternion(interpQ).add(group.position);
+      // in the kart's frame: pulled in to the drawn (smaller) chassis, the smaller tyre still on the ground
+      w.position.copy(t.position).sub(bodyP).applyQuaternion(rawQInv);
+      w.position.x *= L.scale;
+      w.position.z *= L.scale * L.wheelbase;
+      w.position.y -= CFG.kart.wheelRadius * (1 - L.scale);
+      w.position.applyQuaternion(drawQ).add(group.position);
       w.quaternion.copy(t.quaternion).premultiply(interpQ);
       if (spinning) {
         w.position.sub(group.position).applyQuaternion(spinQ).add(group.position);
@@ -4080,23 +4198,62 @@ function updateCamera(dt) {
  * lobby's columns (lobbyShift, measured in layoutLobby). The chase camera snaps back at the race start. */
 const LOBBY_FOV = 42;
 let lobbyShift = 0, lobbyClock = 0;
+/** Split stage (driver / paint pickers): close 3/4 front view framed on the left, turned by drag (rot), a key
+ * light on the kart, a bounce on each pick (pop). The lobby camera blends between this and the turntable. */
+const stage = { on: false, rot: 0, idle: 0, drag: null, pop: 0 };
+const lobbyView = { a: 0, dist: 9, up: 2.3, lookUp: 0.9, fov: LOBBY_FOV, shift: 0, init: false };
+const lightSide = new THREE.Vector3();
+// Key light for the stage. Always in the scene (0 in a race) so adding it never recompiles every material.
+const stageLight = new THREE.DirectionalLight(0xfff4e6, 0);
+scene.add(stageLight, stageLight.target);
 function lobbyCamera(dt, bp, yaw) {
   lobbyClock += dt;
   const i = kart.trackIdx, n = track.normals[i];
   const out = Math.sign(lateral(i, bp) || 1); // the grid side away from the centre line: no karts there
-  const a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22), dist = 9;
   const fx = Math.sin(yaw), fz = Math.cos(yaw);
-  camera.position.set(
-    bp.x + (fx * Math.cos(a) + n.x * out * Math.sin(a)) * dist,
-    bp.y + 2.3,
-    bp.z + (fz * Math.cos(a) + n.z * out * Math.sin(a)) * dist,
-  );
-  camState.look.set(bp.x, bp.y + 0.9, bp.z);
-  camera.lookAt(camState.look);
   const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
-  if (camera.fov !== LOBBY_FOV || camera.view?.offsetX !== lobbyShift) {
-    camera.fov = LOBBY_FOV;
-    camera.setViewOffset(w, h, lobbyShift, 0, w, h);
+  let a, dist, up, lookUp, fov, shift;
+  if (stage.on) {
+    // untouched: ease back into a slow swing around the 3/4 front
+    stage.idle += dt;
+    if (!stage.drag && stage.idle > 2.5) {
+      const swing = 0.45 * Math.sin(lobbyClock * 0.35);
+      stage.rot = wrapAngle(stage.rot) + (swing - wrapAngle(stage.rot)) * (1 - Math.exp(-dt * 0.8));
+    }
+    const el = $('pick-stage');
+    a = 0.55 + stage.rot; dist = 5.4; up = 1.7; lookUp = 0.85; fov = 34;
+    shift = Math.round(app.clientWidth / 2 - (el.offsetLeft + el.offsetWidth / 2)); // kart in the stage's middle
+  } else {
+    a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22); dist = 9; up = 2.3; lookUp = 0.9; fov = LOBBY_FOV; shift = lobbyShift;
+  }
+  // smooth move between turntable and stage: blend the orbit (angle, distance, height), so it swings round the
+  // kart instead of cutting through it
+  const V = lobbyView, k = V.init ? 1 - Math.exp(-dt * 5) : 1;
+  V.init = true;
+  V.a += wrapAngle(a - V.a) * k;
+  for (const [key, to] of [['dist', dist], ['up', up], ['lookUp', lookUp], ['fov', fov], ['shift', shift]]) V[key] += (to - V[key]) * k;
+  const ca = Math.cos(V.a), sa = Math.sin(V.a);
+  camera.position.set(
+    bp.x + (fx * ca + n.x * out * sa) * V.dist,
+    bp.y + V.up,
+    bp.z + (fz * ca + n.z * out * sa) * V.dist,
+  );
+  camState.look.set(bp.x, bp.y + V.lookUp, bp.z);
+  camera.lookAt(camState.look);
+  if (Math.abs(camera.fov - V.fov) > 0.01 || Math.abs((camera.view?.offsetX ?? 0) - V.shift) > 0.5 || !camera.view?.enabled) {
+    camera.fov = V.fov;
+    camera.setViewOffset(w, h, Math.round(V.shift), 0, w, h);
+  }
+  // key light from above the camera's left: the character's colours and smooth shading pop on any track
+  stageLight.intensity += ((stage.on ? 1.3 : 0) - stageLight.intensity) * (1 - Math.exp(-dt * 4));
+  stageLight.position.copy(camera.position).addScaledVector(camera.up, 3).add(lightSide.set(-fz, 0, fx).multiplyScalar(2));
+  stageLight.target.position.copy(camState.look);
+  // bounce on a new pick (driver rebuilt / repainted)
+  if (stage.pop > 0) {
+    stage.pop = Math.max(0, stage.pop - dt * 2.2);
+    const sc = 1 + 0.12 * Math.sin((1 - stage.pop) * Math.PI * 3) * stage.pop;
+    kart.rider.mesh.scale.setScalar(sc);
+    kart.bodyMesh.scale.set(sc, 1 + (sc - 1) * 0.6, sc);
   }
   camState.snap = true; // whatever comes next starts from a clean chase view
 }
@@ -4111,7 +4268,7 @@ function layoutLobby() {
 
 function chaseCamera(dt, bp, yaw, speedRatio) {
   const C = CFG.camera;
-  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = C.fov; camera.updateProjectionMatrix(); }
+  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = C.fov; camera.updateProjectionMatrix(); stageLight.intensity = 0; }
 
   if (camState.snap) {
     camState.yaw = yaw;
@@ -4440,7 +4597,7 @@ function escapeHtml(t) { return t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 33 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 36 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 fillIcons();
 loadTrack(savedTrack());
 castDrivers();

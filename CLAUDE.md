@@ -131,15 +131,41 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   shoulder stripes + cuffs, paws on the wheel, **static** red scarf collar with short wind-swept ends (the
   flapping version clipped the seat / tail at speed: don't animate it again), one S-curved tail clear above the
   spoiler, tip under head height so the chase camera sees her. Animation: ears twitch idle / fold with speed,
-  torso + head lean into turns, tail sways against the lean (no idle wag). Next: Rex, Luna, Bolt, Mako, Pip.
+  torso + head lean into turns, tail sways against the lean (no idle wag). Next: Rex, Bolt, Mako, Pip.
+  **Luna (build 35, the cosmic space yeti, not phone-tested):** same smooth standard; torso + shoulder fur 1.3x
+  wide (`LUNA_WIDE`), white shoulder tufts overflow the seat back; pear lathe head (lavender #C4B5FD), white neck
+  ruff + round cheek puffs (pointed teardrops read as spikes), heavy white unibrow on its own `brow` joint, dark
+  indigo face patch, glowing cyan eyes, two tusks rising from the lower lip (higher up they read as tears),
+  glossy cyan ram horns (`sweep`, out/back/up), thick arms + indigo paws, shield pack on the upper back with a
+  glowing crescent (`crescent()` extrude) above the seat back. `fluff(g, amp, freq)` = bumpy fur displacement
+  (keep amp small: big values look jagged). Animation: slow breathing (torso scale), spring sway with momentum,
+  "defender mode" at top speed or right after a kart bump: brow lowers, chin down, glow pulses.
+  **Glow parts (build 35):** `part(..., { glow: true })` = third material group, unlit `MeshBasicMaterial`
+  (`R.glow`, its colour multiplies to pulse; eyes and crescent pulse together). Rider state got `bump` (0/1, a
+  kart-to-kart contact in the last 0.6 s: `k.bumpT` set in the karts' collide listener).
 - **Chase camera (build 33, user: pulled "way too far back at top speed"):** `CFG.camera` distance 7 -> 4.6,
   height 2.6, `speedPull` 0.3 m (was 1.5), and `maxLag` 0.5 m caps the position lag (at top speed it trailed
   ~4.5 m: that was most of the pullback); FOV kick at most +5 deg (`fovSpeed/fovBoost/fovMax`). The kart is the
   same size at 113 km/h as parked. Look-at = 6 m ahead at `lookHeight` -0.9: the user asked for "above the
   head", but that put the kart behind the km/h readout; now only the rear wheels overlap it. Dizzy stars moved
   up to y0 + 2.1.
-  `dev/test.sh studio [front,side,back,fast,turn,chase,face]` = lobby close-ups of the player's driver with forced
+  **Build 34 (user: "Nova's tall fox ears block the horizon"):** `height` 2.6 -> 3.5, look-at 8 m ahead at
+  `lookHeight` -0.1: view centre ~16 deg down, the ear tips' sight line ~19 deg, so the ears sit just below the
+  centre. The kart then landed under the km/h readout, so `#speedo` moved just right of the kart
+  (`left: 50% + 0.17 * --app-h`).
+  `dev/test.sh studio [front,side,back,fast,turn,chase,face,profile]` = lobby close-ups of the player's driver with forced
   poses (the default pick is Nova; for another driver set `kartrush.driver` first).
+- **Split stage (build 35, driver + paint pickers):** `#pick-screen.staged` = left `#pick-stage` (42%, open;
+  name + flavour tag of the driver or the paint name on top, never a role; user: ALL text goes with the 3D view, so
+  the cards are art only, 3 per row, `aria-label` = the name) + right `.pick-panel` (title,
+  vertical 2-col driver / 3-col paint grid, DONE); `#overlay.stage-on` = left-light-to-right-dark gradient. The
+  track picker keeps the old centred strip (`.pick-panel` is `display: contents` there). `lobbyCamera` blends
+  (angle / distance / height / fov / view shift, ease 5/s) between the turntable and the stage view: close 3/4
+  front, kart centred in `#pick-stage` (view offset from its offsetLeft), drag on the stage turns it
+  (`stage.rot`), after 2.5 s untouched it eases into a slow +-0.45 rad swing. `stageLight` = a directional key
+  light, always in the scene (intensity 0 in races, so it never recompiles materials; the race camera zeroes
+  it). A pick sets `stage.pop`: bounce of the rider + body mesh. Test: `dev/test.sh pick driver,kart`
+  (screenshots, taps the 3rd card). Not phone-tested.
 - **Title picks (build 31):** `openPicker('track' | 'driver' | 'kart')` fills `#pick-list` with cards in one
   horizontally swipeable strip (`.pick-grid`, tracks 1 row, drivers / paints 2 rows; edges fade when it
   overflows), so new tracks / drivers just extend it. A tap picks at once; DONE -> `showMenu()`. `onTap` ignores a
@@ -209,6 +235,18 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   Measured (headless): 15 bullets back to back on the canyon, 0 resets (crest + jump fine); shield blocks one
   hit then the next lands; star top ~115 km/h; GPU programs stay 17 (bubble shader warmed up). 3-lap races with natural odds: 2 flips in
   7 canyon races (both after the jump, idx ~1120, probably boosted/star karts landing badly), 0 on the meadow.
+- **Screenshot tool:** `dev/shot.sh` (see Screenshots). `DRIVER=Luna` poses / races as that driver
+  (`Page.addScriptToEvaluateOnNewDocument` sets `kartrush.driver`). The first studio view of a run sometimes
+  catches the boot warm-up frame (bubbles, items in the karts): put a throwaway view first.
+- **Drawn kart smaller than the physics kart (build 34, user: kart "too big, wide, and stretched out" next to
+  the driver):** `CFG.kart.look` = `scale` 0.77, `wheelbase` 0.85 (extra on z), `groundY` -0.61 (ground under
+  the body origin at rest, measured), `seatDrop` 0.15. `buildKart` models the chassis full size inside a `frame`
+  group scaled about the ground; seat back + steering wheel sit unscaled in `cockpit`, lowered by `seatDrop`, and
+  the rider is built at `y0 - seatDrop` (drivers keep their size). Wheels are drawn at r 0.31 and `syncMeshes`
+  pulls each physics wheel's kart-local spot in (x * scale, z * scale * wheelbase, y - (R - r)). **Physics is
+  untouched** (wheel spots, chassis box 1.6 x 2.6, grip, `wheelBase` for the assist), so handling didn't change;
+  the collider is now ~0.25 m longer each end than the drawn kart. Shrinking it changes inertia = steering feel:
+  ask first.
 - **Karts are baked**: `bakeMeshes` merges each kart body into one vertex-coloured mesh (plus one per wheel).
   Before that, ~28 meshes per kart (x2 for the shadow pass) = 195 draw calls on the grid and stutter on the
   phone when karts were close. Now 75. Add new kart parts before the `bakeMeshes` call.
@@ -341,6 +379,10 @@ then `__useItem(__k)`). Keep that line. `test.sh` refuses to run if port 8765 is
 an orphaned test server once served a stale copy and made every test lie. The page can't be tested on a real phone from here: ask the user to
 check touch and feel.
 
+**Screenshots (user 2026-10-17):** whenever visuals are needed, save them with `dev/shot.sh` (same args as
+`dev/test.sh shots|studio`): into gitignored `dev/shots/`, named `b<build>-<commit>[+dirty]-<view>.png`
+(build from `sw.js` VERSION), so before/after sets stay comparable. `ITEMS=1` parks items in `shots` views.
+
 ## User feedback so far
 - Physics stuck bug: fixed. Wants landscape only (done), buttons instead of a joystick (done; the joystick came back
   as an option in Settings, build 28), PWA (done).
@@ -453,6 +495,63 @@ Each driver keeps their fixed character and name (looks will match it later); wh
    standings between races; form shifts with the standings (leader cautious-but-fast, bottom drivers desperate:
    more aggression, more mistakes). Would sit on top of 1 + 2.
 Suggested order: 1, then 2 after the user plays a few races with 1; 3 only if the user wants a cup mode.
+
+**Build 35 (2026-10-17, NOT committed yet):** Luna (see Drivers). Items again: build 34's 2x was "too big and
+low definition" with the smaller kart: `modelScale` green/red 1.4, banana 1.3, blue 1.25, mushroom 1.15; smooth
+shading (`flatShading = false`) + 24-28 segment domes, torus rims; `hitRadius` 1.5, `bananaRadius` 1.3 (between
+the old and build 34), banana drops 2.5 m behind, shell-vs-banana 1.26 m.
+
+**Hits on the player (user asked 2026-10-17, "I think I am not being hit so often"; races 16-23):**
+| builds | races | hits / race | dodgeable (red, green, banana, bullet) / race | blue | time in 1st |
+|---|---|---|---|---|---|
+| b33 (16, 17, 18, 20) | 4 | 3.0 | 3.0 (9 of 12 were red shells) | 0 | 0-13% |
+| b34 (21, 22, 23) | 3 | 2.3 | 1.3 (2 red, 1 banana, 1 red) | 3 | 16-30% |
+AI shells thrown per race barely changed (~11 vs ~11); share of AI red/green shells that hit the player 9/43
+(21%) -> 2/33 (6%). Likely: the higher camera lets the user see and dodge them, and they lead more (blue shells
+now hit them in 1st). Small sample (3 races) and build 34 also grew the hit radius, so it isn't the items
+being easier to dodge. Blue in race 22 hit them in 3rd (blast radius 5 m near the leader, or 1 s sample lag).
+Keep watching with the build 35 item sizes.
+
+**Build 36 (2026-10-17, NOT committed yet; user: "execute those changes that need no extra data"):**
+- **Finished karts are immune** to every item (`spinOut` returns false when `k.finished`; shell + banana hit
+  checks skip them too). Fixes the red shell hitting Luna 11 s after she finished.
+- **Red shells never hit their owner** (Bolt hit by his own); a green bouncing back still can (Mario Kart).
+- **Box rows:** meadow [95, 241, 450, 670], canyon [230, 405, 760, 1010, 1185] (longest track: 5 rows), frost
+  [60, 298, 420, 760]; new rows on straight, flat spots away from pads, jumps and crests (radius > 300 m).
+  `boxRespawn` 3 -> 2 s. Karts holding an item still smash boxes (unchanged, Mario Kart style).
+- **No shields in 5th / 6th** (`CFG.items.odds`): their weight went to mushroom (+3) and triple (+2).
+- **Banana = a peel** (user: the old one "looks like it was inserted on pavement"): upright cream stub + stem,
+  three flat yellow flaps splayed on the road with brown tips (`sweep` now exported from drivers.js).
+- **Telemetry:** `ghost` events (`on` true/false, any kart: chase the respawn ghost bug) and `boxmiss` for the
+  player: each row passed without an item, `why` = 'holding' | 'empty' (all boxes respawning) | 'missed'.
+  Checked headless: forced respawn logged ghost on at 22.1 s, off at 24.1 s.
+- Test tool: `studio items` = close-up of a banana, green and red on the road; `window.__tele` exposed.
+- **What to check in the next 4-5 races:** boxes per race (was 7-9 with 3 rows), `boxmiss` reasons, longest
+  gap without an item (was 15-48 s), hits on the player vs builds 34-35, any `ghost` stuck on for long.
+  Still waiting for data (don't change yet): AI shell aggression, softer place odds, rails.
+
+**Item distribution feels inconsistent (user 2026-10-17: "sometimes it is too much, sometimes nothing. I am not
+sure. Just take note")** - races 13-24, noted only, nothing changed:
+- The player's box count is steady: 7-9 boxes per race (max 9 = 3 rows x 3 laps), held items used in ~2 s
+  (shields held longest, 6-12 s). The field uses 32-38 items per race.
+- What swings is **when** and **what**: boxes only come at 3 fixed rows per lap, so items arrive in bursts with
+  15-48 s gaps; a row the AIs just emptied (`boxRespawn` 3 s) or reached while still holding an item gives
+  nothing (race 23 lap 2: 1 box, 36 s gap; race 21: first box at 29 s after a slow start; race 13: 48 s).
+  Field item uses per 10 s window range 0-6 (bursts when the pack hits a row together).
+- And the type follows the place (`CFG.items.odds`): leading = bananas / greens / shields (races 22-23:
+  "nothing" useful), behind = reds, blue, bullet (race 24 in 5th: 3 reds, blue, bullet: "too much").
+- Options when the user wants to act: more rows (4-5 per lap, the PENDING "more item boxes"), shorter
+  `boxRespawn` so back-markers find full rows, softer place-based odds (fewer extremes), and add "row empty /
+  holding item" events to telemetry to measure the misses.
+
+**Build 34 (2026-10-17, NOT committed yet):** compact drawn kart, higher chase camera, km/h readout moved,
+bigger items: `CFG.items.modelScale` (green/red 2x, banana 1.8x, blue 1.6x, mushroom 1.4x), item templates
+rebased so their bottom is at y 0 (shells ride at road + 0.03, were + 0.15 floating), a faint glow (`emissive`
+per kind) and a dark back-face outline (`OUTLINE_MAT`, child mesh made in `spawnModel`). Hit distances grew with
+them: `hitRadius` 1.4 -> 1.7, `bananaRadius` 1.2 -> 1.5, shell-vs-banana 1.1 -> 1.4 m; bananas drop 2.8 m behind
+(was 2.4). First race on it (race 21, canyon): 3rd, 0.20 s behind the winner (gaps were 7-22 s), 0 rail hits
+(first canyon race with none), best lap 40.3 s, 2 bananas landed on Luna. One race: keep watching. Note the
+bigger hit radius also makes AI shells easier to land on the player.
 
 **Small fixes still open:** landing after the canyon jump (user and AIs get stuck / flip there, ~idx 1100-1140);
 shells keep hitting the player after they cross the line (ignore finished karts as targets / hits).
