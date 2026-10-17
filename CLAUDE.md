@@ -400,7 +400,7 @@ Suggested order: 1, then 2 after the user plays a few races with 1; 3 only if th
 **Small fixes still open:** landing after the canyon jump (user and AIs get stuck / flip there, ~idx 1100-1140);
 shells keep hitting the player after they cross the line (ignore finished karts as targets / hits).
 
-**Build 31 (2026-10-17, not committed yet):** Frost Peak far-peak flicker fixed (snow cap was coplanar with the
+**Build 31 (2026-10-17, committed locally df1a84f, NOT pushed):** Frost Peak far-peak flicker fixed (snow cap was coplanar with the
 rock cone: z-fighting; user confirmed). GUI: title picks (track / driver / kart paint), how-to-play removed, mute
 moved into Settings. Not tried on the phone yet.
 
