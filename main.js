@@ -353,7 +353,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '64.1'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '64.3'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -3248,9 +3248,9 @@ setDifficulty(difficulty, false);
 // Menu / pause -> DEBUG. Pick the track (menu only), park the rivals (invisible, no collisions), a start spot
 // (applied at the start of a race, or at once when paused), an item you always carry (refilled after each use)
 // and one-shot effects. Races played with any of it on are not sent to the telemetry log.
-const dbg = { on: false, parked: false, spot: null, item: null }; // `on`: this race was started from the panel (or changed from pause)
+const dbg = { on: false, parked: false, spot: null, items: [], next: 0, laps: 3 }; // items: the ticked powers, carried in rotation // `on`: this race was started from the panel (or changed from pause)
 const dbgActive = () => DEBUG && (track.id === 'lab' || dbg.on);
-function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, item: null }); }
+function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, items: [], next: 0, laps: 3 }); CFG.laps = 3; }
 let dbgFrom = null;
 function dbgSpots() {
   const def = CFG.tracks[track.id], N = track.N;
@@ -3271,14 +3271,21 @@ function dbgGoto(spot) {
     camState.snap = true;
   }
 }
-function dbgGive(kind) {
-  dbg.item = kind;
-  if (kind && (state.phase === 'race' || state.phase === 'countdown')) { kart.item = kind; kart.itemRoll = 0; kart.itemCount = kind === 'triple' ? 3 : 1; }
+function dbgHold(kind) { kart.item = kind; kart.itemRoll = 0; kart.itemCount = kind === 'triple' ? 3 : 1; }
+function dbgNextItem() { // the next ticked power in rotation
+  dbg.next %= dbg.items.length;
+  return dbg.items[dbg.next++];
+}
+function dbgToggle(kind) { // null = clear all
+  if (!kind) dbg.items = [];
+  else dbg.items = dbg.items.includes(kind) ? dbg.items.filter((t) => t !== kind) : [...dbg.items, kind];
+  if (dbg.items.length && (state.phase === 'race' || state.phase === 'countdown')) dbgHold(dbg.items.includes(kind) ? kind : dbgNextItem());
 }
 function dbgApplyStart() { // right after the grid is set up for a race
   if (!dbg.on) return;
+  CFG.laps = dbg.laps;
   if (dbg.spot) resetKart(kart, dbg.spot.idx, 0);
-  if (dbg.item) dbgGive(dbg.item);
+  if (dbg.items.length) dbgHold(dbgNextItem());
 }
 function dbgTick() { // every frame
   for (const k of karts) {
@@ -3287,7 +3294,7 @@ function dbgTick() { // every frame
     if (k.group.visible === park) k.group.visible = !park;
     if (k.body.collisionResponse === park) k.body.collisionResponse = !park;
   }
-  if (dbg.on && dbg.item && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) { kart.item = dbg.item; kart.itemRoll = 0; kart.itemCount = dbg.item === 'triple' ? 3 : 1; }
+  if (dbg.on && dbg.items.length && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) dbgHold(dbgNextItem());
 }
 function dbgRender() {
   const card = $('debug-card'), rows = [];
@@ -3308,10 +3315,11 @@ function dbgRender() {
   const racing = state.paused || state.phase === 'race';
   if (!racing) row('TRACK', Object.entries(CFG.tracks).map(([id, t]) => ({ text: t.name, on: track.id === id, pick: () => { dbg.spot = null; selectTrack(id); } })));
   row('RIVALS', [{ text: 'Race', on: !dbg.parked, pick: () => { dbg.parked = false; } }, { text: 'Parked', on: dbg.parked, pick: () => { dbg.parked = true; } }]);
+  row('LAPS', [1, 3].map((n) => ({ text: n === 1 ? '1 lap' : '3 laps', on: dbg.laps === n, pick: () => { dbg.laps = n; CFG.laps = n; } })));
   row(racing ? 'GO TO' : 'START AT', [{ text: 'Grid', on: !dbg.spot, pick: () => { dbg.spot = null; } },
     ...dbgSpots().map((s) => ({ text: s.name, on: dbg.spot?.idx === s.idx, pick: () => dbgGoto(s) }))]);
-  row('ITEM', [{ text: 'Normal', on: !dbg.item, pick: () => dbgGive(null) },
-    ...ITEM_TYPES.map((t) => ({ text: t, on: dbg.item === t, pick: () => dbgGive(t) }))]);
+  row('ITEMS', [{ text: 'Normal', on: !dbg.items.length, pick: () => dbgToggle(null) },
+    ...ITEM_TYPES.map((t) => ({ text: t, on: dbg.items.includes(t), pick: () => dbgToggle(t) }))]); // tick several: carried in rotation
   if (racing) row('NOW', [
     { text: 'Boost', on: false, pick: () => { kart.boost = CFG.kart.boostDuration * 1.3; } },
     { text: 'Spin out', on: false, pick: () => spinOut(kart, null, 'debug') },
@@ -3455,10 +3463,11 @@ function showResults() {
 
   const all = loadRecords();
   const rec = (all[track.id] ||= {});
-  const newRace = !(rec.race <= kart.finishTime), newLap = !(rec.lap <= state.bestLap);
+  const debugRace = dbgActive(); // debug races (a 1-lap race, the Test Lab...) never set records
+  const newRace = !debugRace && !(rec.race <= kart.finishTime), newLap = !debugRace && !(rec.lap <= state.bestLap);
   if (newRace) rec.race = kart.finishTime;
   if (newLap) rec.lap = state.bestLap;
-  saveRecords(all);
+  if (!debugRace) saveRecords(all);
   hud.resRecord.innerHTML = newRace || newLap
     ? `<span class="new">&#9733; NEW ${newRace ? 'RECORD' : 'BEST LAP'}</span>`
     : `Record ${fmtTime(rec.race)} &middot; best lap ${fmtTime(rec.lap)}`;
