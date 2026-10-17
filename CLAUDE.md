@@ -64,6 +64,11 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   bursts (`hitBurst` in `spinOut`), plus a 360-quad ring buffer of skid marks at y 0.05; emitted only for karts
   within 45 m with rear wheels down. Dizzy stars (`k.stars`) while spun out. `fx.reset()` on race start / menu.
   GPU programs: 16, all compiled by `warmUpShaders`.
+- **Engine sound (build 22):** user: "the same brrr the whole race... uncomfortable because the gas is pressed
+  all the time". Was pitch = speed only (one fixed ~138 Hz sawtooth drone at top speed). Now `engineRevs`: 4
+  virtual gears (`GEARS`, revs drop on upshift + brief dip), revs sag off the gas and rise free in the air
+  (`mix.player.air`), slow pitch wobble, putt tremolo kept at speed, softer custom wave (harmonics 1/k^1.5), and
+  "presence": ~60% volume after ~1.5 s of steady revs, full when they change. User: "much better, not too present".
 - **Music:** `sound.music('race' | 'menu' | false)`; menu loop on the title + results screens, starts on the first
   tap (iOS). sound.js only suspends on visibility change; the game resumes audio (so a paused race stays silent).
 - Flat track layers are >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10) and the
@@ -117,7 +122,10 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - **AI:** pure pursuit to a look-ahead point on the AI's lane; target speed = top x skill x rubber band, capped
   by `track.radius` corner speeds; lane wander, dodging slower karts ahead, random wobble/lift mistakes;
   back-up + reset recovery and a 4 s no-progress watchdog. After the player finishes, the CPU drives their kart.
-- **Places:** `k.progress` = (lap-1)*N + idx, with idx counted negative behind the line before halfway.
+- **Places:** `k.progress` = (lap-1)*N + idx + fraction past the sample (build 23), with idx counted negative
+  behind the line before halfway. The HUD shows `state.shownPlace`: a new place must hold `PLACE_HOLD` 0.35 s,
+  overtake sound at most every `OVERTAKE_GAP` 0.6 s (user: indicator "goes crazy" passing a pack; measured in a
+  race: 92 -> 10 shown changes, 47 -> 8 sounds). Game logic (rubber band, items) uses the instant `k.place`.
   Finished karts rank by finish time. The results overlay refreshes live as AIs finish.
 - `manifest.webmanifest`, `sw.js`, `icons/`: PWA. **Bump `VERSION` in `sw.js` when shipping changes.**
 - `dev/test.sh`: headless Chrome regression tests (see Testing).

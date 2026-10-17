@@ -2011,7 +2011,7 @@ function updateGameFlow(dt) {
   const racing = state.phase === 'race' || state.phase === 'finished';
   if (racing) state.raceTime += dt;
   for (const k of karts) updateKartProgress(k, dt, racing);
-  updatePlaces();
+  updatePlaces(dt);
   updateItems(dt, racing);
   input.reset = false;
   input.item = false;
@@ -2032,7 +2032,11 @@ function updateKartProgress(k, dt, racing) {
   }
   // Distance raced in samples. Before the halfway mark, the back half of the loop counts as
   // "behind the line" (the grid at the start, or after crossing it backwards).
-  k.progress = (k.lap - 1) * N + (k.halfway || idx < N / 2 ? idx : idx - N);
+  // ...plus how far past that sample it is (-0.5..0.5): whole samples made side-by-side karts swap places
+  // back and forth every frame
+  const t = track.tangents[idx], s = track.samples[idx];
+  const frac = clamp(((k.body.position.x - s.x) * t.x + (k.body.position.z - s.z) * t.z) / track.spacing, -0.5, 0.5);
+  k.progress = (k.lap - 1) * N + (k.halfway || idx < N / 2 ? idx : idx - N) + frac;
 
   // Auto-recover when flipped or beached (no wheel touching anything), on the reset button,
   // or when the AI gives up on getting unstuck
@@ -2088,12 +2092,34 @@ function finishKart(k) {
 }
 
 /** Finished karts by finish time, then everyone else by distance raced. */
-function updatePlaces() {
+function updatePlaces(dt = 0) {
   const order = [...karts].sort((a, b) =>
     (b.finished - a.finished) || (a.finished ? a.finishTime - b.finishTime : b.progress - a.progress));
-  const before = kart.place;
   order.forEach((k, i) => { k.place = i + 1; });
-  if (state.phase === 'race' && kart.place < before) sound.overtake();
+  updateShownPlace(dt);
+}
+
+/**
+ * The place on the HUD: a new place has to hold for `PLACE_HOLD` s before it shows (passing a pack, the
+ * order flickers for a moment), and the overtake sound plays at most every `OVERTAKE_GAP` s.
+ */
+const PLACE_HOLD = 0.35, OVERTAKE_GAP = 0.6;
+function updateShownPlace(dt) {
+  const p = kart.place;
+  if (state.phase !== 'race' || kart.finished || !state.shownPlace) {
+    Object.assign(state, { shownPlace: p, placeWant: p, placeHold: 0 });
+    return;
+  }
+  if (p !== state.placeWant) Object.assign(state, { placeWant: p, placeHold: 0 });
+  state.placeHold += dt;
+  state.overtakeT = (state.overtakeT || 0) - dt;
+  if (p !== state.shownPlace && state.placeHold >= PLACE_HOLD) {
+    if (p < state.shownPlace && state.overtakeT <= 0) {
+      sound.overtake();
+      state.overtakeT = OVERTAKE_GAP;
+    }
+    state.shownPlace = p;
+  }
 }
 
 // Personal bests survive restarts (per device), one { race, lap } per track. Storage can be unavailable
@@ -3051,7 +3077,8 @@ function updateHUD() {
   const timeTxt = fmtTime(kart.finished ? kart.finishTime : state.raceTime);
   const bestTxt = fmtTime(state.bestLap);
   const showPlace = state.phase !== 'menu';
-  const key = `${kmh}|${lapTxt}|${timeTxt}|${bestTxt}|${showPlace && kart.place}`;
+  const shown = state.shownPlace || kart.place;
+  const key = `${kmh}|${lapTxt}|${timeTxt}|${bestTxt}|${showPlace && shown}`;
   if (key !== lastHud) {
     lastHud = key;
     hud.speed.textContent = kmh;
@@ -3060,9 +3087,9 @@ function updateHUD() {
     hud.time.textContent = timeTxt;
     hud.best.textContent = bestTxt;
     hud.place.hidden = !showPlace;
-    hud.place.classList.toggle('first', kart.place === 1);
-    hud.placeNum.textContent = kart.place;
-    hud.placeSuffix.textContent = ordinal(kart.place).slice(-2);
+    hud.place.classList.toggle('first', shown === 1);
+    hud.placeNum.textContent = shown;
+    hud.placeSuffix.textContent = ordinal(shown).slice(-2);
     hud.placeOf.textContent = `/${karts.length}`;
   }
   const charge = clamp(kart.driftCharge / CFG.kart.miniTurboTime, 0, 1);
@@ -3096,25 +3123,27 @@ function updateHUD() {
 }
 
 const camRight = new THREE.Vector3();
-const soundMix = { live: false, duck: true, player: { ratio: 0, throttle: 0 }, drift: 0, charged: false, rivals: [] };
+const soundMix = { live: false, duck: true, player: { ratio: 0, throttle: 0, air: false }, drift: 0, charged: false, rivals: [] };
 
 /** Feeds the engine / drift sounds: the player's kart plus every rival, panned and faded by distance. */
 function updateSound(dt) {
   const live = state.phase === 'race' || state.phase === 'finished';
   const top = CFG.kart.maxSpeed;
   const throttle = (k) => (live && (k.ctl.gas || k.boost > 0) ? 1 : 0);
+  const air = (k) => !k.vehicle.wheelInfos.some((w) => w.raycastResult.hasHit);
   camRight.setFromMatrixColumn(camera.matrixWorld, 0);
   soundMix.live = live;
   soundMix.duck = state.phase === 'menu' || state.resultsShown;
   soundMix.player.ratio = clamp(Math.abs(kart.speed) / top, 0, 1.3);
   soundMix.player.throttle = throttle(kart);
+  soundMix.player.air = air(kart);
   soundMix.drift = kart.drifting ? 1 : 0;
   soundMix.charged = kart.driftCharge > CFG.kart.miniTurboTime;
   soundMix.rivals = karts.slice(1).map((k) => {
     const dx = k.body.position.x - camera.position.x, dz = k.body.position.z - camera.position.z;
     const dist = Math.hypot(dx, dz);
     return {
-      ratio: clamp(Math.abs(k.speed) / top, 0, 1.3), throttle: throttle(k), dist,
+      ratio: clamp(Math.abs(k.speed) / top, 0, 1.3), throttle: throttle(k), air: air(k), dist,
       pan: clamp((dx * camRight.x + dz * camRight.z) / Math.max(dist, 1), -0.8, 0.8),
     };
   });
@@ -3236,7 +3265,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 21 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 23 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
 onResize();
 showMenu();

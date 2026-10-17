@@ -62,8 +62,18 @@ function noiseSource(loop = false) {
   return src;
 }
 
-/** Kart engine: detuned saw + square through a lowpass, with a "putt" tremolo that fades with revs. */
+/**
+ * Kart engine: a soft buzz (harmonics rolling off faster than a sawtooth's, which grated at a steady pitch)
+ * plus a sub an octave down, through a lowpass, with a "putt" tremolo. Pitch follows revs, not speed:
+ * see engineRevs.
+ */
+let engineWave = null;
 function makeEngine(level, detune) {
+  if (!engineWave) {
+    const n = 24, real = new Float32Array(n), imag = new Float32Array(n);
+    for (let k = 1; k < n; k++) imag[k] = 1 / k ** 1.5;
+    engineWave = ctx.createPeriodicWave(real, imag);
+  }
   const pan = ctx.createStereoPanner();
   pan.connect(engineBus);
   const gain = gainNode(0, pan);
@@ -73,7 +83,7 @@ function makeEngine(level, detune) {
   filter.connect(gain);
   const trem = gainNode(1, filter);
   const a = ctx.createOscillator(), b = ctx.createOscillator();
-  a.type = 'sawtooth';
+  a.setPeriodicWave(engineWave);
   b.type = 'triangle';
   b.detune.value = 7 + detune;
   a.detune.value = detune;
@@ -86,21 +96,51 @@ function makeEngine(level, detune) {
   const lfoDepth = gainNode(0.3, trem.gain);
   lfo.connect(lfoDepth);
   [a, b, lfo].forEach((o) => o.start());
-  return { a, b, lfo, lfoDepth, filter, gain, pan, level };
+  return { a, b, lfo, lfoDepth, filter, gain, pan, level,
+    rpm: 0.3, gear: 0, shift: 0, change: 0, phase: Math.random() * 10 };
 }
 
-function setEngine(e, { ratio, throttle, vol, pan = 0 }) {
+// Speed ratio at which each virtual gear tops out. Upshifts drop the revs: accelerating sounds like
+// "rrrRRR-rrRRR" instead of one long slide up to a fixed note.
+const GEARS = [0, 0.3, 0.55, 0.78, 1];
+
+/**
+ * Revs 0..~1.1 from speed through the gears; free-revving when the wheels are off the ground, sagging
+ * when off the gas. Also tracks how much the revs are changing (`change`), which sets how present the
+ * engine is: a steady drone at top speed fades back after a couple of seconds.
+ */
+function engineRevs(e, ratio, throttle, air, dt) {
+  let g = e.gear;
+  while (g < GEARS.length - 2 && ratio > GEARS[g + 1] + 0.02) g++;
+  while (g > 0 && ratio < GEARS[g] - 0.05) g--;
+  if (g > e.gear) e.shift = 0.14; // the lift while the next gear goes in
+  e.gear = g;
+  const within = Math.min(1.15, Math.max(0, (ratio - GEARS[g]) / (GEARS[g + 1] - GEARS[g])));
+  let target = 0.32 + 0.6 * within;
+  if (!throttle) target -= 0.08;
+  if (air) target = Math.min(1.12, target + 0.22); // wheels spinning free over a jump
+  if (e.shift > 0) { e.shift -= dt; target -= 0.06; }
+  const before = e.rpm;
+  e.rpm += (target - e.rpm) * (1 - Math.exp(-dt * (air ? 10 : 7)));
+  const rate = Math.abs(e.rpm - before) / Math.max(dt, 1e-3);
+  e.change += (Math.min(1, rate * 3 + (e.shift > 0 ? 1 : 0)) - e.change) * (1 - Math.exp(-dt * (rate > 0.05 ? 6 : 0.8)));
+}
+
+function setEngine(e, { ratio, throttle, air = false, vol, pan = 0 }, dt) {
   const t = ctx.currentTime, k = 0.06; // smoothing time constant
-  // Kept low and dark at top speed: a bright, high saw whine gets grating fast
-  // (boosts push ratio to 1.3, so it's capped).
-  ratio = Math.min(ratio, 1.1);
-  const f = 45 + ratio * 85 + throttle * 8;
+  engineRevs(e, Math.min(ratio, 1.3), throttle, air, dt);
+  // a little unsteadiness, so even a held top speed isn't one fixed note
+  const wobble = 1 + 0.012 * Math.sin(t * 2.3 + e.phase) + 0.008 * Math.sin(t * 5.7 + e.phase * 2);
+  const f = (40 + e.rpm * 92) * wobble;
   e.a.frequency.setTargetAtTime(f, t, k);
   e.b.frequency.setTargetAtTime(f * 0.5, t, k);
   e.lfo.frequency.setTargetAtTime(f / 4, t, k);
-  e.lfoDepth.gain.setTargetAtTime(0.35 * Math.max(0, 1 - ratio), t, k);
-  e.filter.frequency.setTargetAtTime(380 + ratio * 520 + throttle * 200, t, k);
-  e.gain.gain.setTargetAtTime(e.level * vol * (0.55 + 0.45 * throttle) * (1 - 0.3 * ratio), t, k);
+  e.lfoDepth.gain.setTargetAtTime(0.1 + 0.25 * Math.max(0, 1 - e.rpm), t, k);
+  e.filter.frequency.setTargetAtTime(340 + e.rpm * 480 + throttle * 160, t, k);
+  // present when the revs move (pulling away, shifts, corners, jumps), ~60% at a steady cruise
+  const presence = 0.6 + 0.4 * e.change;
+  const shiftDip = e.shift > 0 ? 0.6 : 1;
+  e.gain.gain.setTargetAtTime(e.level * vol * (0.6 + 0.4 * throttle) * presence * shiftDip, t, k);
   e.pan.pan.setTargetAtTime(pan, t, k);
 }
 
@@ -119,18 +159,18 @@ function makeDrift() {
 
 /**
  * Per-frame mix.
- * mix = { live, duck, player: {ratio, throttle}, drift: 0..1, charged, rivals: [{ratio, throttle, dist, pan}] }
+ * mix = { live, duck, player: {ratio, throttle, air}, drift: 0..1, charged, rivals: [{ratio, throttle, air, dist, pan}] }
  */
 function update(dt, mix) {
   if (!ctx || ctx.state !== 'running') return;
   const t = ctx.currentTime;
-  setEngine(player, { ...mix.player, vol: mix.live ? 1 : 0.6 });
+  setEngine(player, { ...mix.player, vol: mix.live ? 1 : 0.6 }, dt);
   engineBus.gain.setTargetAtTime(mix.duck ? 0.12 : 1, t, mix.duck ? 0.5 : 0.15); // engines fade behind menus
 
   while (rivals.length < mix.rivals.length) rivals.push(makeEngine(VOL.rivals, (rivals.length + 1) * 23));
   mix.rivals.forEach((r, i) => {
     const near = Math.max(0, 1 - r.dist / 45);
-    setEngine(rivals[i], { ratio: r.ratio, throttle: r.throttle, vol: near * near, pan: r.pan });
+    setEngine(rivals[i], { ratio: r.ratio, throttle: r.throttle, air: r.air, vol: near * near, pan: r.pan }, dt);
   });
 
   drift.gain.gain.setTargetAtTime(VOL.drift * mix.drift, t, 0.05);
