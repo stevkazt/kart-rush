@@ -111,6 +111,35 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   Track maps (`trackShape`): checkered start line + yellow chevron for the direction. Paint cards: spotlight +
   floor so dark paints read; default paint is called "Team" (the driver's own colours).
   Settings: title + groups in a card; ALL SOUND Off dims the volume row (`#volume-row.dim`).
+- **Drivers / 3D characters (build 33, `drivers.js`):** the rider is no longer baked into the kart body. Each kart
+  has `k.rider` = one **SkinnedMesh with rigid bones** (every part follows one joint; `rig()` joint/part, `bakeRig`
+  -> vertex colours + paint roles + an optional gloss group with a Phong material), so an animated character is
+  1 draw call (+1 for gloss). `setRider(k, r, colors)` in castDrivers rebuilds it only when the driver changes;
+  `paintKart` recolours body + rider; ghost alpha, star emissive and the bullet hull cover it. `animateRider(k, dt)`
+  (in updateEffects) feeds `update(dt, {speed 0..1, steer -1..1 +right, drift, boost})`. Registry
+  `DRIVERS[name] = { build(R, y0) -> update, avatar(r), kartArt(r) }`; drivers without an entry use `FALLBACK`
+  (the old helmet + suit, paint-driven). 2D: `driverSvg` / `kartSvg(colors, driver)` use `driverAvatar` /
+  `driverKartArt` when the driver has them. Cost: 92 -> 99 draw calls, GPU programs 17 -> 20 (skinned), warmed up.
+  **Character standard (user 2026-10-17, after "too jagged... like stacked snowballs"):** smooth and toy-like:
+  `smooth: true` in the registry = MeshStandardMaterial (roughness 0.55) with smooth normals, 12-24 segments,
+  continuous shapes (`sweep` = tube along a CatmullRom curve with a radius profile; `teardrop` lathe; `taperZ`;
+  `capsuleBetween`), colour gradients per vertex (part colour can be `colorAt(x, y, z)`), gloss = metallic
+  Standard with a painted sky env map (`skyEnv`). Driver 1.25x the old size. Nova = ~6.8k triangles, 1 draw
+  call + 1 for the visor (budget the user gave: "2,000-3,000 triangles"; the head/tail need the segments).
+  **Nova (not phone-tested):** no helmet, smooth oval fox head, tapered two-tone muzzle, nose button, smooth ears
+  with cream insides, teardrop cheek tufts, gold metallic visor on a strap, white jacket over cream belly, red
+  shoulder stripes + cuffs, paws on the wheel, **static** red scarf collar with short wind-swept ends (the
+  flapping version clipped the seat / tail at speed: don't animate it again), one S-curved tail clear above the
+  spoiler, tip under head height so the chase camera sees her. Animation: ears twitch idle / fold with speed,
+  torso + head lean into turns, tail sways against the lean (no idle wag). Next: Rex, Luna, Bolt, Mako, Pip.
+- **Chase camera (build 33, user: pulled "way too far back at top speed"):** `CFG.camera` distance 7 -> 4.6,
+  height 2.6, `speedPull` 0.3 m (was 1.5), and `maxLag` 0.5 m caps the position lag (at top speed it trailed
+  ~4.5 m: that was most of the pullback); FOV kick at most +5 deg (`fovSpeed/fovBoost/fovMax`). The kart is the
+  same size at 113 km/h as parked. Look-at = 6 m ahead at `lookHeight` -0.9: the user asked for "above the
+  head", but that put the kart behind the km/h readout; now only the rear wheels overlap it. Dizzy stars moved
+  up to y0 + 2.1.
+  `dev/test.sh studio [front,side,back,fast,turn,chase,face]` = lobby close-ups of the player's driver with forced
+  poses (the default pick is Nova; for another driver set `kartrush.driver` first).
 - **Title picks (build 31):** `openPicker('track' | 'driver' | 'kart')` fills `#pick-list` with cards in one
   horizontally swipeable strip (`.pick-grid`, tracks 1 row, drivers / paints 2 rows; edges fade when it
   overflows), so new tracks / drivers just extend it. A tap picks at once; DONE -> `showMenu()`. `onTap` ignores a
@@ -164,7 +193,10 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   player"):** `ITEM_TYPES` = mushroom, banana, green, red, **shield** (bubble `k.bubble`: `BUBBLE_MAT` shader, fresnel rim +
   thin-film rainbow + highlights + wobble, elastic pop-in, flickers out; user found the flat additive sphere "cheap"; blocks the next hit of
   any kind, `shieldTime` 10 s, blinks at the end), **star** (`k.star` 6 s: immune, +`starSpeed` top speed,
-  rainbow emissive on `k.bodyMesh`; AIs get the speed through their pace in `updateAI`), **triple** (3 mushrooms,
+  rainbow emissive on `k.bodyMesh`; AIs get the speed through their pace in `updateAI`; build 33: `starSpeed` 4 -> 8
+  plus a `starAccel` 7 m/s^2 centre-of-mass push like the boost, so it reaches ~122 km/h in 0.5 s; sound =
+  whoosh + its own looping theme for the whole star on a `starBus` that `starEnd` cuts; user: "should give more
+  speed and play a different sound", not phone-tested), **triple** (3 mushrooms,
   `k.itemCount`, `tripleGap`, `k.orbit` meshes circle the kart, x3 badge = `data-count` on the item button),
   **blue** (one at a time: `rollItem` zeroes it while one is out or held; flies over the road centre at
   `blueSpeed` 55 to the leader (`blueTarget`, never its owner), dives within `blueHome`, `blueBlast` 5 m blast,
@@ -436,6 +468,28 @@ on the phone. User: the turntable kart in the lobby "is something good" (keep). 
 for now (just stored; don't build on it unless asked). Still to ask: fit around the notch, the driver tag
 lines (placeholders). Open idea not chosen: a
 Rivals row (the 5 AIs with role icons) on the setup card.
+
+**PENDING (user 2026-10-17, after Nova; analysed from races 12-14, build 32):**
+- **Respawn ghost bug** (user: "seem to have had a bug last race", race 14 canyon, 6th). Player resets that race:
+  t 50.8 'button' (stuck at 0 km/h for ~2 s after losing 112 km/h at ~106 m into lap 2, no rail/hit event) and
+  t 94.5 flip after a 115 km/h rail hit, both ~100 m into the lap (start straight / banked right-hander).
+  Acceleration after both resets looked normal. Ghost state is NOT in the telemetry: ask the user what they saw
+  (stayed see-through? got hit while ghosted? solid inside a kart?). Suspect: `ghosted` only ends when no kart is
+  within 3.2 m, so in a pack it can stay ghost (and item-immune) for long. Add ghost on/off events to telemetry.
+- **More item boxes** ("to level out chances"): 3 rows per lap now (`boxRows`), player gets 5-9 boxes per race
+  (avg ~7 of 9). Options: a 4th (5th) row per track, and/or `boxRespawn` 3 -> 1.5 s so back-markers find full rows.
+- **Shields in last place too often**: player in 6th got 3 shields in 13 boxes (2 in a row in race 14) vs odds
+  5/100 (all karts in 6th: 6/72 = 8%): mostly bad luck, but drop shield to 0 for 5th/6th (maybe 4th) in
+  `CFG.items.odds`; move that weight to mushroom/triple.
+- **Races 15-17 (build 33: Nova, new camera; canyon 4th, meadow 5th, meadow 4th; 4-11 s behind the winner,
+  winners Luna / Bolt / Rex):** no player resets at all (so no new ghost data); rail hits down to 1-2 per race
+  (were ~4). Hits on the player: 9, of which **7 red shells** (Mako 3, Bolt 3, Pip 1) + Luna's green and
+  bullet: AI reds are what costs places now; watch it after the box/odds changes. Shells still hit karts that
+  already finished (race 15: the player's red hit Luna 11 s after she finished): the open "ignore finished
+  karts" fix. Shield in last place: none this time (6th got star, triple). **Star was weak** (all 41 stars in
+  the log): it held ~108 km/h (top + 4 m/s, engine only) and gained ~20 m over its 6 s, rarely a place; a
+  mushroom peaks ~130. User asked for more speed + a different sound -> done in build 33 (see Items).
+- Also seen: **Bolt hit by his own red shell** (race 14, t 83.7, `hit kart 3 by 3 red`): owner should be immune.
 
 **Note (user 2026-10-17): remove the side rails.** They make every track look the same. Not started; the rails
 are also the walls karts collide with (+ rail reset, `wallHitLoss`, AI recovery, jump `jumpWallHeight`), so

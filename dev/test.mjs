@@ -4,6 +4,7 @@
 //   node test.mjs <port> profile <seconds>   -> autopilot race with drawing switched off; prints the
 //                                                functions using the most CPU (JS cost, not software GL)
 //   node test.mjs <port> shots <idx,idx,...>  -> screenshots with the player parked at those track samples
+//   node test.mjs <port> studio <view,...>    -> lobby close-ups of the player's driver (views: STUDIO below)
 //   node test.mjs <port> eval <js expr>       -> prints the expression ~1 s after GO
 //   node test.mjs <port> tap <seconds>        -> on open grass at top speed, hold RIGHT for <seconds>,
 //                                                prints heading change / slip / yaw rate
@@ -34,7 +35,7 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-await ev(`document.getElementById('btn-start').click()`);
+if (mode !== 'studio') await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -66,6 +67,31 @@ if (mode === 'autopilot' || mode === 'trace') {
     await sleep(2500);
     const s = await send('Page.captureScreenshot');
     fs.writeFileSync(path.join(process.env.OUT_DIR, `shot-${idx}.png`), Buffer.from(s.data, 'base64'));
+  }
+} else if (mode === 'studio') {
+  // camera + look-at in kart-local space (kart faces +Z, left = +X), fov, and a forced rider pose (null = live)
+  const STUDIO = {
+    front: [[1.4, 1.5, 2.2], [0, 0.9, -0.3], 30, null],
+    side: [[2.6, 1.2, -0.3], [0, 0.85, -0.5], 32, null],
+    back: [[-0.9, 1.9, -3.4], [0, 0.9, -0.6], 30, null],
+    chase: [[0, 2.6, -4.6], [0, -0.9, 6], 66, { speed: 1, steer: 0, drift: 0, boost: 0 }],
+    fast: [[-1.2, 1.8, -3.2], [0, 0.9, -0.6], 32, { speed: 1, steer: 0, drift: 0, boost: 1 }],
+    turn: [[0, 1.9, -3.4], [0, 0.9, -0.6], 30, { speed: 0.8, steer: 1, drift: 0.6, boost: 0 }],
+    face: [[0.5, 1.15, 1.3], [0, 1.0, -0.2], 26, null],
+  };
+  await ev(`(() => { document.getElementById('overlay').style.display = 'none';
+    const r0 = __r.render.bind(__r);
+    __r.render = (sc, c) => { const v = window.__view; if (v) {
+      c.clearViewOffset(); c.fov = v[2]; c.updateProjectionMatrix();
+      c.position.copy(__k.group.localToWorld(c.position.set(...v[0])));
+      c.lookAt(__k.group.localToWorld(c.up.clone().set(...v[1])));
+      if (v[3]) for (let i = 0; i < 20; i++) __k.rider.update?.(1 / 120, v[3]); }
+      r0(sc, c); }; })()`);
+  for (const name of arg.split(',')) {
+    await ev(`window.__view = ${JSON.stringify(STUDIO[name])}`);
+    await sleep(2000);
+    const s = await send('Page.captureScreenshot');
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `studio-${name}.png`), Buffer.from(s.data, 'base64'));
   }
 } else if (mode === 'eval') {
   await sleep(5000); // countdown + ~1 s of racing

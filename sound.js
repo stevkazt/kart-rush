@@ -215,6 +215,7 @@ const now = () => ctx.currentTime + 0.01;
 const notes = (list, step, opts) => { const t = now(); list.forEach((f, i) => f && tone(f, t + i * step, step * 1.6, opts)); };
 
 let lastBump = 0;
+let starBus = null; // the star theme's own gain, so it can be cut when the star ends
 const sfx = {
   beep() { if (ready()) tone(440, now(), 0.18, { vol: 0.25 }); },
   go() { if (ready()) tone(880, now(), 0.5, { vol: 0.3 }); },
@@ -272,8 +273,28 @@ const sfx = {
     noiseHit(now(), 0.18, { freq: 5000, type: 'highpass', vol: 0.4 });
     tone(1800, now(), 0.25, { type: 'sine', vol: 0.2, slide: 0.4 });
   },
-  star() { if (ready()) notes([523, 659, 784, 1047, 784, 1047, 1319, 1568], 0.06, { type: 'square', vol: 0.12 }); },
-  starEnd() { if (ready()) notes([1047, 784, 523], 0.07, { type: 'triangle', vol: 0.12 }); },
+  /** Star: a rising whoosh, then its own bouncy sparkling theme for as long as it lasts (dur s). Was a short
+   * jingle that sounded like the lap / final-lap ones (user: "play a different sound"). */
+  star(dur = 6) {
+    if (!ready()) return;
+    const t = now();
+    starBus?.disconnect();
+    starBus = gainNode(1, sfxBus);
+    noiseHit(t, 0.6, { freq: 600, sweepTo: 7000, type: 'bandpass', q: 2, vol: 0.35, bus: starBus });
+    tone(262, t, 0.5, { type: 'sawtooth', vol: 0.1, slide: 4, bus: starBus });
+    const riff = [523, 784, 1047, 784, 587, 880, 1175, 880, 659, 988, 1319, 988, 698, 1047, 1397, 1047];
+    for (let s = 0.4, i = 0; s < dur - 0.15; s += 0.09, i++) {
+      const f = riff[i % riff.length];
+      tone(f, t + s, 0.08, { type: 'square', vol: 0.06, bus: starBus });
+      if (i % 2 === 0) tone(f / 4, t + s, 0.16, { type: 'triangle', vol: 0.12, bus: starBus });
+      if (i % 4 === 1) tone(f * 2, t + s, 0.06, { type: 'sine', vol: 0.05, bus: starBus }); // sparkle
+    }
+  },
+  starEnd() {
+    if (!ready()) return;
+    starBus?.gain.setTargetAtTime(0, ctx.currentTime, 0.03); // cut whatever of the theme is left
+    notes([1047, 784, 523], 0.07, { type: 'triangle', vol: 0.12 });
+  },
   bullet() {
     if (!ready()) return;
     noiseHit(now(), 0.4, { freq: 300, vol: 0.6 });

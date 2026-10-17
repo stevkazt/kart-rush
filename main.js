@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { sound } from './sound.js';
 import { icon, fillIcons } from './ui-icons.js';
+import { PAINT_ROLES, buildRider, driverAvatar, driverKartArt } from './drivers.js';
 
 /* ==========================================================================
  * 0. CONFIG
@@ -247,7 +248,9 @@ const CFG = {
     aiTargetPlayer: 140,              // AI red shells lock onto the player when they're up to this far ahead (m)
     hitRadius: 1.4, bananaRadius: 1.2,
     shieldTime: 10,                   // bubble that blocks the next hit (any kind), gone after this anyway
-    starTime: 6, starSpeed: 4,        // invincible, + m/s on top speed; karts touched spin out
+    // invincible + faster; karts touched spin out. User (build 33 races): the star "should give more speed": at
+    // +4 m/s with engine power only it held ~108 km/h and gained ~20 m over 6 s. Now pushed like a mushroom.
+    starTime: 6, starSpeed: 8, starAccel: 7, // + m/s on top speed (~122 km/h), push m/s^2 up to it
     bumpRadius: 2.3,                  // star / bullet kart this close to another one = hit
     tripleGap: 0.25,                  // triple mushroom: min seconds between two boosts
     blueSpeed: 55, blueLife: 30,      // blue shell: along the track to the leader, explodes
@@ -271,11 +274,17 @@ const CFG = {
   },
 
   camera: {
-    distance: 7,
-    height: 3.2,
+    // build 33 (user: the camera "pulls way too far back at top speed" to see the driver): 35% closer, and
+    // the kart keeps about the same size on screen at any speed (was 7 m + 1.5 m at speed + ~4.5 m of lag)
+    distance: 4.6,
+    height: 2.6,
     posLag: 6,
+    maxLag: 0.5,       // the trailing position lag can't drift more than this (m) from the ideal spot
+    speedPull: 0.3,    // extra distance at top speed (m)
     yawLag: 4,
-    lookAhead: 4,
+    lookAhead: 6,      // look-at point: down the road ahead of the kart, low enough that the kart sits in
+    lookHeight: -0.9,  // the lower-middle third ABOVE the km/h readout (aiming above the head hid it behind)
+    fov: 66, fovSpeed: 3, fovBoost: 2, fovMax: 5, // FOV kick: subtle, at most +5 deg
   },
 };
 
@@ -1670,7 +1679,6 @@ const BUBBLE_MAT = new THREE.ShaderMaterial({
 });
 
 const SVG_ITEMS = { mushroom: icon('mushroom'), triple: icon('mushroom'), banana: icon('banana'), shield: icon('shield'), star: icon('star') };
-const PAINT_ROLES = ['body', 'accent', 'driver', 'helmet', 'visor']; // the parts paintKart recolours (see buildKart)
 const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0)); // names + colours are set again by castDrivers
 const kart = karts[0];
 world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
@@ -1702,16 +1710,41 @@ function makeRacer({ name, colors, look }, isPlayer) {
 
 function cssHex(n) { return '#' + n.toString(16).padStart(6, '0'); }
 
-/** Recolours a baked kart in place: colors = [body, accent, suit, helmet, visor] (kartColors). */
+/** Recolours a baked kart + its rider in place: colors = [body, accent, suit, helmet, visor] (kartColors). */
 function paintKart(k, colors) {
-  const geo = k.bodyMesh.geometry, attr = geo.attributes.color, roles = geo.userData.paint, c = new THREE.Color();
-  for (let i = 0; i < roles.length; i++) {
-    if (roles[i] < 0) continue;
-    c.setHex(colors[roles[i]]);
-    attr.setXYZ(i, c.r, c.g, c.b);
+  const c = new THREE.Color();
+  for (const mesh of [k.bodyMesh, k.rider?.mesh]) {
+    if (!mesh) continue;
+    const attr = mesh.geometry.attributes.color, roles = mesh.geometry.userData.paint;
+    for (let i = 0; i < roles.length; i++) {
+      if (roles[i] < 0) continue;
+      c.setHex(colors[roles[i]]);
+      attr.setXYZ(i, c.r, c.g, c.b);
+    }
+    attr.needsUpdate = true;
   }
-  attr.needsUpdate = true;
   k.color = cssHex(colors[0]);
+}
+
+/** Seats driver r in kart k: each driver has their own rider mesh + animation (drivers.js; others = the
+ * helmeted fallback). Rebuilt only when the driver changes (the karts are reused, castDrivers recasts them). */
+function setRider(k, r, colors) {
+  if (k.rider?.name === r.name) return;
+  if (k.rider) { k.rider.mesh.removeFromParent(); k.rider.dispose(); }
+  k.rider = buildRider(r, colors, CFG.kart.chassisYOffset);
+  k.group.add(k.rider.mesh);
+  k.alpha = undefined; // re-apply the ghost look to the new materials
+}
+
+const riderState = { speed: 0, steer: 0, drift: 0, boost: 0 };
+/** Feeds a kart's driving state to its rider's animation hook (ears, scarf, tail, lean...). */
+function animateRider(k, dt) {
+  if (!k.rider?.update) return;
+  riderState.speed = k.speed / CFG.kart.maxSpeed;
+  riderState.steer = k.spin > 0 ? 0 : k.steerSmooth;
+  riderState.drift = k.driftAmt;
+  riderState.boost = k.boost > 0 || k.star > 0 ? 1 : 0;
+  k.rider.update(dt, riderState);
 }
 
 /** The player (karts[0]) becomes the picked driver in the picked paint; the other five drivers race as AI.
@@ -1723,7 +1756,9 @@ function castDrivers() {
   [me, ...CFG.racers.filter((r) => r !== me)].forEach((r, i) => {
     karts[i].name = r.name;
     karts[i].style = r === spare ? me.name : r.name;
-    paintKart(karts[i], i === 0 ? playerColors() : kartColors(r.colors, r.look));
+    const colors = i === 0 ? playerColors() : kartColors(r.colors, r.look);
+    setRider(karts[i], r, colors);
+    paintKart(karts[i], colors);
   });
 }
 
@@ -1802,10 +1837,7 @@ function buildKart(colors) {
   add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', -0.72, y0 + 0.05, 0);
   add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6);   // seat back
   add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05); // engine
-  add(new THREE.CylinderGeometry(0.33, 0.4, 0.6, 8), 'driver', 0, y0 + 0.38, -0.3); // driver
-  const helmet = add(new THREE.IcosahedronGeometry(0.33, 1), 'helmet', 0, y0 + 0.92, -0.3);
-  add(new THREE.BoxGeometry(0.44, 0.15, 0.1), 'visor', 0, 0.0, 0.29, helmet); // visor
-  add(new THREE.BoxGeometry(0.7, 0.07, 0.07), 'body', 0, 0.17, 0, helmet);   // stripe
+  // (the driver is a separate rider mesh, per driver: setRider / drivers.js)
   const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2);
   wheel.rotation.x = -0.9;
   add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, 0.6, y0 + 0.35, -1.35);  // spoiler struts
@@ -1862,7 +1894,7 @@ function buildKart(colors) {
     st.position.set(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55);
     stars.add(st);
   }
-  stars.position.set(0, y0 + 1.55, -0.3);
+  stars.position.set(0, y0 + 2.1, -0.3); // over the drivers' heads (Nova's ears reach ~1.9)
   stars.visible = false;
   group.add(stars);
 
@@ -2759,24 +2791,27 @@ function playerColors(paint = picks.paint) {
 }
 
 /** Side view of a kart (colours as kartColors), standing on a faint studio floor so dark paints still read. */
-function kartSvg([body, accent, suit, helmet = 0xffffff, visor = 0x1c2340]) {
+function kartSvg([body, accent, suit, helmet = 0xffffff, visor = 0x1c2340], driver = playerDriver()) {
   const [b, a, d, h, v] = [body, accent, suit, helmet, visor].map(cssHex);
+  const rider = driverKartArt(driver) ?? `<rect x="28" y="11" width="11" height="12" rx="3" fill="${d}"/>
+    <circle cx="34" cy="8" r="6.5" fill="${h}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.6"/><rect x="35" y="6" width="6.5" height="3.5" rx="1.5" fill="${v}"/>`;
   return `<svg class="kart-art" viewBox="0 0 72 46" aria-hidden="true">
     <ellipse cx="36" cy="42" rx="33" ry="3.2" fill="#fff" opacity="0.13"/>
     <rect x="3" y="9" width="15" height="4" rx="1.5" fill="${a}" stroke="#fff" stroke-opacity="0.25" stroke-width="0.6"/><rect x="9" y="12" width="3" height="10" fill="#555"/>
     <path d="M8 22 H50 L64 25 Q67 26 67 29 V32 H6 Q4 32 4 29 V25 Q4 22 8 22 Z" fill="${b}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.7"/>
     <rect x="22" y="20" width="22" height="7" rx="2" fill="${a}"/>
-    <rect x="28" y="11" width="11" height="12" rx="3" fill="${d}"/>
-    <circle cx="34" cy="8" r="6.5" fill="${h}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.6"/><rect x="35" y="6" width="6.5" height="3.5" rx="1.5" fill="${v}"/>
+    ${rider}
     <rect x="62" y="29" width="7" height="3" rx="1" fill="#333"/>
     <circle cx="15" cy="34" r="7.5" fill="#222"/><circle cx="15" cy="34" r="3" fill="#888"/>
     <circle cx="55" cy="35" r="6.5" fill="#222"/><circle cx="55" cy="35" r="2.6" fill="#888"/>
   </svg>`;
 }
 
-/** Head-and-shoulders avatar from a driver's look: suit, helmet, visor and helmet mark. Placeholder for the
- * planned 3D characters, built from the same CFG.racers[].look data. */
+/** Head-and-shoulders avatar: the driver's own (drivers.js), else the generic helmet from their look (suit,
+ * helmet, visor and helmet mark) until that driver gets a character. */
 function driverSvg(r) {
+  const own = driverAvatar(r);
+  if (own) return own;
   const L = r.look, [h, v, m, suit] = [L.helmet, L.visor, L.markColor, r.colors[2]].map(cssHex);
   const mark = {
     stripe: `<rect x="21.5" y="7.5" width="5" height="12" rx="1.5" fill="${m}"/>`,
@@ -3330,7 +3365,7 @@ function useItem(k) {
     if (k.isPlayer) sound.shieldUp();
   } else if (item === 'star') {
     k.star = I.starTime;
-    if (k.isPlayer) { showMessage('STAR POWER!'); sound.star(); }
+    if (k.isPlayer) { showMessage('STAR POWER!'); sound.star(I.starTime); }
   } else if (item === 'bullet') {
     k.bullet = I.bulletTime;
     k.bulletLane = lateral(k.trackIdx, b.position);
@@ -3869,8 +3904,11 @@ function applyStabilityAssist(k) {
   if (!onGround) airLevel(k);
   // Boost: extra push through the centre of mass. Doing it with more wheel torque popped wheelies
   // and flipped karts that hit a boost pad at low speed.
-  if (k.boost > 0 && k.spin <= 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed && onGround) {
-    const dv = K.boostAccel * CFG.physicsStep;
+  // (the star pushes the same way, up to its own higher top speed)
+  const boostPush = k.boost > 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed ? K.boostAccel : 0;
+  const starPush = k.star > 0 && speed < K.maxSpeed * k.topMult + CFG.items.starSpeed ? CFG.items.starAccel : 0;
+  if ((boostPush || starPush) && k.spin <= 0 && onGround) {
+    const dv = Math.max(boostPush, starPush) * CFG.physicsStep;
     body.velocity.x += fwd.x * dv;
     body.velocity.z += fwd.z * dv;
   }
@@ -4073,7 +4111,7 @@ function layoutLobby() {
 
 function chaseCamera(dt, bp, yaw, speedRatio) {
   const C = CFG.camera;
-  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = 66; camera.updateProjectionMatrix(); }
+  if (camera.view?.enabled) { camera.clearViewOffset(); camera.fov = C.fov; camera.updateProjectionMatrix(); }
 
   if (camState.snap) {
     camState.yaw = yaw;
@@ -4081,7 +4119,7 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
     camState.yaw += wrapAngle(yaw - camState.yaw) * (1 - Math.exp(-dt * C.yawLag));
   }
 
-  const dist = C.distance + speedRatio * 1.5;
+  const dist = C.distance + speedRatio * C.speedPull;
   desiredCam.set(
     bp.x - Math.sin(camState.yaw) * dist,
     bp.y + C.height,
@@ -4093,19 +4131,22 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
     camState.snap = false;
   } else {
     camState.pos.lerp(desiredCam, 1 - Math.exp(-dt * C.posLag));
+    // a smooth follow, but never trailing far behind at speed (the old lag added ~4.5 m at top speed)
+    const lag = camState.pos.distanceTo(desiredCam);
+    if (lag > C.maxLag) camState.pos.lerp(desiredCam, 1 - C.maxLag / lag);
   }
   camState.pos.y = Math.max(camState.pos.y, track.samples[kart.trackIdx].y + 1.0);
   camera.position.copy(camState.pos);
 
   camState.look.set(
     bp.x + Math.sin(camState.yaw) * C.lookAhead,
-    bp.y + 1.0,
+    bp.y + C.lookHeight,
     bp.z + Math.cos(camState.yaw) * C.lookAhead,
   );
   camera.lookAt(camState.look);
 
   // Speed-based FOV kick
-  const targetFov = 66 + speedRatio * 8 + (kart.boost > 0 ? 8 : 0);
+  const targetFov = C.fov + Math.min(C.fovMax, speedRatio * C.fovSpeed + (kart.boost > 0 ? C.fovBoost : 0));
   if (Math.abs(camera.fov - targetFov) > 0.05) {
     camera.fov = lerp(camera.fov, targetFov, 1 - Math.exp(-dt * 4));
     camera.updateProjectionMatrix();
@@ -4136,14 +4177,15 @@ function updateEffects(dt) {
     const alpha = k.ghosted ? (Math.floor(itemClock * 12) % 2 ? 0.25 : 0.5) : 1;
     if (alpha !== k.alpha) {
       k.alpha = alpha;
-      for (const m of [k.bodyMesh, ...k.wheelMeshes.map((w) => w.children[0])]) {
-        m.material.transparent = alpha < 1;
-        m.material.opacity = alpha;
-        m.material.depthWrite = alpha === 1;
+      for (const m of [k.bodyMesh.material, ...k.rider.mats, ...k.wheelMeshes.map((w) => w.children[0].material)]) {
+        m.transparent = alpha < 1;
+        m.opacity = alpha;
+        m.depthWrite = alpha === 1;
       }
     }
     k.hull.visible = k.bullet > 0;
-    k.bodyMesh.visible = !k.hull.visible;
+    k.bodyMesh.visible = k.rider.mesh.visible = !k.hull.visible;
+    animateRider(k, dt);
     const em = k.bodyMesh.material.emissive;
     if (k.star > 0 && (k.star > 1 || Math.floor(k.star * 10) % 2 === 0)) {
       em.setHSL((itemClock * 2.5) % 1, 1, 0.4);
@@ -4154,6 +4196,7 @@ function updateEffects(dt) {
         fx.emit(emitP, emitV, [1, 0.95, 0.5], { life: 0.4, size: 0.3, grow: 0, alpha: 1 });
       }
     } else if (em.r || em.g || em.b) em.setRGB(0, 0, 0);
+    k.rider.matte.emissive.copy(em);
 
     // Smoke + skid marks while drifting, dust on the grass; only near the camera (it's all small stuff)
     const near = k.group.position.distanceToSquared(camera.position) < 45 * 45;
@@ -4397,7 +4440,7 @@ function escapeHtml(t) { return t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 32 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 33 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 fillIcons();
 loadTrack(savedTrack());
 castDrivers();
