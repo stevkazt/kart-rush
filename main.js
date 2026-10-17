@@ -370,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '66'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '67'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -2425,7 +2425,7 @@ const state = {
 };
 
 let viewFov = 66; // the chase camera's base vertical FOV (wider in the vertical view)
-const input = { left: false, right: false, axis: 0, gas: false, brake: false, reset: false, item: false }; // axis: joystick -1..1
+const input = { left: false, right: false, axis: 0, gas: false, brake: false, reset: false, item: false, itemAlt: false }; // axis: joystick -1..1
 
 const hud = {
   lap: $('lap'), time: $('time'), best: $('best'), speed: $('speed'),
@@ -2435,7 +2435,7 @@ const hud = {
   menuScreen: $('menu-screen'), resultsScreen: $('results-screen'), menuRecord: $('menu-record'),
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
-  item: $('btn-item'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
+  item: $('btn-item'), itemB: $('btn-item-b'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
   pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), debugScreen: $('debug-screen'), helpScreen: $('help-screen'), knob: $('stick-knob'), pickScreen: $('pick-screen'),
   helloScreen: $('hello-screen'),
 };
@@ -2501,18 +2501,21 @@ initControls();
 function initControls() {
   // --- Slide from GAS onto ITEM: fires the item while the gas stays held (GAS keeps the captured pointer) ---
   function slideToItem(el) {
-    const over = new Set(); // pointers currently over ITEM, so each slide-on fires once
+    const over = new Set(); // "pointerId:button" pairs currently over a throw button, so each slide-on fires once
     el.addEventListener('pointermove', (e) => {
-      const r = hud.item.getBoundingClientRect(), pad = 8;
-      const inside = e.clientX > r.left - pad && e.clientX < r.right + pad && e.clientY > r.top - pad && e.clientY < r.bottom + pad;
-      if (inside && !over.has(e.pointerId)) {
-        over.add(e.pointerId);
-        input.item = true;
-        hud.item.classList.add('pressed');
-        setTimeout(() => hud.item.classList.remove('pressed'), 120);
-      } else if (!inside) over.delete(e.pointerId);
+      for (const [btn, key] of [[hud.item, 'item'], [hud.itemB, 'itemAlt']]) {
+        if (btn.hidden) continue;
+        const r = btn.getBoundingClientRect(), pad = 8, id = e.pointerId + key;
+        const inside = e.clientX > r.left - pad && e.clientX < r.right + pad && e.clientY > r.top - pad && e.clientY < r.bottom + pad;
+        if (inside && !over.has(id)) {
+          over.add(id);
+          input[key] = true;
+          btn.classList.add('pressed');
+          setTimeout(() => btn.classList.remove('pressed'), 120);
+        } else if (!inside) over.delete(id);
+      }
     });
-    ['pointerup', 'pointercancel'].forEach((t) => el.addEventListener(t, (e) => over.delete(e.pointerId)));
+    ['pointerup', 'pointercancel'].forEach((t) => el.addEventListener(t, (e) => { over.delete(e.pointerId + 'item'); over.delete(e.pointerId + 'itemAlt'); }));
   }
 
   // --- Hold buttons (each tracks its own set of pointers, so multi-touch works) ---
@@ -2593,6 +2596,8 @@ function initControls() {
 
   $('btn-reset').addEventListener('pointerdown', (e) => { e.preventDefault(); input.reset = true; });
   hud.item.addEventListener('pointerdown', (e) => { e.preventDefault(); input.item = true; hud.item.classList.add('pressed'); });
+  hud.itemB.addEventListener('pointerdown', (e) => { e.preventDefault(); input.itemAlt = true; hud.itemB.classList.add('pressed'); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.itemB.addEventListener(t, () => hud.itemB.classList.remove('pressed')));
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.item.addEventListener(t, () => hud.item.classList.remove('pressed')));
 
   for (const row of document.querySelectorAll('.setup [data-pick]')) onTap(row, () => { sound.click(); openPicker(row.dataset.pick); });
@@ -2674,6 +2679,7 @@ function initControls() {
     keys.add(e.code); updateKeys();
     if (e.code === 'KeyR') input.reset = true;
     if (e.code === 'Space' || e.code === 'KeyE') input.item = true;
+    if (e.code === 'KeyQ') input.itemAlt = true;
     if (e.code === 'Escape' || e.code === 'KeyP') (state.paused ? resumeGame : pauseGame)();
   });
   window.addEventListener('keyup', (e) => { keys.delete(e.code); updateKeys(); });
@@ -2846,6 +2852,7 @@ function updateGameFlow(dt) {
   if (racing) teleSample();
   input.reset = false;
   input.item = false;
+  input.itemAlt = false;
 }
 
 function updateKartProgress(k, dt, racing) {
@@ -3956,14 +3963,16 @@ function spawnModel(kind, pos) {
   return mesh;
 }
 
+const THROWABLE = new Set(['green', 'banana', 'bomb']); // items with a second (opposite-direction) button
 const itemFwd = new CANNON.Vec3();
-function useItem(k) {
+function useItem(k, flip = false) { // flip = the opposite throw: green shell backwards, banana/bomb forwards (build 66.1)
   if (!k.item || k.itemRoll > 0 || k.spin > 0 || k.bullet > 0) return;
   const I = CFG.items, b = k.body;
   const fwd = b.quaternion.vmult(LOCAL_FWD, itemFwd);
   const h = Math.hypot(fwd.x, fwd.z) || 1;
-  const fx = fwd.x / h, fz = fwd.z / h;
+  let fx = fwd.x / h, fz = fwd.z / h;
   const item = k.item;
+  if (flip && !THROWABLE.has(item)) return;
   teleEvent('use', k, { item, place: k.place });
   k.fireT = 0.4;
   if (item === 'triple') {
@@ -4003,20 +4012,28 @@ function useItem(k) {
     showMessage(k.isPlayer ? 'BLUE SHELL!' : `BLUE SHELL FROM ${k.name.toUpperCase()}!`);
     sound.blueLaunch();
   } else if (item === 'banana' || item === 'bomb') {
-    const pos = new THREE.Vector3(b.position.x - fx * 2.5, 0, b.position.z - fz * 2.5); // clear of the banana
+    const FLY = 0.6, spd = Math.hypot(b.velocity.x, b.velocity.z);
+    const dd = flip ? 14 + spd * FLY : -2.5; // flip = lobbed ahead: lands 14 m past where the kart will be by then (build 66.3)
+    const pos = new THREE.Vector3(b.position.x + fx * dd, 0, b.position.z + fz * dd); // clear of the banana
     pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.14; // on the road, even mid-air; lifted so it doesn't look sunk into the asphalt
-    drops.push({ mesh: spawnModel(item, pos), pos, owner: k, age: 0, kind: item });
+    const drop = { mesh: spawnModel(item, pos), pos, owner: k, age: 0, kind: item };
+    if (flip) { // throw motion: the mesh arcs from the kart's hands to the landing spot, spinning, and only counts once it lands
+      drop.fly = { t: 0, dur: FLY, from: new THREE.Vector3(b.position.x + fx * 1.2, b.position.y + 1.6, b.position.z + fz * 1.2) };
+      drop.mesh.position.copy(drop.fly.from);
+    }
+    drops.push(drop);
     if (k.isPlayer || near(k, 25)) sound.drop();
   } else {
     const red = item === 'red';
     const ahead = red ? redShellTarget(k) : null;
     const speed = red ? I.redSpeed : I.shellSpeed;
-    const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0, b.position.z + fz * 2.4);
+    const back = flip && item === 'green'; if (back) { fx = -fx; fz = -fz; }
+    const pos = new THREE.Vector3(b.position.x + fx * 2.4, 0, b.position.z + fz * 2.4); // fx/fz already flipped for a backward throw
     pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)) + 0.03;
     // the player's green shell (build 64.45): aimed at the closest rival ahead (within 28 m, 70 deg of the nose),
     // else along the road's centre line 22 m ahead, so it doesn't just follow wherever the kart happens to point
     let dx = fx, dz = fz;
-    if (item === 'green' && k.isPlayer) {
+    if (item === 'green' && k.isPlayer && !back) {
       let aim = null, best = 28 * 28;
       for (const o of karts) {
         if (o === k || o.finished) continue;
@@ -4596,6 +4613,14 @@ function updateItems(dt, racing) {
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
     d.age += dt;
+    if (d.fly) { // in the air: parabola, tumbling, no hits until it lands (then a small bounce puff)
+      const f = d.fly, u = Math.min(1, (f.t += dt) / f.dur);
+      d.mesh.position.set(f.from.x + (d.pos.x - f.from.x) * u, f.from.y + (d.pos.y - f.from.y) * u + Math.sin(u * Math.PI) * 4.5, f.from.z + (d.pos.z - f.from.z) * u);
+      d.mesh.rotation.x += dt * 14;
+      if (u < 1) continue;
+      d.mesh.position.copy(d.pos); d.mesh.rotation.x = 0; d.fly = null; d.age = Math.max(d.age, 0.8);
+      if (near(d.owner, 70)) sound.drop();
+    }
     const hit = karts.find((k) => (k !== d.owner || d.age > 0.8) && !k.finished && flat2(k.body.position, d.pos) < I.bananaRadius ** 2);
     if (hit) {
       teleEvent(d.kind === 'bomb' ? 'bombhit' : 'bananahit', hit, { by: karts.indexOf(d.owner), age: +d.age.toFixed(1) });
@@ -4654,7 +4679,7 @@ function updateItems(dt, racing) {
     const hit = !gone && karts.find((k) => (k !== s.owner || (s.kind === 'green' && s.age > 0.6)) && !k.finished
       && flat2(k.body.position, s.pos) < I.hitRadius ** 2);
     if (hit) { spinOut(hit, s.owner, s.kind, undefined, { dir: s.vel }); gone = true; }
-    const banana = gone ? -1 : drops.findIndex((d) => flat2(d.pos, s.pos) < 1.6);
+    const banana = gone ? -1 : drops.findIndex((d) => !d.fly && flat2(d.pos, s.pos) < 1.6);
     if (banana >= 0) {
       scene.remove(drops[banana].mesh);
       drops.splice(banana, 1);
@@ -4785,6 +4810,7 @@ function stepPhysics(dt) {
         ? canDrive && !input.brake && !autoLift(k)
         : input.gas;
       if (input.item && canDrive && !k.finished) useItem(k);
+      else if (input.itemAlt && canDrive && !k.finished) useItem(k, true);
     }
     driveKart(k, dt, canDrive);
   }
@@ -5219,6 +5245,14 @@ function updateItemVisuals(dt) {
   const count = kart.item === 'triple' && kart.itemRoll <= 0 ? `x${kart.itemCount}` : '';
   if (hud.item.dataset.count !== count) hud.item.dataset.count = count;
   hud.item.classList.toggle('ready', !!kart.item && kart.itemRoll <= 0);
+  // two throw buttons for green / banana / bomb: the main one keeps the old direction, the second throws the other way
+  const two = kart.itemRoll <= 0 && THROWABLE.has(kart.item);
+  const dirs = two ? (kart.item === 'green' ? ['▲', '▼'] : ['▼', '▲']) : ['', ''];
+  if (hud.item.dataset.dir !== dirs[0]) hud.item.dataset.dir = dirs[0];
+  hud.itemB.hidden = !two;
+  app.classList.toggle('twothrow', two);
+  hud.itemB.textContent = dirs[1];
+  hud.itemB.classList.toggle('ready', two);
 
   // Triple mushroom: what's left circles the kart
   for (const k of karts) {
