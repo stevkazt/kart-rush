@@ -334,8 +334,54 @@ Watch: canyon post-jump flips with the faster items (2 in 7 headless races); bal
 music / effects volume, race telemetry, rubber band removed, rail reset, AI personalities + racecraft. All
 phone-tested and liked.
 
+**Build 30 (2026-10-17, committed locally, NOT pushed):**
+- **Respawn ghost** (user asked): `CFG.kart.ghostTime` 2 s after any reset in a race. `setGhost` drops
+  `KART_GROUP` from the body's `collisionFilterMask` (walls/road still collide), `spinOut` ignores ghosts, the
+  kart flickers see-through (render: `k.alpha`). Solid again only when no kart is within 3.2 m. Tested headless.
+- **Mako's bully items** (user picked 1 + 3, NOT red shells hunting the player: "too much"): `itemOdds`
+  multipliers in his style (weapons up, shield/speed items down) used by `rollItem(place, k)`; `trap`: holding a
+  banana with a corner (`trapCorner`, radius < 45 m) ahead he moves onto the racing line and drops it there.
+  Not yet checked in the user's race data (count banana hits by Mako on the player / others).
+- **Frost Peak** (`tracks.frost`, theme `snow`, user: "keep it day or well lit, the eyes strain thing"): 932 m.
+  Start straight by a frozen lake, banked left sweeper (162), climbing S-bends in pines (237, 263), 13 m hairpin
+  at the top (361, y 10.5), ridge, downhill with a crest (600), ice across the lake (`ice: [[712, 905]]`, gentle
+  S, tightest ~32 m), back to the line. Soft blue-white snow (not pure white), sun 1.9, mid-grey road, red/white
+  rails, blue/white curbs, pale blue ice road. Pines, snow-capped rocks, snowmen, far peaks, light snowfall (450
+  points round the camera). Ice = `track.ice[i]` 0..1 (8 m soft edges): x `kart.iceGrip` 0.65 on tyre
+  frictionSlip (all 4 wheels, set every step) and on the assist's `maxLateralAccel`; AIs scale `cornerGrip` the
+  same. Headless: full race, 0 resets for every kart, laps 32-38 s. Screenshots looked right. NOT tried on the
+  phone yet: ask about ice feel (iceGrip), brightness/glare, snowfall, lake width.
+- Refactor for it: `makeTerrain(data, shape, colorAt)` (height field, from the desert; shape may return a 4th
+  value = rise, the lake uses -0.3), `makeSky(horizon, mid, top, glow)`, `buildChevrons(data)`. Canyon
+  screenshot identical after the refactor.
+
+**User's races on build 29 (personalities):** 4th, 3rd, 6th: competitive now; winners vary (Luna twice on the
+canyon, Rex on the meadow). Mako hit the user 3x in one race (bully works). The user's big losses are rail hits
+while fighting for places (25-32% speed, once a manual reset); user: "I get nervous when they are winning and
+I lose control" (normal; offered more forgiving rails, not wanted for now).
+
+**PLAN: personalities that change, but not randomly (user 2026-10-17: rotating roles "sounds good but I don't
+think doing it randomly is the way to go"). The user hasn't picked yet: show the options and ask first.**
+Each driver keeps their fixed character and name (looks will match it later); what changes is their *form*.
+1. **Track specialists** (recommended first, small): `CFG.tracks[id].form = { Luna: {skill: +0.03, cornerGrip:
+   +1}, ... }` applied in `newAI` on top of `CFG.ai.styles`. Each driver has a home track, e.g. Luna the canyon,
+   Rex the meadow, Bolt Frost Peak (wild on ice fits him), Pip/Mako steady elsewhere. Show it on the track picker
+   ("Specialist: Luna") so it's a known fact, not a surprise. Telemetry: add the form to `race.karts`.
+2. **Rivalry from results** (next): keep the last ~5 results per device in localStorage (`kartrush.history`:
+   track, places by name). The driver who has beaten the player most recently (or most often) becomes the
+   **rival** for the next race: aggression toward the player (shells, defending against them, banana traps on
+   their line) plus a small pace edge (+1-2%). Shown before the race ("Rival: Rex") and on the results screen.
+   Beating the rival clears it. A clear story: "Rex beat me twice, now he's after me".
+3. **Championship / cup** (later, bigger): 3-4 races in a row across the tracks, points (10/8/6/4/2/1),
+   standings between races; form shifts with the standings (leader cautious-but-fast, bottom drivers desperate:
+   more aggression, more mistakes). Would sit on top of 1 + 2.
+Suggested order: 1, then 2 after the user plays a few races with 1; 3 only if the user wants a cup mode.
+
+**Small fixes still open:** landing after the canyon jump (user and AIs get stuck / flip there, ~idx 1100-1140);
+shells keep hitting the player after they cross the line (ignore finished karts as targets / hits).
+
 **Next**, roughly in order (agreed 2026-10-16):
-- Another themed track (idea: snowy night with falling snow + an icy section).
+- Another themed track: Frost Peak built (build 30, above); waiting for the phone test.
 - Kart colour picker (body / trim / driver).
 - **Driver looks matching their personalities** (user, 2026-10-17: will give them styles later): Rex the ace,
   Luna the defender, Mako the bully, Pip the steady one, Bolt the wild card. Each kart + driver should read as

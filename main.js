@@ -31,7 +31,8 @@ const CFG = {
   // design them with dev/track-check.py. Everything placed by sample index (items, pads, features) must
   // move when a layout changes. Features: bumps [idx, length m, height m] (a crest: air above
   // ~sqrt(20 * length^2 / (2 pi^2 height)) m/s), jumps [lip idx, ramp length m, rise m] (a kicker with a
-  // step down after the lip), banks [idx, half-length m, degrees] (the outside of the bend is raised).
+  // step down after the lip), banks [idx, half-length m, degrees] (the outside of the bend is raised),
+  // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges).
   tracks: {
     meadow: {
       name: 'Green Valley', icon: '\u{1F333}', theme: 'meadow',
@@ -69,6 +70,25 @@ const CFG = {
       boxRows: [230, 760, 1010],
       pads: [[40, 0], [480, -2], [985, 0]],
     },
+    frost: {
+      name: 'Frost Peak', icon: '\u{2744}\u{FE0F}', theme: 'snow',
+      // ~930 m. Start straight beside the frozen lake (y 0), banked left sweeper, climbing S-bends through
+      // the pines, a 13 m hairpin at the top (y 10.5), back along the ridge, a fast downhill with a crest,
+      // then across the lake on ice: a gentle S (tightest ~32 m) on two thirds of the grip, back to the line.
+      points: [
+        [150, -15, 0], [150, 20, 0], [145, 55, 0.3], [128, 82, 0.8], [100, 98, 1.5], [70, 100, 2.5],
+        [45, 112, 4], [20, 118, 5.5], [-5, 108, 7], [-30, 112, 8.5], [-55, 115, 9.5], [-70, 112, 10],
+        [-80, 104, 10.3], [-84, 94, 10.5], [-81, 84, 10.5], [-73, 77, 10.5], [-62, 74, 10.4], [-35, 74, 10],
+        [-10, 72, 9.5], [8, 62, 9], [15, 40, 8], [10, 15, 6.5], [-5, -10, 5], [-30, -35, 3.5],
+        [-55, -55, 2], [-70, -78, 1], [-62, -100, 0.3], [-35, -112, 0], [0, -114, 0], [35, -106, 0],
+        [70, -114, 0], [105, -112, 0], [130, -100, 0], [146, -82, 0], [150, -55, 0],
+      ],
+      bumps: [[600, 20, 0.9]],
+      banks: [[162, 25, 8]],
+      ice: [[712, 905]],
+      boxRows: [60, 420, 760],
+      pads: [[30, -3], [430, 0], [585, 2], [955, 0]],
+    },
   },
 
   kart: {
@@ -87,6 +107,8 @@ const CFG = {
     brakeDecel: 22,         // m/s^2 through the centre of mass (big wheel brakes flipped the kart)
     coastBrake: 12,         // rolling resistance when no pedal is held (unused while driving now: see playerCoast, ai.coast)
     playerCoast: 3,         // the player's kart rolls on when GAS is released (~5 km/h lost per 0.3 s lift)
+    ghostTime: 2,           // after a respawn: drives through other karts, items can't hit it, see-through
+                            // (user: "so no one gets taken off guard by the respawn")
     rescueTime: 2.5,        // player held GAS/BRAKE this long while barely moving (stuck on a rail): put back
     rescueSpeed: 2,         // ...below this speed (m/s)
     maxSpeed: 26,           // m/s
@@ -104,6 +126,7 @@ const CFG = {
     driftMinSpeed: 15,
     driftYawAssist: 0.5,
     maxLateralAccel: 14,    // stability assist: caps the requested turn rate at this grip (m/s^2)
+    iceGrip: 0.65,          // on ice (a track's `ice` stretches): x tyre grip and x maxLateralAccel (AIs: x cornerGrip)
     yawSlack: 0.1,          // stability assist: allowed yaw rate above what steering asks for
     steerYawSlack: 0.15,    // ...plus this much at full lock
     driftYawSlack: 0.2,     // ...plus this much while drifting
@@ -171,8 +194,12 @@ const CFG = {
         mistakeEvery: [20, 35], startDelay: [0.05, 0.15], overtake: 1, defend: 0.5, aggression: 0.4 },
       Luna: { role: 'defender', skill: [1.02, 1.06], cornerGrip: [23, 24.5], lineUse: [0.75, 0.95], bias: 1.5,
         laneRange: 1.2, mistakeEvery: [18, 30], startDelay: [0.05, 0.2], overtake: 0.7, defend: 1, aggression: 0.2, hoard: true },
+      // itemOdds: x the per-place odds, in ITEM_TYPES order (mush ban gre red shld star trip blue bullet):
+      // always armed, rarely a shield or a speed item. trap: lays bananas on the racing line at corner entries
+      // (user picked these over red shells that hunt the player: "too much")
       Mako: { role: 'bully', skill: [0.98, 1.02], cornerGrip: [21.5, 23.5], lineUse: [0.4, 0.7], bias: 3,
-        overtake: 0.8, defend: 0.3, aggression: 1 },
+        overtake: 0.8, defend: 0.3, aggression: 1, trap: true,
+        itemOdds: [0.4, 2, 1.8, 1.6, 0.3, 0.5, 0.4, 1.3, 0.5] },
       Pip: { role: 'steady', skill: [0.95, 0.99], cornerGrip: [21, 23], lineUse: [0.5, 0.7], bias: 2, laneRange: 1.5,
         mistakeEvery: [25, 40], overtake: 0.3, defend: 0.8, aggression: 0, hoard: true },
       // fast, brakes late (brakeOver), wide random lines, wobbles a lot
@@ -290,6 +317,7 @@ const world = new CANNON.World({ gravity: new CANNON.Vec3(0, CFG.gravity, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = false;
 world.defaultContactMaterial.friction = 0.2;
+const KART_GROUP = 2; // karts' collision group (a respawned ghost drops it from its mask: setGhost)
 
 const physMats = {
   ground: new CANNON.Material('ground'),
@@ -399,7 +427,17 @@ function buildTrack(def, th) {
     lineRadius.push(ang > 1e-4 ? Math.hypot(cx - ax, cz - az) / ang : Infinity); // arc / turn
   }
   const hilly = samples.some((p) => Math.abs(p.y) > 1e-3) || bank.some((b) => b !== 0);
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, bank, wallH, hilly };
+  // Ice: 0..1 per sample, ramping in and out over ~8 m
+  const ice = new Float32Array(N + 1);
+  const edge = Math.max(1, Math.round(8 / spacing));
+  for (const [from, to] of def.ice || []) {
+    for (let i = from - edge; i <= to + edge; i++) {
+      const v = Math.min(1, (i - from + edge) / edge, (to + edge - i) / edge);
+      ice[(i + N) % N] = Math.max(ice[(i + N) % N], v);
+    }
+  }
+  ice[N] = ice[0];
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, bank, wallH, hilly, ice };
   track = data; // the road helpers below (surfaceY, roadPoint...) read the global
 
   if (hilly) {
@@ -420,7 +458,7 @@ function buildTrack(def, th) {
   // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
   const P = th.palette;
   trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02,
-    (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : P.road[((i / 10) | 0) % 2])));
+    (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : (P.ice && ice[i] > 0.5 ? P.ice : P.road)[((i / 10) | 0) % 2])));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
   trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
   const curbColor = (i) => P.curb[((i / 3) | 0) % 2];
@@ -791,6 +829,16 @@ const THEMES = {
     },
     build: buildDesert,
   },
+  snow: {
+    // a clear winter day, kept soft: the snow is blue-white, not pure white, and the sun a bit lower in
+    // power than the meadow's, so it doesn't glare (user: the dark canyon strained the eyes; bright snow can too)
+    sky: 0x9ccaf0, fog: [0xdfe9f3, 110, 420], hemi: [0xf2f6ff, 0x9fb3c8, 1.25], sun: [0xfff6e8, 1.9], sunOffset: [60, 110, 40],
+    palette: {
+      road: [0x6b7179, 0x70767e], dash: 0xf6f8fb, curb: [0x2f6bff, 0xf3f6fa], ice: [0x9fd2ea, 0xa7d8ee],
+      rail: [0xd23a3a, 0xf3f6fa], arch: [0x2f6bff, 0xd23a3a],
+    },
+    build: buildSnow,
+  },
 };
 
 function buildMeadow({ N, samples }) {
@@ -881,20 +929,15 @@ function makeNoise(rand) {
 const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 /**
- * Desert canyon on a golden afternoon. The ground is a height field: flat at road height beside the road, then a sandy
- * slope and red rock walls 13-30 m high. Each point takes the lowest of (nearby road height + rise with
- * distance), so where two parts of the track are close at different heights the ground follows the lower
- * one: the lower road runs through a slot under the bridge, and a higher road on a ridge gets a stone
- * embankment. Life: circling vultures, hot-air balloons, tumbleweeds rolling across the road, dust devils,
- * flags at the start.
+ * Ground as a height field around a track with heights (canyon, snow). Flat at road height beside the road,
+ * then a rise (1.4 m) and a wall / hill of `shape(x, z)` = [height, where it starts, how wide its slope is,
+ * rise] (metres beyond the flat floor). Each point takes the lowest of (nearby road height + rise with distance),
+ * so where two parts of the track are close at different heights the ground follows the lower one.
+ * `colorAt(x, z, h, slope, color)` paints it. Adds the mesh to trackRoot; returns the lookups the scenery uses.
  */
-function buildDesert(data) {
-  const { N, samples, normals, tangents, wL, wR, wallH, spacing, radius, bank } = data;
+function makeTerrain(data, shape, colorAt) {
+  const { N, samples, normals, wL, wR, bank } = data;
   const T = CFG.track;
-  const rand = seededRand(4242);
-  const noise = makeNoise(rand);
-
-  // ---- Height field ----
   const flat = new Float32Array(N); // road + rails + 2.5 m of flat floor, from the centre line
   for (let i = 0; i < N; i++) flat[i] = Math.max(wL[i], wR[i]) + T.curb + T.wallThickness + 2.5;
   const CELL = 20, REACH = 70, R = Math.ceil(REACH / CELL);
@@ -920,10 +963,7 @@ function buildDesert(data) {
   let maxY = -Infinity;
   for (const p of samples) maxY = Math.max(maxY, p.y);
   function heightAt(x, z) {
-    // the wall's shape at this spot: height, where it starts, how steep
-    const cliff = 13 + 17 * noise(x / 110 + 31, z / 110 + 17);
-    const start = 5 + 7 * noise(x / 23, z / 23);
-    const width = 5 + 5 * noise(x / 15 + 50, z / 15);
+    const [cliff, start, width, rise = 1.4] = shape(x, z);
     let h = Infinity;
     nearby(x, z, (i, d) => {
       // the road's height across from here (banking tilts it), held level beyond the rails
@@ -931,7 +971,7 @@ function buildDesert(data) {
       const base = samples[i].y + lat * bank[i];
       if (base - 0.35 >= h) return;
       const u = d - flat[i];
-      h = Math.min(h, base + (u <= 0 ? -0.35 : 1.4 * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
+      h = Math.min(h, base + (u <= 0 ? -0.35 : rise * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
     });
     return h === Infinity ? maxY + 1.4 + cliff : h;
   }
@@ -953,10 +993,6 @@ function buildDesert(data) {
   const H = new Float32Array(nx * nz);
   for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) H[r * nx + c] = heightAt(x0 + c * STEP, z0 + r * STEP);
 
-  // Colours: sand on the flat, talus on gentle slopes, red rock strata on the walls
-  const SAND = [0xe3b27a, 0xd9a46c, 0xe8bd88].map((h) => new THREE.Color(h));
-  const TALUS = new THREE.Color(0xc57a49);
-  const ROCK = [0xb4532e, 0xc8693a, 0x9c4127, 0xd88a52, 0xb85d36, 0xa84a2c].map((h) => new THREE.Color(h));
   const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3);
   const cc = new THREE.Color();
   for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) {
@@ -964,10 +1000,7 @@ function buildDesert(data) {
     pos.set([x, h, z], v * 3);
     const gx = (H[r * nx + Math.min(c + 1, nx - 1)] - H[r * nx + Math.max(c - 1, 0)]) / (2 * STEP);
     const gz = (H[Math.min(r + 1, nz - 1) * nx + c] - H[Math.max(r - 1, 0) * nx + c]) / (2 * STEP);
-    const slope = Math.hypot(gx, gz);
-    if (slope > 0.6) cc.copy(ROCK[(((h + noise(x / 9, z / 9) * 2.5) / 2.3) | 0) % ROCK.length]);
-    else if (slope > 0.22) cc.copy(TALUS).lerp(SAND[0], 0.3 * noise(x / 6, z / 6));
-    else cc.copy(SAND[(noise(x / 12 + 9, z / 12) * 3) | 0]);
+    colorAt(x, z, h, Math.hypot(gx, gz), cc);
     col.set([cc.r, cc.g, cc.b], v * 3);
   }
   const idx = [];
@@ -983,11 +1016,17 @@ function buildDesert(data) {
   const terrain = new THREE.Mesh(tgeo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
   terrain.receiveShadow = true;
   trackRoot.add(terrain);
+  return { heightAt, floorDist, nearby, maxY, minX, maxX, minZ, maxZ };
+}
 
-  // ---- Sky: a gradient dome that follows the camera, and the sun ----
+/**
+ * Sky for a theme with a height-field ground: a gradient dome (horizon -> mid -> top) that follows the
+ * camera, plus the sun disc and a soft glow in the sun's direction. Call update() every frame.
+ */
+function makeSky(horizon, mid, top, glow) {
   const skyGeo = new THREE.SphereGeometry(450, 32, 16);
-  const skyCol = [];
-  const HORIZON = new THREE.Color(0xf1d9bb), MID = new THREE.Color(0xb9d8ef), TOP = new THREE.Color(0x5f9fdc);
+  const skyCol = [], cc = new THREE.Color();
+  const HORIZON = new THREE.Color(horizon), MID = new THREE.Color(mid), TOP = new THREE.Color(top);
   for (let i = 0; i < skyGeo.attributes.position.count; i++) {
     const t = Math.max(0, skyGeo.attributes.position.getY(i) / 450);
     cc.copy(HORIZON).lerp(MID, smoothstep(0.02, 0.25, t)).lerp(TOP, smoothstep(0.2, 0.75, t));
@@ -1000,9 +1039,253 @@ function buildDesert(data) {
   const sunDir = SUN_OFFSET.clone().normalize();
   const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(22, 24), new THREE.MeshBasicMaterial({ color: 0xfff1c4, fog: false, depthWrite: false }));
   const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(70, 24), new THREE.MeshBasicMaterial({
-    color: 0xffe2b0, transparent: true, opacity: 0.35, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    color: glow, transparent: true, opacity: 0.35, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
   sunDisc.renderOrder = sunGlow.renderOrder = -1;
   trackRoot.add(sky, sunGlow, sunDisc);
+  return {
+    update() {
+      sky.position.copy(camera.position);
+      sunDisc.position.copy(camera.position).addScaledVector(sunDir, 420);
+      sunGlow.position.copy(camera.position).addScaledVector(sunDir, 425);
+      sunDisc.lookAt(camera.position);
+      sunGlow.lookAt(camera.position);
+    },
+  };
+}
+
+/** Chevron boards on the rail on the outside of the tight corners (radius < 22 m), arrows the way it turns. */
+function buildChevrons({ N, normals, tangents, wL, wR, wallH, radius }) {
+  const T = CFG.track;
+  const chevTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1d1a1a'; g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#ffd23a';
+    for (const x of [14, 54, 94]) {
+      g.beginPath(); g.moveTo(x, 8); g.lineTo(x + 22, 32); g.lineTo(x, 56); g.lineTo(x + 12, 56); g.lineTo(x + 34, 32); g.lineTo(x + 12, 8); g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  })();
+  const boards = [];
+  const used = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    if (radius[i] > 22 || used[i]) continue;
+    let lo = i;
+    for (let d = -14; d <= 14; d++) if (radius[(i + d + N) % N] < radius[lo]) lo = (i + d + N) % N;
+    if (lo !== i) continue; // local tightest point only
+    const a = normals[(i - 3 + N) % N], b = tangents[(i + 3) % N];
+    const leftTurn = b.x * a.x + b.z * a.z > 0;
+    for (let d = -14; d <= 14; d += 4) {
+      const k = (i + d + N) % N;
+      used[k] = 1;
+      const lat = leftTurn ? -(wR[k] + T.curb + T.wallThickness / 2) : wL[k] + T.curb + T.wallThickness / 2;
+      boards.push({ k, lat, leftTurn });
+    }
+  }
+  if (boards.length) {
+    const geo = new THREE.PlaneGeometry(1.8, 0.9);
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: chevTex, side: THREE.DoubleSide }), boards.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    boards.forEach(({ k, lat, leftTurn }, n) => {
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(tangents[k].x, tangents[k].z) + Math.PI);
+      sc.set(leftTurn ? -1 : 1, 1, 1); // arrows point the way the corner goes
+      m.compose(roadPoint(k, lat, wallH[k] + 0.55, p), q, sc);
+      mesh.setMatrixAt(n, m);
+    });
+    trackRoot.add(mesh);
+  }
+}
+
+/**
+ * Snowy mountain on a clear day. Height-field ground (makeTerrain): soft snowy hills, grey rock where it's
+ * steep, and a frozen lake (flat, a little below the road, icy blue) around the ice stretch. Snow-capped
+ * pines, rocks, snowmen, far mountains, and light snowfall around the camera.
+ */
+function buildSnow(data) {
+  const { N, samples } = data;
+  const rand = seededRand(777);
+  const noise = makeNoise(rand);
+
+  // The lake: an ellipse round the ice stretch, its shore wobbled by noise. 1 inside, 0 outside.
+  const lake = (x, z) => {
+    const r = ((x - 40) / 135) ** 2 + ((z + 110) / 58) ** 2 + (noise(x / 25 + 5, z / 25) - 0.5) * 0.5;
+    return 1 - smoothstep(0.8, 1, r);
+  };
+  const SNOW = [0xe9eff6, 0xe2e9f2, 0xeef3f8].map((h) => new THREE.Color(h));
+  const SHADE = new THREE.Color(0xc9d6e6), ROCK = new THREE.Color(0x7f8a98), ICE = [0xbfe2f1, 0xb3dbee, 0xcbe8f4].map((h) => new THREE.Color(h));
+  const ground = makeTerrain(data,
+    (x, z) => {
+      const f = lake(x, z);
+      return [(4 + 16 * noise(x / 90 + 7, z / 90)) * (1 - f), 6 + 8 * noise(x / 30, z / 30), 12 + 14 * noise(x / 20 + 3, z / 20),
+        1.4 * (1 - f) - 0.3 * f];
+    },
+    (x, z, h, slope, cc) => {
+      const f = lake(x, z);
+      if (f > 0.5) cc.copy(ICE[(noise(x / 7, z / 7 + 4) * 3) | 0]);
+      else if (slope > 0.75) cc.copy(ROCK).lerp(SHADE, 0.35 * noise(x / 5, z / 5));
+      else cc.copy(SNOW[(noise(x / 14 + 9, z / 14) * 3) | 0]).lerp(SHADE, smoothstep(0.3, 0.75, slope) * 0.6);
+    });
+  const { heightAt, floorDist, minX, maxX, minZ, maxZ } = ground;
+  // snow beyond the height field's edge, so there's no gap at the horizon
+  const plain = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), lambert(0xe6edf5));
+  plain.rotation.x = -Math.PI / 2;
+  plain.position.set((minX + maxX) / 2, -2, (minZ + maxZ) / 2);
+  trackRoot.add(plain);
+
+  const sky = makeSky(0xe8f0f8, 0xb5d6f2, 0x5a9be0, 0xfff4e0);
+  buildChevrons(data);
+
+  // ---- Props: pines, rocks, snowmen (instanced, on spots off the road, not on the lake) ----
+  const cc = new THREE.Color();
+  const spot = (uMin, uMax, tries = 40) => {
+    for (let t = 0; t < tries; t++) {
+      const x = minX - 60 + rand() * (maxX - minX + 120), z = minZ - 60 + rand() * (maxZ - minZ + 120);
+      if (lake(x, z) > 0.1) continue;
+      const { u } = floorDist(x, z);
+      if (u < uMin || u > uMax) continue;
+      const y = heightAt(x, z);
+      if (Math.abs(heightAt(x + 1.5, z) - y) > 1 || Math.abs(heightAt(x, z + 1.5) - y) > 1) continue;
+      return new THREE.Vector3(x, y, z);
+    }
+    return null;
+  };
+  const scatter = (geo, mat, count, uMin, uMax, place, colors) => {
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    let n = 0;
+    for (let t = 0; t < count; t++) {
+      const p = spot(uMin, uMax);
+      if (!p) continue;
+      q.setFromAxisAngle(_up, rand() * Math.PI * 2);
+      place(sc, p);
+      mesh.setMatrixAt(n, m.compose(p, q, sc));
+      if (colors) mesh.setColorAt(n, cc.set(colors[(rand() * colors.length) | 0]));
+      n++;
+    }
+    mesh.count = n;
+    mesh.castShadow = true;
+    trackRoot.add(mesh);
+  };
+  const baked = (build) => {
+    const g = new THREE.Group();
+    build((geo, color, x, y, z) => {
+      const mesh = new THREE.Mesh(geo, lambert(color));
+      mesh.position.set(x, y, z);
+      g.add(mesh);
+      return mesh;
+    });
+    return bakeMeshes(g);
+  };
+  // pine: trunk, three green tiers, each with snow on top
+  const pine = baked((add) => {
+    add(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6), 0x6b4a2f, 0, 0.8, 0);
+    [[2.3, 3, 2.6], [1.7, 2.5, 4.2], [1.1, 2, 5.6]].forEach(([r, h, y], i) => {
+      add(new THREE.ConeGeometry(r, h, 7), [0x2e6b4c, 0x347756, 0x2a6347][i], 0, y, 0);
+      add(new THREE.ConeGeometry(r * 0.62, h * 0.42, 7), 0xf2f6fa, 0, y + h * 0.3, 0);
+    });
+  });
+  scatter(pine.geometry, pine.material, 190, 1, 40, (sc) => sc.setScalar(0.8 + rand() * 0.8));
+  const rock = baked((add) => {
+    add(new THREE.IcosahedronGeometry(1, 0), 0x7d8794, 0, 0, 0);
+    add(new THREE.IcosahedronGeometry(0.75, 0), 0xf0f4f8, 0, 0.45, 0).scale.set(1.15, 0.5, 1.15);
+  });
+  scatter(rock.geometry, rock.material, 60, 0, 16, (sc) => sc.set(0.7 + rand() * 2, 0.6 + rand() * 1.2, 0.7 + rand() * 2));
+  const snowman = baked((add) => {
+    add(new THREE.SphereGeometry(0.9, 10, 8), 0xf4f7fb, 0, 0.8, 0);
+    add(new THREE.SphereGeometry(0.65, 10, 8), 0xf4f7fb, 0, 2.0, 0);
+    add(new THREE.SphereGeometry(0.45, 10, 8), 0xf4f7fb, 0, 2.95, 0);
+    add(new THREE.ConeGeometry(0.09, 0.5, 6), 0xff8a1f, 0, 2.95, 0.6).rotation.x = Math.PI / 2;
+    add(new THREE.TorusGeometry(0.5, 0.12, 6, 12), 0xd23a3a, 0, 2.5, 0).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 10), 0x222831, 0, 3.32, 0);
+    add(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 10), 0x222831, 0, 3.58, 0);
+    for (const x of [-0.15, 0.15]) add(new THREE.SphereGeometry(0.06, 5, 4), 0x222831, x, 3.08, 0.4);
+  });
+  scatter(snowman.geometry, snowman.material, 14, 0.5, 5, (sc) => sc.setScalar(0.9 + rand() * 0.3));
+
+  // ---- Far mountains with snow caps ----
+  const peaks = baked((add) => {
+    add(new THREE.ConeGeometry(1, 1, 6), 0x8fa3bd, 0, 0.5, 0);
+    add(new THREE.ConeGeometry(0.42, 0.42, 6), 0xf2f6fa, 0, 0.79, 0);
+  });
+  const peakMesh = new THREE.InstancedMesh(peaks.geometry, peaks.material, 18);
+  const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), ps = new THREE.Vector3(), pp = new THREE.Vector3();
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2 + rand() * 0.2, r = 330 + rand() * 50, h = 70 + rand() * 60;
+    pq.setFromAxisAngle(_up, rand() * Math.PI);
+    peakMesh.setMatrixAt(i, pm.compose(pp.set(cx + Math.cos(a) * r, -2, cz + Math.sin(a) * r), pq, ps.set(45 + rand() * 35, h, 45 + rand() * 35)));
+  }
+  trackRoot.add(peakMesh);
+
+  // ---- Light snowfall: flakes in a box round the camera, wrapping as it moves ----
+  const FLAKES = 450, BOX = 70, TALL = 30;
+  const fPos = new Float32Array(FLAKES * 3), fCol = new Float32Array(FLAKES * 3);
+  const fAlpha = new Float32Array(FLAKES), fSize = new Float32Array(FLAKES), fPhase = new Float32Array(FLAKES);
+  for (let i = 0; i < FLAKES; i++) {
+    fPos.set([(rand() - 0.5) * BOX, rand() * TALL, (rand() - 0.5) * BOX], i * 3);
+    fCol.set([1, 1, 1], i * 3);
+    fAlpha[i] = 0.55 + rand() * 0.35;
+    fSize[i] = 0.1 + rand() * 0.12;
+    fPhase[i] = rand() * 6.3;
+  }
+  const fGeo = new THREE.BufferGeometry();
+  fGeo.setAttribute('position', new THREE.BufferAttribute(fPos, 3).setUsage(THREE.DynamicDrawUsage));
+  fGeo.setAttribute('color', new THREE.BufferAttribute(fCol, 3));
+  fGeo.setAttribute('alpha', new THREE.BufferAttribute(fAlpha, 1));
+  fGeo.setAttribute('size', new THREE.BufferAttribute(fSize, 1));
+  const flakes = new THREE.Points(fGeo, particleMaterial());
+  flakes.frustumCulled = false;
+  trackRoot.add(flakes);
+  const wrap = (v, c, span) => c + ((((v - c + span / 2) % span) + span) % span) - span / 2;
+
+  let clock = 0;
+  return {
+    update(dt) {
+      clock += dt;
+      sky.update();
+      const c = camera.position;
+      for (let i = 0; i < FLAKES; i++) {
+        const o = i * 3;
+        fPos[o] = wrap(fPos[o] + Math.sin(clock * 0.8 + fPhase[i]) * 0.4 * dt, c.x, BOX);
+        fPos[o + 1] = wrap(fPos[o + 1] - (1.2 + fSize[i] * 4) * dt, c.y + 8, TALL);
+        fPos[o + 2] = wrap(fPos[o + 2] + Math.cos(clock * 0.6 + fPhase[i]) * 0.3 * dt, c.z, BOX);
+      }
+      fGeo.attributes.position.needsUpdate = true;
+    },
+  };
+}
+
+/**
+ * Desert canyon on a golden afternoon. The ground is a height field: flat at road height beside the road, then a sandy
+ * slope and red rock walls 13-30 m high. Each point takes the lowest of (nearby road height + rise with
+ * distance), so where two parts of the track are close at different heights the ground follows the lower
+ * one: the lower road runs through a slot under the bridge, and a higher road on a ridge gets a stone
+ * embankment. Life: circling vultures, hot-air balloons, tumbleweeds rolling across the road, dust devils,
+ * flags at the start.
+ */
+function buildDesert(data) {
+  const { N, samples, normals, tangents, wL, wR, wallH, spacing, radius, bank } = data;
+  const T = CFG.track;
+  const rand = seededRand(4242);
+  const noise = makeNoise(rand);
+
+  // ---- Ground: sand on the flat, talus on gentle slopes, red rock strata on walls 13-30 m high ----
+  const SAND = [0xe3b27a, 0xd9a46c, 0xe8bd88].map((h) => new THREE.Color(h));
+  const TALUS = new THREE.Color(0xc57a49);
+  const ROCK = [0xb4532e, 0xc8693a, 0x9c4127, 0xd88a52, 0xb85d36, 0xa84a2c].map((h) => new THREE.Color(h));
+  const { heightAt, floorDist, nearby, maxY, minX, maxX, minZ, maxZ } = makeTerrain(data,
+    (x, z) => [13 + 17 * noise(x / 110 + 31, z / 110 + 17), 5 + 7 * noise(x / 23, z / 23), 5 + 5 * noise(x / 15 + 50, z / 15)],
+    (x, z, h, slope, cc) => {
+      if (slope > 0.6) cc.copy(ROCK[(((h + noise(x / 9, z / 9) * 2.5) / 2.3) | 0) % ROCK.length]);
+      else if (slope > 0.22) cc.copy(TALUS).lerp(SAND[0], 0.3 * noise(x / 6, z / 6));
+      else cc.copy(SAND[(noise(x / 12 + 9, z / 12) * 3) | 0]);
+    });
+  const cc = new THREE.Color();
+
+  const sky = makeSky(0xf1d9bb, 0xb9d8ef, 0x5f9fdc, 0xffe2b0);
 
   // ---- Bridge: where another part of the track runs > 5 m below within 26 m ----
   const bridge = new Uint8Array(N + 1);
@@ -1071,48 +1354,7 @@ function buildDesert(data) {
     trackRoot.add(mesh);
   }
 
-  // ---- Chevron boards on the outside of the tight corners ----
-  const chevTex = (() => {
-    const c = document.createElement('canvas');
-    c.width = 128; c.height = 64;
-    const g = c.getContext('2d');
-    g.fillStyle = '#1d1a1a'; g.fillRect(0, 0, 128, 64);
-    g.fillStyle = '#ffd23a';
-    for (const x of [14, 54, 94]) {
-      g.beginPath(); g.moveTo(x, 8); g.lineTo(x + 22, 32); g.lineTo(x, 56); g.lineTo(x + 12, 56); g.lineTo(x + 34, 32); g.lineTo(x + 12, 8); g.fill();
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  })();
-  const boards = [];
-  const used = new Uint8Array(N);
-  for (let i = 0; i < N; i++) {
-    if (radius[i] > 22 || used[i]) continue;
-    let lo = i;
-    for (let d = -14; d <= 14; d++) if (radius[(i + d + N) % N] < radius[lo]) lo = (i + d + N) % N;
-    if (lo !== i) continue; // local tightest point only
-    const a = normals[(i - 3 + N) % N], b = tangents[(i + 3) % N];
-    const leftTurn = b.x * a.x + b.z * a.z > 0;
-    for (let d = -14; d <= 14; d += 4) {
-      const k = (i + d + N) % N;
-      used[k] = 1;
-      const lat = leftTurn ? -(wR[k] + T.curb + T.wallThickness / 2) : wL[k] + T.curb + T.wallThickness / 2;
-      boards.push({ k, lat, leftTurn });
-    }
-  }
-  if (boards.length) {
-    const geo = new THREE.PlaneGeometry(1.8, 0.9);
-    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ map: chevTex, side: THREE.DoubleSide }), boards.length);
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
-    boards.forEach(({ k, lat, leftTurn }, n) => {
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(tangents[k].x, tangents[k].z) + Math.PI);
-      sc.set(leftTurn ? -1 : 1, 1, 1); // arrows point the way the corner goes
-      m.compose(roadPoint(k, lat, wallH[k] + 0.55, p), q, sc);
-      mesh.setMatrixAt(n, m);
-    });
-    trackRoot.add(mesh);
-  }
+  buildChevrons(data);
 
   // ---- Props on the canyon floor: cacti, boulders, dry bushes ----
   const spot = (uMin, uMax, tries = 40) => {
@@ -1295,11 +1537,7 @@ function buildDesert(data) {
   return {
     update(dt) {
       clock += dt;
-      sky.position.copy(camera.position);
-      sunDisc.position.copy(camera.position).addScaledVector(sunDir, 420);
-      sunGlow.position.copy(camera.position).addScaledVector(sunDir, 425);
-      sunDisc.lookAt(camera.position);
-      sunGlow.lookAt(camera.position);
+      sky.update();
 
       flagSpots.forEach((f, n) => {
         const yaw = Math.atan2(tangents[f.k].x, tangents[f.k].z) + Math.PI + Math.sin(clock * 3 + f.phase) * 0.35;
@@ -1445,6 +1683,7 @@ function buildKart([bodyColor, accentColor, driverColor]) {
 
   // --- Physics: chassis + raycast vehicle ---
   const body = new CANNON.Body({ mass: K.mass, material: physMats.chassis });
+  body.collisionFilterGroup = KART_GROUP; // a ghost (just respawned) drops this from its mask: see setGhost
   body.addShape(new CANNON.Box(K.chassisHalf), new CANNON.Vec3(0, K.chassisYOffset, 0));
   body.angularDamping = 0.5;
   body.linearDamping = 0.05;
@@ -2145,6 +2384,8 @@ function placeOnGrid() {
   const G = CFG.grid;
   [...karts.slice(1), kart].forEach((k, slot) => {
     Object.assign(k, freshDriveState());
+    k.ghost = 0;
+    setGhost(k, false);
     const back = G.firstRow + Math.floor(slot / 2) * G.rowGap + (slot % 2) * G.rowGap * 0.5;
     const lane = slot % 2 ? -G.colOffset : G.colOffset;
     k.ai = k.isPlayer ? null : newAI(lane, k.name);
@@ -2155,6 +2396,12 @@ function placeOnGrid() {
 }
 
 /** Puts a kart on the track at sample idx, `lane` metres left of the centre line, facing forward. */
+/** Ghost after a respawn: no contact with other karts (walls and road still count). */
+function setGhost(k, on) {
+  k.body.collisionFilterMask = on ? -1 & ~KART_GROUP : -1;
+  k.ghosted = on;
+}
+
 function resetKart(k, idx, lane = 0) {
   const body = k.body;
   const p = roadPoint(idx, lane, 1.2, resetP);
@@ -2232,6 +2479,10 @@ function updateKartProgress(k, dt, racing) {
   // Off the road (over a rail, off a jump): well below the road surface for a moment
   const below = surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
   k.fallT = below ? k.fallT + dt : 0;
+  // Ghost (after a respawn): solid again once its time is up and no kart is inside it
+  if (k.ghost > 0) k.ghost = Math.max(0, k.ghost - dt);
+  if (k.ghosted && k.ghost <= 0 &&
+    !karts.some((o) => o !== k && o.body.position.distanceSquared(k.body.position) < 3.2 * 3.2)) setGhost(k, false);
   // On top of a rail or past it (user: "I was literally over a rail and it let me run over it"). Pressed
   // flat against a rail the kart's centre stays >= 0.8 m (its half width) inside the rail's road face, so a
   // centre within 0.2 m of that face can only be a kart riding on the rail or gone over: put it back.
@@ -2251,6 +2502,7 @@ function updateKartProgress(k, dt, racing) {
     if (state.phase !== 'countdown') teleEvent('reset', k, { why: k.lastReset });
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     resetKart(k, k.trackIdx, lane);
+    if (racing) { k.ghost = CFG.kart.ghostTime; setGhost(k, true); }
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
     if (k.isPlayer) camState.snap = true;
   }
@@ -2643,6 +2895,8 @@ function updateAI(k, dt, canDrive) {
     }
   }
   if (ai.defendT > 0) goal = ai.defendLane;
+  // Banana trap (the bully): with a banana in hand and a corner coming, get onto the racing line to drop it
+  if (A.trap && k.item === 'banana' && k.itemRoll <= 0 && trapCorner(idx)) goal = clampLane(idx, track.line[idx]);
   // Steer round bananas
   for (const d of drops) {
     const dx = d.pos.x - b.position.x, dz = d.pos.z - b.position.z;
@@ -2697,7 +2951,8 @@ function updateAI(k, dt, canDrive) {
   for (let s = 2; s * spacing < 45; s += 2) {
     // this AI's own path is somewhere between the centre line and the racing line: blend the curvatures
     const c = (idx + s) % N, curv = lerp(1 / radius[c], 1 / track.lineRadius[c], ai.lineUse);
-    const vCorner = Math.sqrt((ai.grip - CFG.gravity * Math.abs(track.bank[c])) / Math.max(curv, 1e-4)); // banks help
+    const g = ai.grip * lerp(1, K.iceGrip, track.ice[c]);
+    const vCorner = Math.sqrt((g - CFG.gravity * Math.abs(track.bank[c])) / Math.max(curv, 1e-4)); // banks help
     corner = Math.min(corner, Math.sqrt(vCorner * vCorner + 2 * brakeDecel * s * spacing));
   }
   const target = Math.min(pace, corner);
@@ -2773,8 +3028,10 @@ function clearItems() {
   }
 }
 
-function rollItem(place) {
+function rollItem(place, k) {
   const odds = CFG.items.odds[clamp(place, 1, CFG.items.odds.length) - 1].slice();
+  const tilt = k?.ai?.style.itemOdds; // a personality's item luck (the bully: weapons)
+  if (tilt) tilt.forEach((m, i) => { odds[i] *= m; });
   // one blue shell at a time (flying or held)
   if (shells.some((s) => s.kind === 'blue') || karts.some((k) => k.item === 'blue')) odds[ITEM_TYPES.indexOf('blue')] = 0;
   let r = Math.random() * odds.reduce((a, b) => a + b, 0);
@@ -2899,7 +3156,7 @@ function shieldBurst(k) {
  * takes the hit and pops. Returns whether the kart actually spun out.
  */
 function spinOut(k, by, what, time = CFG.items.spinTime) {
-  if (k.spin > 0 || k.star > 0 || k.bullet > 0) return false;
+  if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted) return false;
   if (k.shield > 0) {
     teleEvent('blocked', k, { by: by ? karts.indexOf(by) : -1, what });
     k.shield = 0;
@@ -3002,7 +3259,7 @@ function updateItems(dt, racing) {
       if (flat2(k.body.position, box.pos) > I.pickupRadius ** 2) continue;
       box.hidden = I.boxRespawn;
       if (!k.item && !k.finished) {
-        k.item = rollItem(k.place);
+        k.item = rollItem(k.place, k);
         teleEvent('box', k, { item: k.item, place: k.place });
         k.itemCount = k.item === 'triple' ? 3 : 1;
         k.itemRoll = I.rollTime;
@@ -3130,6 +3387,13 @@ function shellIncoming(k) {
     (s.pos.x - k.body.position.x) ** 2 + (s.pos.z - k.body.position.z) ** 2 < (s.kind === 'blue' ? 90 : 45) ** 2);
 }
 
+/** A corner (radius < 45 m) starting within `within` m ahead of sample idx: where a banana trap goes. */
+function trapCorner(idx, within = 40) {
+  const { N, radius, spacing } = track;
+  for (let s = 4; s * spacing < within; s += 2) if (radius[(idx + s) % N] < 45) return true;
+  return false;
+}
+
 /**
  * AI item use: mushrooms on a straight, banana when someone's on its tail, shells at whoever's ahead,
  * the shield when a shell (or a star / bullet) is coming, star / bullet / blue shell straight away.
@@ -3156,7 +3420,10 @@ function updateAIItem(k, dt) {
       o.body.position.distanceSquared(k.body.position) < 20 * 20);
   } else {
     const wantBehind = k.item === 'banana';
-    use = ai.itemT < (wantBehind ? (st.hoard ? -20 : -7) : -10);
+    use = ai.itemT < (wantBehind ? (st.hoard || st.trap ? -20 : -7) : -10);
+    // the trap: dropped on the racing line just before a corner, where everyone (the player too) will drive
+    if (wantBehind && st.trap && trapCorner(k.trackIdx, 18) &&
+      Math.abs(lateral(k.trackIdx, k.body.position) - track.line[k.trackIdx]) < 1.2) use = true;
     const tail = st.aggression > 0.7 ? 20 : 14; // the bully drops it for anyone within 20 m
     for (const o of karts) {
       if (o === k) continue;
@@ -3224,7 +3491,9 @@ function driveKart(k, dt, canDrive) {
     ? clamp((Math.abs(k.steerSmooth) - 0.75) / 0.25, 0, 1) * clamp((speed - K.driftMinSpeed) / 6, 0, 1)
     : 0;
   k.driftAmt = driftAmt;
-  const rearGrip = lerp(K.rearGrip, K.driftGrip, driftAmt);
+  const iceMul = lerp(1, K.iceGrip, track.ice[k.trackIdx]);
+  const rearGrip = lerp(K.rearGrip, K.driftGrip, driftAmt) * iceMul;
+  vehicle.wheelInfos[0].frictionSlip = vehicle.wheelInfos[1].frictionSlip = K.frontGrip * iceMul;
   vehicle.wheelInfos[2].frictionSlip = rearGrip;
   vehicle.wheelInfos[3].frictionSlip = rearGrip;
   if (driftAmt > 0) body.angularVelocity.y -= k.steerSmooth * driftAmt * K.driftYawAssist * dt;
@@ -3359,7 +3628,7 @@ function applyStabilityAssist(k) {
 
   // a bank tilted into the turn adds g * tan(bank) of cornering (bank > 0 raises the left: helps right turns)
   const bankHelp = Math.max(0, Math.sign(k.steerSmooth) * track.bank[k.trackIdx]) * -CFG.gravity;
-  const gripLimit = (K.maxLateralAccel + bankHelp) / speed;
+  const gripLimit = (K.maxLateralAccel * lerp(1, K.iceGrip, track.ice[k.trackIdx]) + bankHelp) / speed;
   const targetYaw = clamp((speed * Math.tan(k.steerAngle)) / K.wheelBase, -gripLimit, gripLimit);
   const slack = K.yawSlack + K.steerYawSlack * Math.abs(k.steerSmooth) + K.driftYawSlack * k.driftAmt;
   const yaw = body.angularVelocity.y;
@@ -3560,6 +3829,16 @@ function updateEffects(dt) {
       const u = k.bubble.material.uniforms;
       u.time.value = itemClock;
       u.fade.value = k.shield > 1.5 ? 1 : 0.35 + 0.65 * Math.abs(Math.sin(k.shield * 9));
+    }
+    // ghost: see-through, flickering
+    const alpha = k.ghosted ? (Math.floor(itemClock * 12) % 2 ? 0.25 : 0.5) : 1;
+    if (alpha !== k.alpha) {
+      k.alpha = alpha;
+      for (const m of [k.bodyMesh, ...k.wheelMeshes.map((w) => w.children[0])]) {
+        m.material.transparent = alpha < 1;
+        m.material.opacity = alpha;
+        m.material.depthWrite = alpha === 1;
+      }
     }
     k.hull.visible = k.bullet > 0;
     k.bodyMesh.visible = !k.hull.visible;
@@ -3814,7 +4093,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 29 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 30 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
 onResize();
 showMenu();
