@@ -83,6 +83,7 @@
       <div id="menu-screen" class="screen lobby">
         <div class="lobby-top">
           <button id="hello-edit" class="chip" hidden></button>
+          <button class="chip btn-help" aria-label="How to play">?</button>
           <button class="chip btn-settings"><i data-icon="gear"></i>SETTINGS</button>
         </div>
         <div class="lobby-main">
@@ -163,7 +164,29 @@
             <button id="btn-restart" class="btn-secondary">RESTART</button>
             <button id="btn-quit" class="btn-secondary">MENU</button>
           </div>
+          <button class="btn-small btn-help" aria-label="How to play">? HOW TO PLAY</button>
           <button class="btn-small btn-settings"><i data-icon="gear"></i>SETTINGS</button>
+        </div>
+      </div>
+      <!-- How to play (from the title or pause screen) -->
+      <div id="help-screen" class="screen screen-col" hidden>
+        <div class="help-head">
+          <div class="pick-title">HOW TO PLAY</div>
+          <button id="btn-help-back" class="btn-primary help-back">BACK</button>
+        </div>
+        <div class="card help-card">
+          <div class="help-col help-controls">
+            <h3>CONTROLS</h3>
+            <div class="help-grid g3">
+              <div class="tile"><span class="hi hb hb-gas">GAS</span><b>GAS</b><small>Hold to go</small></div><div class="tile"><span class="hi hb hb-brake">BRK</span><b>BRAKE</b><small>Slow down, hold to reverse</small></div><div class="tile"><span class="hi hb hb-steer"><i data-icon="arrows"></i></span><b>STEER</b><small>Arrows or joystick</small></div><div class="tile"><span class="hi hb hb-item">?</span><b>ITEM</b><small>Tap, or slide GAS onto it</small></div><div class="tile"><span class="hi hb hb-reset">&#x21BB;</span><b>RESET</b><small>Back on the road</small></div><div class="tile"><span class="hi hbar"><i></i></span><b>DRIFT</b><small>Hold a turn, let go to boost</small></div><div class="tile"><span class="hi hb hb-one">1</span><b>ROCKET</b><small>GAS as it shows 1</small></div><div class="tile"><span class="hi hpad">&#9654;&#9654;</span><b>BOOST PAD</b><small>Free speed</small></div><div class="tile"><span class="hi hbox"></span><b>ITEM BOX</b><small>Drive through for an item</small></div>
+            </div>
+          </div>
+          <div class="help-col help-items">
+            <h3>ITEMS</h3>
+            <div class="help-grid g4">
+              <div class="tile"><span class="hi hs hs-green"></span><b>GREEN</b><small>Bounces twice, then pops</small></div><div class="tile"><span class="hi hs hs-red"></span><b>RED</b><small>Homes in on the kart ahead</small></div><div class="tile"><span class="hi hs hs-blue"></span><b>BLUE</b><small>Hunts the leader</small></div><div class="tile"><span class="hi"><i data-icon="banana"></i></span><b>BANANA</b><small>Drop it, spin them out</small></div><div class="tile"><span class="hi"><i data-icon="mushroom"></i></span><b>MUSHROOM</b><small>Speed boost</small></div><div class="tile"><span class="hi"><i data-icon="shield"></i></span><b>SHIELD</b><small>Blocks one hit</small></div><div class="tile"><span class="hi"><i data-icon="star"></i></span><b>STAR</b><small>Invincible and fast</small></div><div class="tile"><span class="hi hs hs-bullet"></span><b>BULLET</b><small>Rockets you ahead</small></div>
+            </div>
+          </div>
         </div>
       </div>
       <!-- Settings (from the title or pause screen; saved per device) -->

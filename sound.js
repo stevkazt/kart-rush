@@ -215,6 +215,7 @@ const now = () => ctx.currentTime + 0.01;
 const notes = (list, step, opts) => { const t = now(); list.forEach((f, i) => f && tone(f, t + i * step, step * 1.6, opts)); };
 
 let lastBump = 0;
+let starTimer = 0;
 let starBus = null; // the star theme's own gain, so it can be cut when the star ends
 const sfx = {
   beep() { if (ready()) tone(440, now(), 0.18, { vol: 0.25 }); },
@@ -251,6 +252,21 @@ const sfx = {
     for (let s = 0.05; s < roll; s += 0.07) tone(900 + ((s * 100) % 3) * 200, t + s, 0.04, { type: 'square', vol: 0.06 });
     tone(1568, t + roll, 0.25, { type: 'triangle', vol: 0.2 });
   },
+  /** An item box popped (anyone's): a boom, a glassy shatter and a quick sparkle run. `v` 0..1 = loudness. */
+  boxPop(v = 1) {
+    if (!ready() || v <= 0.02) return;
+    const t = now();
+    tone(160, t, 0.22, { type: 'sine', vol: 0.4 * v, slide: 0.4 });
+    noiseHit(t, 0.3, { freq: 2500, sweepTo: 6000, type: 'bandpass', q: 1, vol: 0.4 * v });
+    [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, t + 0.04 + i * 0.045, 0.14, { type: 'triangle', vol: 0.14 * v }));
+  },
+  /** A green shell blowing up. `v` 0..1 = loudness. */
+  shellBang(v = 1) {
+    if (!ready()) return;
+    const t = now();
+    tone(130, t, 0.3, { type: 'sine', vol: 0.5 * v, slide: 0.3 });
+    noiseHit(t, 0.35, { freq: 1800, sweepTo: 300, type: 'lowpass', vol: 0.5 * v });
+  },
   drop() { if (ready()) tone(300, now(), 0.15, { type: 'triangle', vol: 0.2, slide: 0.6 }); },
   throwShell() {
     if (!ready()) return;
@@ -283,15 +299,27 @@ const sfx = {
     noiseHit(t, 0.6, { freq: 600, sweepTo: 7000, type: 'bandpass', q: 2, vol: 0.35, bus: starBus });
     tone(262, t, 0.5, { type: 'sawtooth', vol: 0.1, slide: 4, bus: starBus });
     const riff = [523, 784, 1047, 784, 587, 880, 1175, 880, 659, 988, 1319, 988, 698, 1047, 1397, 1047];
-    for (let s = 0.4, i = 0; s < dur - 0.15; s += 0.09, i++) {
-      const f = riff[i % riff.length];
-      tone(f, t + s, 0.08, { type: 'square', vol: 0.06, bus: starBus });
-      if (i % 2 === 0) tone(f / 4, t + s, 0.16, { type: 'triangle', vol: 0.12, bus: starBus });
-      if (i % 4 === 1) tone(f * 2, t + s, 0.06, { type: 'sine', vol: 0.05, bus: starBus }); // sparkle
-    }
+    // Scheduled ~0.5 s ahead from a timer, not all ~170 notes at once (that made iPhones hitch when the star started)
+    clearInterval(starTimer);
+    let s = 0.4, i = 0;
+    const bus = starBus;
+    const feed = () => {
+      if (bus !== starBus || !ctx || ctx.currentTime > t + dur) { clearInterval(starTimer); return; }
+      while (s < dur - 0.15 && t + s < ctx.currentTime + 0.5) {
+        const f = riff[i % riff.length];
+        tone(f, t + s, 0.08, { type: 'square', vol: 0.06, bus });
+        if (i % 2 === 0) tone(f / 4, t + s, 0.16, { type: 'triangle', vol: 0.12, bus });
+        if (i % 4 === 1) tone(f * 2, t + s, 0.06, { type: 'sine', vol: 0.05, bus }); // sparkle
+        s += 0.09; i++;
+      }
+      if (s >= dur - 0.15) clearInterval(starTimer);
+    };
+    feed();
+    starTimer = setInterval(feed, 200);
   },
   starEnd() {
     if (!ready()) return;
+    clearInterval(starTimer);
     starBus?.gain.setTargetAtTime(0, ctx.currentTime, 0.03); // cut whatever of the theme is left
     notes([1047, 784, 523], 0.07, { type: 'triangle', vol: 0.12 });
   },

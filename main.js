@@ -263,7 +263,7 @@ const CFG = {
     rollTime: 0.9,                    // item roulette before an item can be used
     spinTime: 1.1,                    // spin-out after a banana / shell hit
     mushroomBoost: 1.3,               // x the mini-turbo duration
-    shellSpeed: 38, shellLife: 6, shellBounces: 5,
+    shellSpeed: 38, shellLife: 6, shellBounces: 2, // green shells vanish on their 2nd wall hit
     redSpeed: 40, redLife: 12, redHomeDist: 14,
     aiTargetPlayer: 140,              // AI red shells lock onto the player when they're up to this far ahead (m)
     // Drawn size per kind. Build 34 (user: "way too small on a mobile screen") went to 2x; with the smaller
@@ -2057,7 +2057,7 @@ function particleMaterial() {
 
 function buildEffects() {
   // Particles: one THREE.Points with a soft round sprite, per-particle colour, alpha and size.
-  const MAX = 220;
+  const MAX = 400; // box pops emit ~55 at once
   const pos = new Float32Array(MAX * 3), col = new Float32Array(MAX * 3);
   const alpha = new Float32Array(MAX), size = new Float32Array(MAX);
   const vel = new Float32Array(MAX * 3), life = new Float32Array(MAX), maxLife = new Float32Array(MAX);
@@ -2287,7 +2287,7 @@ const hud = {
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
   item: $('btn-item'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
-  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), knob: $('stick-knob'), pickScreen: $('pick-screen'),
+  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), helpScreen: $('help-screen'), knob: $('stick-knob'), pickScreen: $('pick-screen'),
   helloScreen: $('hello-screen'),
 };
 
@@ -2437,6 +2437,12 @@ function initControls() {
   for (const b of $('steer-pick').children) onTap(b, () => { sound.click(); setSteering(b.dataset.steer); });
   for (const b of $('flip-pick').children) onTap(b, () => { sound.click(); setFlip(b.dataset.flip === '1'); });
   setFlip(savedFlip(), false);
+  document.querySelectorAll('.btn-help').forEach((b) => onTap(b, () => {
+    sound.click();
+    helpFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
+    showOverlay(hud.helpScreen);
+  }));
+  onTap($('btn-help-back'), () => { sound.click(); showOverlay(helpFrom); });
   onTap($('btn-settings-back'), () => { sound.click(); showOverlay(settingsFrom); });
   setSteering(savedSteering(), false);
   for (const pick of document.querySelectorAll('.vol-pick')) {
@@ -3132,6 +3138,7 @@ function stageLabel(kind) {
 // ---------- Settings (per device). Steering: 'buttons' (the two arrows) or 'joystick' (analogue). ----------
 const STEER_KEY = 'kartrush.steering';
 let settingsFrom = null; // the screen BACK returns to (title or pause)
+let helpFrom = null;     // same for HOW TO PLAY
 function savedSteering() {
   try { return localStorage.getItem(STEER_KEY) === 'joystick' ? 'joystick' : 'buttons'; } catch { return 'buttons'; }
 }
@@ -3211,7 +3218,7 @@ function releaseStick() {
 
 /** Shows one overlay screen (menu / results / pause / settings) and hides the HUD behind it. */
 function showOverlay(screen) {
-  for (const el of [hud.menuScreen, hud.helloScreen, hud.pickScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen]) el.hidden = el !== screen;
+  for (const el of [hud.menuScreen, hud.helloScreen, hud.pickScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen, hud.helpScreen]) el.hidden = el !== screen;
   hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
   hud.overlay.classList.toggle('lobby-on', screen === hud.menuScreen); // lighter backdrop: the 3D kart shows through
@@ -3687,6 +3694,45 @@ function shieldBurst(k) {
   }
 }
 
+/** Item box popped: a white flash, a flat shockwave ring and a fountain of big coloured sparks. */
+function boxBurst(pos, mine) {
+  const n = mine ? 36 : 26, cols = [[1, 0.35, 0.35], [1, 0.9, 0.3], [0.4, 1, 0.5], [0.4, 0.8, 1], [0.8, 0.5, 1]];
+  const y = pos.y + 0.5;
+  for (let i = 0; i < 5; i++) { // flash
+    emitP.set(pos.x, y, pos.z);
+    emitV.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2);
+    fx.emit(emitP, emitV, [1, 1, 1], { life: 0.35, size: 1.6, grow: 2.5, alpha: 0.9 });
+  }
+  for (let i = 0; i < 16; i++) { // ring
+    const a = (i / 16) * Math.PI * 2;
+    emitP.set(pos.x, y, pos.z);
+    emitV.set(Math.cos(a) * 11, 0.3, Math.sin(a) * 11);
+    fx.emit(emitP, emitV, [1, 1, 1], { life: 0.4, size: 0.7, grow: 0.5, alpha: 0.9 });
+  }
+  for (let i = 0; i < n; i++) { // fountain
+    const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 6;
+    emitP.set(pos.x, y, pos.z);
+    emitV.set(Math.cos(a) * sp, 5 + Math.random() * 6, Math.sin(a) * sp);
+    fx.emit(emitP, emitV, cols[i % cols.length], { life: 0.9 + Math.random() * 0.4, size: 0.9, grow: 0.2, alpha: 1 });
+  }
+}
+
+/** A green shell going off (wall limit, banana, kart): a white flash, a green-yellow fireball and sparks. */
+function shellExplosion(pos) {
+  const y = pos.y + 0.5;
+  for (let i = 0; i < 5; i++) {
+    emitP.set(pos.x, y, pos.z);
+    emitV.set((Math.random() - 0.5) * 2, 1 + Math.random() * 2, (Math.random() - 0.5) * 2);
+    fx.emit(emitP, emitV, [1, 1, 0.9], { life: 0.3, size: 1.8, grow: 3, alpha: 0.9 });
+  }
+  for (let i = 0; i < 24; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 8;
+    emitP.set(pos.x, y, pos.z);
+    emitV.set(Math.cos(a) * sp, 2 + Math.random() * 6, Math.sin(a) * sp);
+    fx.emit(emitP, emitV, i % 3 ? [0.5, 1, 0.3] : [1, 0.85, 0.3], { life: 0.5 + Math.random() * 0.4, size: 0.9, grow: 0.8, alpha: 1 });
+  }
+}
+
 /**
  * Hit by a banana / shell / star / bullet / blast. A star or a bullet makes a kart immune, a shield
  * takes the hit and pops. Returns whether the kart actually spun out.
@@ -3795,6 +3841,9 @@ function updateItems(dt, racing) {
     for (const k of karts) {
       if (flat2(k.body.position, box.pos) > I.pickupRadius ** 2) continue;
       box.hidden = I.boxRespawn;
+      if (k.isPlayer || near(k, 90)) boxBurst(box.pos, k.isPlayer);
+      if (k.isPlayer) sound.boxPop(1);
+      else { const d = k.body.position.distanceTo(kart.body.position); if (d < 60) sound.boxPop(0.5 * (1 - d / 60) ** 2); }
       if (!k.item && !k.finished) {
         k.item = rollItem(k.place, k);
         teleEvent('box', k, { item: k.item, place: k.place });
@@ -3924,7 +3973,7 @@ function updateItems(dt, racing) {
     s.mesh.position.copy(s.pos);
     s.mesh.rotation.y += dt * 12;
 
-    let gone = s.life <= 0 || s.bounces > I.shellBounces;
+    let gone = s.life <= 0 || s.bounces >= I.shellBounces;
     // a red shell never hits its owner (build 36: Bolt was hit by his own); a green one bouncing back still can
     const hit = !gone && karts.find((k) => (k !== s.owner || (s.kind === 'green' && s.age > 0.6)) && !k.finished
       && flat2(k.body.position, s.pos) < I.hitRadius ** 2);
@@ -3936,6 +3985,11 @@ function updateItems(dt, racing) {
       gone = true;
     }
     if (gone) {
+      if (s.kind === 'green') {
+        shellExplosion(s.pos);
+        const d = s.pos.distanceTo(kart.body.position);
+        if (d < 70) sound.shellBang(0.6 * (1 - d / 70) ** 2 + 0.1);
+      }
       scene.remove(s.mesh);
       shells.splice(i, 1);
     }
@@ -4683,6 +4737,11 @@ function updatePerf(ms) {
 function loop(now) {
   requestAnimationFrame(loop);
   updatePerf(now - lastTime);
+  // telemetry: frames over 50 ms, with what was active on the player (build 54: fps dropped during a star)
+  if (now - lastTime > 50 && (state.phase === 'race' || state.phase === 'finished')) {
+    teleEvent('slow', kart, { ms: Math.round(now - lastTime), star: +kart.star.toFixed(1), ghost: !!kart.ghosted, shield: kart.shield > 0,
+      boost: kart.boost > 0, bullet: kart.bullet > 0, spin: kart.spin > 0, calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
+  }
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
