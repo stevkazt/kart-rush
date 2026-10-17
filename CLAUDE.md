@@ -79,6 +79,14 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   #app from `screen.*`. Now testing status-bar-style `black` instead of `black-translucent` (the page starts below
   the status bar). Real landscape (rotation unlocked) never had the bug. The title screen shows `build N · host · app` (bump N with `sw.js` VERSION): if the
   phone shows an old N, it is running a stored copy (the home-screen app once never contacted the server at all).
+- **Settings (build 28):** `#settings-screen`, opened by the `.btn-settings` buttons on the title and pause screens
+  (`showSettings`; BACK returns to `settingsFrom`). Only option so far: **steering** `buttons` (the two arrows) or
+  `joystick`, saved in localStorage `kartrush.steering` (`setSteering`, `savedSteering`; `#app.steer-joystick`
+  swaps `#steer` for `#joystick`). Joystick = knob in a base where the arrows were; analogue `input.axis` -1..1 from
+  the knob's sideways offset only (`CFG.controls.stickDeadZone` 0.12, full lock at `stickFull` 0.85 of the radius),
+  springs back on release (`releaseStick`, also on pause). Portrait: screen offsets are turned 90deg back into
+  the game's frame. `ctl.steer = clamp(arrows/keys + input.axis)`, so the steering ramp and lock are the same for
+  both. Add future options as more `.setting` blocks on that screen.
 - `style.css`: `#app` is always laid out landscape; `.rotated` turns it 90deg in portrait. Sizes use `--app-h`
   and safe-area vars `--edge-l/--edge-r`, which map to the top/bottom insets when rotated.
 - `main.js` sections: 0 CONFIG (`CFG`; all tuning lives here, incl. `racers`, `grid`, `ai`, `items`) · 1 INITIALIZATION
@@ -233,7 +241,8 @@ an orphaned test server once served a stale copy and made every test lie. The pa
 check touch and feel.
 
 ## User feedback so far
-- Physics stuck bug: fixed. Wants landscape only (done), buttons instead of a joystick (done), PWA (done).
+- Physics stuck bug: fixed. Wants landscape only (done), buttons instead of a joystick (done; the joystick came back
+  as an option in Settings, build 28), PWA (done).
 - Steering: "feels slow but much better, let's leave it like that for now". Don't retune unless asked.
 - Wants it to feel like a finished game rather than a demo.
 - 2026-10-16: new menu/results screens "look good"; player coasting + slide GAS->ITEM "really improved the game
@@ -244,7 +253,8 @@ check touch and feel.
   indicator: good. Asked for auto-rescue when stuck (build 24, 2.5 s): judge after real use.
 - 2026-10-16 (night): asked for more power-ups incl. a pure shield "so the chances balance out for every player";
   got shield, star, triple mushroom, blue shell, bullet + per-place odds (build 25). New bubble "awesome". Slide
-  steering across both arrows: "bad idea" (reverted in build 27; don't retry without a new design).
+  steering across both arrows: "bad idea" (reverted in build 27; don't retry without a new design). Instead asked
+  for a settings menu with buttons or a normal joystick (build 28): judge the joystick after real use.
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
@@ -281,7 +291,8 @@ m/s^2; AI corner speeds too); user OK'd it as a quick tweak, "not that relevant"
 left during the canyon countdown: karts on the grid are pinned (`k.held` in applyStabilityAssist) instead of
 held by `brakeForce` 600, whose left/right impulses fought on the grid's 0.1-0.2% slope (meadow: flat, no load).
 
-**Builds 25-27 (2026-10-16, committed locally, NOT pushed; build 27 = slide steering reverted):** shield, star, triple mushroom, blue shell, bullet (see Items).
+**Builds 25-28 (2026-10-16, committed locally, NOT pushed; build 27 = slide steering reverted, build 28 =
+Settings screen with buttons / joystick steering; joystick not tried on the phone yet):** shield, star, triple mushroom, blue shell, bullet (see Items).
 Build 26: real-looking shield bubble (user: "awesome"). Tried and reverted: steering as one slide pad over both
 arrows (finger side of the midpoint = direction, so you change direction without lifting). User: "a bad idea, now
 it keeps steering either way all the time" (any touch on the pad, even the gap, steered). Keep two separate hold

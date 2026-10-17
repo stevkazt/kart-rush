@@ -193,6 +193,11 @@ const CFG = {
     ],
   },
 
+  controls: {
+    stickDeadZone: 0.12,    // joystick (Settings): this share of the knob's travel either side does nothing...
+    stickFull: 0.85,        // ...and full lock is reached here (share of the base's radius)
+  },
+
   camera: {
     distance: 7,
     height: 3.2,
@@ -1842,7 +1847,7 @@ const state = {
   wrongT: 0,             // seconds spent driving the wrong way
 };
 
-const input = { left: false, right: false, gas: false, brake: false, reset: false, item: false };
+const input = { left: false, right: false, axis: 0, gas: false, brake: false, reset: false, item: false }; // axis: joystick -1..1
 
 const hud = {
   lap: $('lap'), time: $('time'), best: $('best'), speed: $('speed'),
@@ -1853,7 +1858,7 @@ const hud = {
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
   item: $('btn-item'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
-  pauseScreen: $('pause-screen'),
+  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), knob: $('stick-knob'),
 };
 
 const minimap = buildMinimap();
@@ -1931,6 +1936,36 @@ function initControls() {
   };
   bindHold($('btn-left'), 'left');
   bindHold($('btn-right'), 'right');
+
+  // --- Joystick (Settings -> Joystick, replaces the arrows): analogue steering from how far the knob is
+  // pushed sideways; up/down does nothing. One finger at a time; the knob springs back on release.
+  const stickZone = $('joystick'), stickBase = $('stick-base');
+  let stickId = null;
+  const moveStick = (e) => {
+    const r = stickBase.getBoundingClientRect();
+    let sx = e.clientX - (r.left + r.width / 2), sy = e.clientY - (r.top + r.height / 2);
+    if (app.classList.contains('rotated')) [sx, sy] = [sy, -sx]; // portrait: the game is turned 90deg
+    const radius = stickBase.offsetWidth / 2;
+    const lim = Math.min(1, radius / (Math.hypot(sx, sy) || 1));
+    sx *= lim; sy *= lim;
+    hud.knob.style.transform = `translate(${sx}px, ${sy}px)`;
+    const C = CFG.controls, x = sx / radius;
+    input.axis = Math.sign(x) * clamp((Math.abs(x) - C.stickDeadZone) / (C.stickFull - C.stickDeadZone), 0, 1);
+  };
+  stickZone.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (stickId !== null) return;
+    stickId = e.pointerId;
+    try { stickZone.setPointerCapture(e.pointerId); } catch { /* synthetic pointer (tests) */ }
+    hud.knob.classList.add('held');
+    moveStick(e);
+  });
+  stickZone.addEventListener('pointermove', (e) => { if (e.pointerId === stickId) moveStick(e); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => stickZone.addEventListener(t, (e) => {
+    if (e.pointerId !== stickId) return;
+    stickId = null;
+    releaseStick();
+  }));
   bindHold($('btn-gas'), 'gas');
   slideToItem($('btn-gas'));
   bindHold($('btn-brake'), 'brake');
@@ -1969,6 +2004,10 @@ function initControls() {
   onTap($('btn-resume'), resumeGame);
   onTap($('btn-restart'), () => { state.paused = false; startRace(); });
   onTap($('btn-quit'), () => { state.paused = false; sound.unlock(); showMenu(); });
+  document.querySelectorAll('.btn-settings').forEach((b) => onTap(b, () => { sound.click(); showSettings(); }));
+  for (const b of $('steer-pick').children) onTap(b, () => { sound.click(); setSteering(b.dataset.steer); });
+  onTap($('btn-settings-back'), () => { sound.click(); showOverlay(settingsFrom); });
+  setSteering(savedSteering(), false);
 
   // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
   const muteBtn = $('btn-mute');
@@ -2311,9 +2350,32 @@ function updateWrongWay(dt) {
 }
 const wrongFwd = new CANNON.Vec3();
 
-/** Shows one overlay screen (menu / results / pause) and hides the HUD behind it. */
+// ---------- Settings (per device). Steering: 'buttons' (the two arrows) or 'joystick' (analogue). ----------
+const STEER_KEY = 'kartrush.steering';
+let settingsFrom = null; // the screen BACK returns to (title or pause)
+function savedSteering() {
+  try { return localStorage.getItem(STEER_KEY) === 'joystick' ? 'joystick' : 'buttons'; } catch { return 'buttons'; }
+}
+function setSteering(mode, save = true) {
+  if (save) try { localStorage.setItem(STEER_KEY, mode); } catch { /* storage blocked */ }
+  app.classList.toggle('steer-joystick', mode === 'joystick');
+  for (const b of $('steer-pick').children) b.classList.toggle('on', b.dataset.steer === mode);
+  input.left = input.right = false;
+  releaseStick();
+}
+function showSettings() {
+  settingsFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
+  showOverlay(hud.settingsScreen);
+}
+function releaseStick() {
+  input.axis = 0;
+  hud.knob.style.transform = '';
+  hud.knob.classList.remove('held');
+}
+
+/** Shows one overlay screen (menu / results / pause / settings) and hides the HUD behind it. */
 function showOverlay(screen) {
-  for (const el of [hud.menuScreen, hud.resultsScreen, hud.pauseScreen]) el.hidden = el !== screen;
+  for (const el of [hud.menuScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen]) el.hidden = el !== screen;
   hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
   hud.overlay.classList.remove('hidden');
@@ -2323,6 +2385,7 @@ function pauseGame() {
   if (state.paused || !(state.phase === 'race' || state.phase === 'countdown')) return;
   state.paused = true;
   for (const key of Object.keys(input)) input[key] = false; // held buttons would stay held otherwise
+  releaseStick();
   document.querySelectorAll('.ctl.pressed').forEach((el) => el.classList.remove('pressed'));
   sound.suspend();
   showOverlay(hud.pauseScreen);
@@ -2994,7 +3057,7 @@ function stepPhysics(dt) {
     if (k.ai) {
       updateAI(k, dt, canDrive);
     } else {
-      k.ctl.steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+      k.ctl.steer = clamp((input.right ? 1 : 0) - (input.left ? 1 : 0) + input.axis, -1, 1);
       k.ctl.gas = input.gas;
       k.ctl.brake = input.brake;
       if (input.item && canDrive && !k.finished) useItem(k);
@@ -3619,7 +3682,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 27 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 28 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
 onResize();
 showMenu();

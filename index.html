@@ -61,6 +61,8 @@
         <button id="btn-left" class="ctl steer-btn" aria-label="Steer left">&#9664;</button>
         <button id="btn-right" class="ctl steer-btn" aria-label="Steer right">&#9654;</button>
       </div>
+      <!-- Joystick steering (Settings): shown instead of the arrows -->
+      <div id="joystick" aria-label="Steering joystick"><div id="stick-base"><div id="stick-knob"></div></div></div>
 
       <button id="btn-item" class="ctl" aria-label="Use item" data-item=""></button>
 
@@ -83,6 +85,7 @@
           <p class="tagline">3 laps &middot; 5 rivals &middot; you start last</p>
           <div id="track-pick" class="track-pick"></div>
           <button id="btn-start" class="btn-primary">START RACE</button>
+          <button class="btn-small btn-settings">&#9881;&#65039; SETTINGS</button>
           <p class="record" id="menu-record" hidden></p>
         </div>
         <p id="build"></p>
@@ -125,6 +128,21 @@
             <button id="btn-restart" class="btn-secondary">RESTART</button>
             <button id="btn-quit" class="btn-secondary">MENU</button>
           </div>
+          <button class="btn-small btn-settings">&#9881;&#65039; SETTINGS</button>
+        </div>
+      </div>
+      <!-- Settings (from the title or pause screen; saved per device) -->
+      <div id="settings-screen" class="screen" hidden>
+        <div class="side">
+          <div class="paused">SETTINGS</div>
+          <div class="setting">
+            <span class="setting-label">STEERING</span>
+            <div id="steer-pick" class="track-pick">
+              <button class="trk" data-steer="buttons"><i>&#9664;&#9654;</i>Buttons</button>
+              <button class="trk" data-steer="joystick"><i>&#128377;&#65039;</i>Joystick</button>
+            </div>
+          </div>
+          <button id="btn-settings-back" class="btn-primary">BACK</button>
         </div>
       </div>
       <div id="confetti" aria-hidden="true"></div>
