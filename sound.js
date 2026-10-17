@@ -259,6 +259,34 @@ const sfx = {
   },
   hitOther() { if (ready()) notes([880, 1175], 0.07, { type: 'square', vol: 0.12 }); },
   warn() { if (ready()) tone(1400, now(), 0.12, { type: 'square', vol: 0.12 }); },
+  shieldUp() {
+    if (!ready()) return;
+    tone(400, now(), 0.35, { type: 'sine', vol: 0.25, slide: 2.5 });
+    notes([0, 0, 1568, 2093], 0.05, { type: 'triangle', vol: 0.1 });
+  },
+  shieldPop() {
+    if (!ready()) return;
+    noiseHit(now(), 0.18, { freq: 5000, type: 'highpass', vol: 0.4 });
+    tone(1800, now(), 0.25, { type: 'sine', vol: 0.2, slide: 0.4 });
+  },
+  star() { if (ready()) notes([523, 659, 784, 1047, 784, 1047, 1319, 1568], 0.06, { type: 'square', vol: 0.12 }); },
+  starEnd() { if (ready()) notes([1047, 784, 523], 0.07, { type: 'triangle', vol: 0.12 }); },
+  bullet() {
+    if (!ready()) return;
+    noiseHit(now(), 0.4, { freq: 300, vol: 0.6 });
+    noiseHit(now(), 1.2, { freq: 600, sweepTo: 3000, type: 'bandpass', q: 1, vol: 0.4 });
+    tone(110, now(), 1.0, { type: 'sawtooth', vol: 0.12, slide: 2 });
+  },
+  blueLaunch() {
+    if (!ready()) return;
+    noiseHit(now(), 0.8, { freq: 3000, sweepTo: 500, type: 'bandpass', q: 3, vol: 0.35 });
+    notes([1760, 0, 1760, 0, 1760], 0.06, { type: 'sine', vol: 0.1 });
+  },
+  explosion(strength = 1) {
+    if (!ready()) return;
+    noiseHit(now(), 1.1, { freq: 1500, sweepTo: 80, vol: 0.8 * strength });
+    tone(70, now(), 0.8, { type: 'sine', vol: 0.5 * strength, slide: 0.4 });
+  },
 };
 
 // ---------- Music: little step-sequenced chiptune loops ----------

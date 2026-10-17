@@ -99,6 +99,23 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   above BRAKE (Space/E on desktop). Sliding a thumb from GAS onto ITEM fires it while GAS stays held
   (`slideToItem`). User feedback: lifting GAS to tap ITEM felt "like a pro battle royale", so the player's kart
   now coasts (`playerCoast: 3`, ~5 km/h lost per 0.3 s lift) while AIs keep `coastBrake: 12`. Red shell incoming shows a blinking `!` + alarm.
+- **More items (build 25, 2026-10-16; user wanted a pure protection item "so the chances balance out for every
+  player"):** `ITEM_TYPES` = mushroom, banana, green, red, **shield** (bubble `k.bubble`: `BUBBLE_MAT` shader, fresnel rim +
+  thin-film rainbow + highlights + wobble, elastic pop-in, flickers out; user found the flat additive sphere "cheap"; blocks the next hit of
+  any kind, `shieldTime` 10 s, blinks at the end), **star** (`k.star` 6 s: immune, +`starSpeed` top speed,
+  rainbow emissive on `k.bodyMesh`; AIs get the speed through their pace in `updateAI`), **triple** (3 mushrooms,
+  `k.itemCount`, `tripleGap`, `k.orbit` meshes circle the kart, x3 badge = `data-count` on the item button),
+  **blue** (one at a time: `rollItem` zeroes it while one is out or held; flies over the road centre at
+  `blueSpeed` 55 to the leader (`blueTarget`, never its owner), dives within `blueHome`, `blueBlast` 5 m blast,
+  `blueSpin` 1.9 s; thrown from 1st it flies backwards to 2nd (`s.dir`)), **bullet** (`k.bullet` 4 s: on rails,
+  `bulletGuide` in preStep steers the velocity to 38 m/s along the road, `collisionResponse` off until nobody
+  overlaps, hull mesh `k.hull`, wheels hidden). Star/bullet karts spin out anyone within `bumpRadius` and shove
+  them sideways. All protection lives in `spinOut` (returns whether the kart spun). Odds per place in `CFG.items.odds`
+  (9 columns): shield for every place (most at the front), star/bullet/blue for the back. The `!` alarm
+  (`shellIncoming`) covers the blue shell within 90 m. The roulette already existed (`rollTime`).
+  Measured (headless): 15 bullets back to back on the canyon, 0 resets (crest + jump fine); shield blocks one
+  hit then the next lands; star top ~115 km/h; GPU programs stay 17 (bubble shader warmed up). 3-lap races with natural odds: 2 flips in
+  7 canyon races (both after the jump, idx ~1120, probably boosted/star karts landing badly), 0 on the meadow.
 - **Karts are baked**: `bakeMeshes` merges each kart body into one vertex-coloured mesh (plus one per wheel).
   Before that, ~28 meshes per kart (x2 for the shadow pass) = 195 draw calls on the grid and stutter on the
   phone when karts were close. Now 75. Add new kart parts before the `bakeMeshes` call.
@@ -210,7 +227,8 @@ contacts); write new ones as needed. Older note: autopilot laps of about 21–23
 finishes within ~10 s, with 0 AI resets in a clean run. `tap 0.6` gives about 35 degrees at
 release, slip under 2 degrees, and 95 km/h kept (before the 2026-10-16 grip cut; now 0.25 s = 9 deg, 0.6 s = 25 deg, 1.0 s = 51 deg). `dev/test.sh` injects debug globals (`__k` kart, `__s` state,
 `__t` track, `__w` world, `__in` input) into a temp copy by replacing the `// ---------- Boot ----------` marker
-line in `main.js` (also `__karts`). Keep that line. `test.sh` refuses to run if port 8765 is already taken:
+line in `main.js` (also `__karts`, `__useItem`, `__spinOut`, `__shells`: give `__k.item = 'blue'; __k.itemRoll = 0`
+then `__useItem(__k)`). Keep that line. `test.sh` refuses to run if port 8765 is already taken:
 an orphaned test server once served a stale copy and made every test lie. The page can't be tested on a real phone from here: ask the user to
 check touch and feel.
 
@@ -224,6 +242,9 @@ check touch and feel.
   theme "perfect", 60 fps on the phone; bumps should feel bumpy (keep); banking "not that relevant" (small grip
   bonus added). New engine sound "much better, not too present" (will say if it annoys again). Steady place
   indicator: good. Asked for auto-rescue when stuck (build 24, 2.5 s): judge after real use.
+- 2026-10-16 (night): asked for more power-ups incl. a pure shield "so the chances balance out for every player";
+  got shield, star, triple mushroom, blue shell, bullet + per-place odds (build 25). New bubble "awesome". Slide
+  steering across both arrows: "bad idea" (reverted in build 27; don't retry without a new design).
 
 ## Roadmap (agreed with the user)
 **Done (2026-10-15): AI opponents:** 5 AI karts, staggered grid (player starts last), position HUD, results
@@ -259,6 +280,13 @@ Build 21: banks now add g * tan(bank) to the assist's grip limit when steering i
 m/s^2; AI corner speeds too); user OK'd it as a quick tweak, "not that relevant". Fixed the kart turning ~9 deg
 left during the canyon countdown: karts on the grid are pinned (`k.held` in applyStabilityAssist) instead of
 held by `brakeForce` 600, whose left/right impulses fought on the grid's 0.1-0.2% slope (meadow: flat, no load).
+
+**Builds 25-27 (2026-10-16, committed locally, NOT pushed; build 27 = slide steering reverted):** shield, star, triple mushroom, blue shell, bullet (see Items).
+Build 26: real-looking shield bubble (user: "awesome"). Tried and reverted: steering as one slide pad over both
+arrows (finger side of the midpoint = direction, so you change direction without lifting). User: "a bad idea, now
+it keeps steering either way all the time" (any touch on the pad, even the gap, steered). Keep two separate hold
+buttons (`bindHold`). Phone-tested items: no complaints yet; open questions are item strength / odds balance.
+Watch: canyon post-jump flips with the faster items (2 in 7 headless races); balance of the odds.
 
 **Next**, roughly in order (agreed 2026-10-16):
 - Another themed track (idea: snowy night with falling snow + an icy section).

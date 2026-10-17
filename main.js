@@ -174,8 +174,23 @@ const CFG = {
     redSpeed: 40, redLife: 12, redHomeDist: 14,
     aiTargetPlayer: 140,              // AI red shells lock onto the player when they're up to this far ahead (m)
     hitRadius: 1.4, bananaRadius: 1.2,
-    // Item odds by race position (index = place - 1): [mushroom, banana, green, red]
-    odds: [[5, 55, 40, 0], [15, 30, 35, 20], [25, 15, 30, 30], [25, 15, 30, 30], [45, 0, 15, 40], [45, 0, 15, 40]],
+    shieldTime: 10,                   // bubble that blocks the next hit (any kind), gone after this anyway
+    starTime: 6, starSpeed: 4,        // invincible, + m/s on top speed; karts touched spin out
+    bumpRadius: 2.3,                  // star / bullet kart this close to another one = hit
+    tripleGap: 0.25,                  // triple mushroom: min seconds between two boosts
+    blueSpeed: 55, blueLife: 30,      // blue shell: along the track to the leader, explodes
+    blueHome: 22, blueBlast: 5, blueSpin: 1.9, blueHeight: 1.8,
+    bulletTime: 4, bulletSpeed: 38,   // CPU drives at this speed (m/s; top is 26) on rails along the track
+    // Item odds by race position (index = place - 1), in ITEM_TYPES order:
+    //          mush ban gre red shld star trip blue bullet
+    odds: [
+      /* 1st */ [5, 40, 30, 0, 25, 0, 0, 0, 0],
+      /* 2nd */ [10, 25, 25, 15, 18, 0, 7, 0, 0],
+      /* 3rd */ [12, 12, 18, 25, 10, 5, 10, 8, 0],
+      /* 4th */ [12, 6, 12, 25, 6, 10, 14, 10, 5],
+      /* 5th */ [12, 0, 8, 22, 5, 15, 15, 11, 12],
+      /* 6th */ [8, 0, 5, 20, 5, 18, 15, 11, 18],
+    ],
   },
 
   camera: {
@@ -1325,6 +1340,43 @@ const _up = new THREE.Vector3(0, 1, 0);
 // shared by every kart's dizzy stars (see buildKart)
 const STAR_GEO = new THREE.OctahedronGeometry(0.17, 0);
 const STAR_MAT = new THREE.MeshBasicMaterial({ color: 0xffe14a });
+// Shield bubble: clear in the middle, bright at the rim (fresnel), a thin-film rainbow sheen that drifts
+// over the surface, two highlights, and a soft wobble. One material per kart (its own fade); one program.
+const BUBBLE_GEO = new THREE.SphereGeometry(1, 32, 20);
+const BUBBLE_SCALE = new THREE.Vector3(1.6, 1.35, 2.05);
+const BUBBLE_MAT = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { time: { value: 0 }, fade: { value: 1 } },
+  vertexShader: `
+    uniform float time;
+    varying vec3 vN, vV, vP;
+    void main() {
+      vec3 p = position;
+      float w = sin(time * 3.1 + p.y * 4.0 + p.x * 2.0) * 0.025 + sin(time * 2.3 - p.z * 3.5) * 0.02;
+      p += normal * w;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      vN = normalize(normalMatrix * normal);
+      vV = normalize(-mv.xyz);
+      vP = position;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform float time, fade;
+    varying vec3 vN, vV, vP;
+    void main() {
+      vec3 n = normalize(vN), v = normalize(vV);
+      float ndv = abs(dot(n, v));
+      float rim = pow(1.0 - ndv, 2.2);
+      // thin film: hue shifts with the viewing angle and swirls slowly across the surface
+      float film = ndv * 1.6 + sin(vP.y * 3.0 + vP.x * 2.0 + time * 0.9) * 0.25 + time * 0.05;
+      vec3 rainbow = 0.55 + 0.45 * cos(6.2832 * (film + vec3(0.0, 0.33, 0.67)));
+      vec3 col = mix(vec3(0.75, 0.92, 1.0), rainbow, 0.75);
+      vec3 l1 = normalize(vec3(-0.5, 0.7, 0.6)), l2 = normalize(vec3(0.6, -0.3, 0.7));
+      float spec = pow(max(dot(reflect(-l1, n), v), 0.0), 60.0) + 0.4 * pow(max(dot(reflect(-l2, n), v), 0.0), 25.0);
+      float a = 0.05 + rim * 0.7 + spec;
+      gl_FragColor = vec4(col * (0.6 + rim * 0.6) + spec, clamp(a, 0.0, 0.95) * fade);
+    }`,
+});
 
 const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0));
 const kart = karts[0];
@@ -1346,6 +1398,7 @@ function makeRacer({ name, colors }, isPlayer) {
     color: '#' + colors[0].toString(16).padStart(6, '0'),
     ctl: { steer: 0, gas: false, brake: false }, // steer -1..1, positive = right
     topMult: 1,
+    orbit: [], // triple mushroom meshes circling the kart
     ai: isPlayer ? null : {},
     ...freshDriveState(),
   });
@@ -1356,7 +1409,7 @@ function freshDriveState() {
   return {
     speed: 0, steerSmooth: 0, steerAngle: 0, driftAmt: 0, drifting: false, driftCharge: 0,
     boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0,
-    item: null, itemRoll: 0, spin: 0,
+    item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, shield: 0, star: 0, bullet: 0, bulletLane: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
   };
 }
@@ -1459,8 +1512,20 @@ function buildKart([bodyColor, accentColor, driverColor]) {
   });
 
   // One draw call for the whole body instead of ~20 (each one is drawn twice: shadow + screen)
-  bakeMeshes(group, [...flames, ...sparks]);
+  const bodyMesh = bakeMeshes(group, [...flames, ...sparks]);
+  bodyMesh.material.emissive = new THREE.Color(0); // the star flashes it through the rainbow
   scene.add(group);
+
+  // Shield bubble and bullet hull (added after baking: they toggle)
+  const bubble = new THREE.Mesh(BUBBLE_GEO, BUBBLE_MAT.clone());
+  bubble.renderOrder = 2; // after the kart and road, so it sits over them
+  bubble.scale.copy(BUBBLE_SCALE);
+  bubble.position.set(0, y0 + 0.35, -0.15);
+  bubble.visible = false;
+  group.add(bubble);
+  const hull = buildBulletHull(y0);
+  hull.visible = false;
+  group.add(hull);
 
   // Dizzy stars circling over the driver while spun out (added after baking: they toggle)
   const stars = new THREE.Group();
@@ -1492,7 +1557,39 @@ function buildKart([bodyColor, accentColor, driverColor]) {
     return g;
   });
 
-  return { body, vehicle, group, wheelMeshes, sparks, sparkMat, flames, stars };
+  return { body, vehicle, group, wheelMeshes, sparks, sparkMat, flames, stars, bodyMesh, bubble, hull };
+}
+
+/** The bullet: a black slug round the kart with a chrome nose ring, eyes and red fins. */
+function buildBulletHull(y0) {
+  const hull = new THREE.Group();
+  const add = (geo, color, x, y, z) => {
+    const m = new THREE.Mesh(geo, lambert(color));
+    m.position.set(x, y, z);
+    hull.add(m);
+    return m;
+  };
+  const bodyGeo = new THREE.CylinderGeometry(1.05, 1.05, 2.6, 14);
+  bodyGeo.rotateX(Math.PI / 2);
+  add(bodyGeo, 0x22232a, 0, y0 + 0.35, -0.3);
+  const noseGeo = new THREE.SphereGeometry(1.05, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  noseGeo.rotateX(Math.PI / 2);
+  noseGeo.scale(1, 1, 1.1);
+  add(noseGeo, 0x22232a, 0, y0 + 0.35, 1.0);
+  const ringGeo = new THREE.TorusGeometry(1.06, 0.08, 6, 16);
+  add(ringGeo, 0xcfd3dc, 0, y0 + 0.35, 0.95);
+  const eyeGeo = new THREE.SphereGeometry(0.2, 8, 6);
+  add(eyeGeo, 0xffffff, 0.4, y0 + 0.75, 1.55);
+  add(eyeGeo, 0xffffff, -0.4, y0 + 0.75, 1.55);
+  const pupilGeo = new THREE.SphereGeometry(0.1, 6, 4);
+  add(pupilGeo, 0x000000, 0.42, y0 + 0.78, 1.72);
+  add(pupilGeo, 0x000000, -0.42, y0 + 0.78, 1.72);
+  const finGeo = new THREE.BoxGeometry(0.1, 0.7, 0.8);
+  for (const [x, y, rz] of [[0, 1.2, 0], [0.95, 0.35, Math.PI / 2], [-0.95, 0.35, Math.PI / 2]]) {
+    add(finGeo, 0xe8322f, x, y0 + y, -1.4).rotation.z = rz;
+  }
+  bakeMeshes(hull);
+  return hull;
 }
 
 /**
@@ -1715,7 +1812,20 @@ function buildItemVisuals() {
     add(new THREE.SphereGeometry(0.42, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), color, 0, 0.12, 0);
     add(new THREE.CylinderGeometry(0.46, 0.46, 0.14, 10), 0xffffff, 0, 0.1, 0);
   });
-  return { boxes, boxMesh, pads, padTex, models: { banana, green: shell(0x2fbf4a), red: shell(0xe8322f) } };
+  const mushroom = template((add) => {
+    add(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 8), 0xfff1d6, 0, 0.15, 0);
+    add(new THREE.SphereGeometry(0.34, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xe8322f, 0, 0.28, 0);
+    for (const [x, z] of [[0.18, 0.12], [-0.16, 0.14], [0, -0.22]]) add(new THREE.SphereGeometry(0.08, 6, 4), 0xffffff, x, 0.5, z);
+  });
+  const blue = template((add) => {
+    add(new THREE.SphereGeometry(0.5, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0x2a6bff, 0, 0.12, 0);
+    add(new THREE.CylinderGeometry(0.54, 0.54, 0.14, 12), 0xffffff, 0, 0.1, 0);
+    for (const x of [0.55, -0.55]) add(new THREE.BoxGeometry(0.7, 0.06, 0.35), 0xffffff, x * 1.4, 0.45, 0).rotation.z = x * 0.6;
+  });
+  return {
+    boxes, boxMesh, pads, padTex,
+    models: { banana, green: shell(0x2fbf4a), red: shell(0xe8322f), mushroom, blue },
+  };
 }
 
 // ---------- 1e. Game state, HUD refs, minimap ----------
@@ -2395,7 +2505,7 @@ function updateAI(k, dt, canDrive) {
   const rubber = state.phase === 'race' && !k.finished
     ? clamp(1 - (k.progress - kart.progress) * spacing * A.rubberBand, A.rubberMin, A.rubberMax)
     : 1;
-  const pace = K.maxSpeed * (k.finished ? A.finishedPace : ai.skill * rubber);
+  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill * rubber);
   let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
   for (let s = 2; s * spacing < 45; s += 2) {
@@ -2462,18 +2572,25 @@ function updateAI(k, dt, canDrive) {
  * Boxes hand out an item rolled from the kart's race position. Bananas and shells are not physics
  * bodies: they move on the track plane and hit karts by distance. A hit kart spins out (see driveKart).
  * ========================================================================== */
-const ITEM_TYPES = ['mushroom', 'banana', 'green', 'red'];
+const ITEM_TYPES = ['mushroom', 'banana', 'green', 'red', 'shield', 'star', 'triple', 'blue', 'bullet'];
 const drops = [];   // bananas on the track: { mesh, pos, owner, age }
-const shells = [];  // { kind, mesh, pos, vel, idx, owner, target, age, life, bounces }
+const shells = [];  // { kind, mesh, pos, vel, idx, owner, target, age, life, bounces } (+ along, homing: blue)
 
 function clearItems() {
   for (const o of [...drops, ...shells]) scene.remove(o.mesh);
   drops.length = shells.length = 0;
   for (const b of itemVis.boxes) b.hidden = 0;
+  for (const k of karts) {
+    for (const m of k.orbit || []) scene.remove(m);
+    k.orbit = [];
+    k.body.collisionResponse = true;
+  }
 }
 
 function rollItem(place) {
-  const odds = CFG.items.odds[clamp(place, 1, CFG.items.odds.length) - 1];
+  const odds = CFG.items.odds[clamp(place, 1, CFG.items.odds.length) - 1].slice();
+  // one blue shell at a time (flying or held)
+  if (shells.some((s) => s.kind === 'blue') || karts.some((k) => k.item === 'blue')) odds[ITEM_TYPES.indexOf('blue')] = 0;
   let r = Math.random() * odds.reduce((a, b) => a + b, 0);
   for (let i = 0; i < odds.length; i++) if ((r -= odds[i]) < 0) return ITEM_TYPES[i];
   return 'mushroom';
@@ -2490,17 +2607,48 @@ function spawnModel(kind, pos) {
 
 const itemFwd = new CANNON.Vec3();
 function useItem(k) {
-  if (!k.item || k.itemRoll > 0 || k.spin > 0) return;
+  if (!k.item || k.itemRoll > 0 || k.spin > 0 || k.bullet > 0) return;
   const I = CFG.items, b = k.body;
   const fwd = b.quaternion.vmult(LOCAL_FWD, itemFwd);
   const h = Math.hypot(fwd.x, fwd.z) || 1;
   const fx = fwd.x / h, fz = fwd.z / h;
   const item = k.item;
-  k.item = null;
+  if (item === 'triple') {
+    if (k.tripleT > 0) return; // a quick double tap shouldn't burn two
+    k.tripleT = I.tripleGap;
+    if (--k.itemCount <= 0) k.item = null;
+  } else {
+    k.item = null;
+  }
 
-  if (item === 'mushroom') {
+  if (item === 'mushroom' || item === 'triple') {
     k.boost = CFG.kart.boostDuration * I.mushroomBoost;
     if (k.isPlayer) sound.boost();
+  } else if (item === 'shield') {
+    k.shield = I.shieldTime;
+    if (k.isPlayer) sound.shieldUp();
+  } else if (item === 'star') {
+    k.star = I.starTime;
+    if (k.isPlayer) { showMessage('STAR POWER!'); sound.star(); }
+  } else if (item === 'bullet') {
+    k.bullet = I.bulletTime;
+    k.bulletLane = lateral(k.trackIdx, b.position);
+    k.boost = 0;
+    // Karts in the way get hit by distance (updateItems); letting the solver shove them at 140 km/h
+    // would fling them about. Back on once the bullet is over and nobody is inside it.
+    b.collisionResponse = false;
+    if (k.isPlayer) { showMessage('BULLET!'); sound.bullet(); }
+  } else if (item === 'blue') {
+    const pos = roadPoint(k.trackIdx, 0, 1.0);
+    shells.push({
+      kind: 'blue', mesh: spawnModel('blue', pos), pos, vel: new THREE.Vector3(), idx: k.trackIdx,
+      along: k.trackIdx, dir: 1, homing: false, owner: k, target: blueTarget(k), age: 0, life: I.blueLife, bounces: 0,
+    });
+    // forward to the leader; backwards when it's thrown from the front (the 2nd-placed kart is behind)
+    const blue = shells[shells.length - 1];
+    if (blue.target && blue.target.progress < k.progress) blue.dir = -1;
+    showMessage(k.isPlayer ? 'BLUE SHELL!' : `BLUE SHELL FROM ${k.name.toUpperCase()}!`);
+    sound.blueLaunch();
   } else if (item === 'banana') {
     const pos = new THREE.Vector3(b.position.x - fx * 2.4, 0, b.position.z - fz * 2.4);
     pos.y = surfaceY(k.trackIdx, clampLane(k.trackIdx, lateral(k.trackIdx, pos), 0)); // on the road, even mid-air
@@ -2530,6 +2678,13 @@ function redShellTarget(k) {
   return karts.find((o) => o.place === k.place - 1 && !o.finished) || null;
 }
 
+/** The blue shell goes for whoever leads the race (not its owner), and moves on if they finish. */
+function blueTarget(owner) {
+  let best = null;
+  for (const o of karts) if (o !== owner && !o.finished && (!best || o.place < best.place)) best = o;
+  return best;
+}
+
 /** A pop of yellow / white sparks where a kart got hit. */
 function hitBurst(k) {
   const p = k.body.position;
@@ -2541,9 +2696,31 @@ function hitBurst(k) {
   }
 }
 
-function spinOut(k, by, what) {
-  if (k.spin > 0) return;
-  k.spin = CFG.items.spinTime;
+/** Ring of cyan shards where a shield bubble took a hit. */
+function shieldBurst(k) {
+  const p = k.body.position;
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2, sp = 5 + Math.random() * 2;
+    emitP.set(p.x, p.y + 0.6, p.z);
+    emitV.set(Math.cos(a) * sp, 0.5 + Math.random() * 2, Math.sin(a) * sp);
+    fx.emit(emitP, emitV, i % 2 ? [1, 1, 1] : [0.5, 0.9, 1], { life: 0.45, size: 0.4, grow: 0.3, alpha: 0.9 });
+  }
+}
+
+/**
+ * Hit by a banana / shell / star / bullet / blast. A star or a bullet makes a kart immune, a shield
+ * takes the hit and pops. Returns whether the kart actually spun out.
+ */
+function spinOut(k, by, what, time = CFG.items.spinTime) {
+  if (k.spin > 0 || k.star > 0 || k.bullet > 0) return false;
+  if (k.shield > 0) {
+    k.shield = 0;
+    shieldBurst(k);
+    if (k.isPlayer) { showMessage('BLOCKED!'); sound.shieldPop(); }
+    else if (by?.isPlayer || near(k, 30)) sound.shieldPop();
+    return false;
+  }
+  k.spin = k.spinTotal = time;
   k.hitBy = `${what} from ${by?.name}`;
   k.boost = 0;
   k.driftCharge = 0;
@@ -2559,6 +2736,67 @@ function spinOut(k, by, what) {
     showMessage(`HIT ${k.name.toUpperCase()}!`);
     sound.hitOther();
   }
+  return true;
+}
+
+const near = (k, m) => k.body.position.distanceSquared(kart.body.position) < m * m;
+
+/** The blue shell's blast: everyone close to its target spins out for longer, and gets popped up a bit. */
+function blueBlast(s, at) {
+  const I = CFG.items, p = at.body.position;
+  for (const k of karts) {
+    const d2 = (k.body.position.x - p.x) ** 2 + (k.body.position.z - p.z) ** 2;
+    if (d2 > I.blueBlast ** 2 || Math.abs(k.body.position.y - p.y) > 2.5) continue;
+    if (spinOut(k, s.owner, 'blue', I.blueSpin)) k.body.velocity.y += 3;
+  }
+  for (let i = 0; i < 40; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 7;
+    emitP.set(p.x, p.y + 0.8, p.z);
+    emitV.set(Math.cos(a) * sp, 2 + Math.random() * 6, Math.sin(a) * sp);
+    fx.emit(emitP, emitV, i % 3 ? [0.35, 0.6, 1] : [1, 1, 1], { life: 0.8, size: 0.7, grow: 1.5, alpha: 0.9 });
+  }
+  const dist = Math.sqrt((p.x - kart.body.position.x) ** 2 + (p.z - kart.body.position.z) ** 2);
+  if (dist < 80) sound.explosion(clamp(1 - dist / 80, 0.25, 1));
+}
+
+const blueA = new THREE.Vector3(), blueB = new THREE.Vector3();
+/**
+ * Blue shell: flies over the middle of the road at blueSpeed (through everything) until its target is
+ * within blueHome m ahead, then dives at it. Returns true when it's done.
+ */
+function updateBlue(s, dt) {
+  const I = CFG.items, { N, spacing } = track;
+  if (!s.target || s.target.finished) {
+    // the target finished: go for the new leader, the short way round
+    s.target = blueTarget(s.owner);
+    if (s.target) s.dir = (s.target.trackIdx - s.idx + N) % N < N / 2 ? 1 : -1;
+  }
+  const tgt = s.target;
+  if (!tgt || s.life <= 0) return true;
+  const tp = tgt.body.position;
+  if (s.homing) {
+    const dx = tp.x - s.pos.x, dy = tp.y + 0.6 - s.pos.y, dz = tp.z - s.pos.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1.4) { blueBlast(s, tgt); return true; }
+    if (d > 60) { s.homing = false; s.along = s.idx; } // target got put back somewhere: fly the track again
+    else {
+      const step = Math.min(d, I.blueSpeed * dt) / d;
+      s.pos.x += dx * step; s.pos.y += dy * step; s.pos.z += dz * step;
+      s.idx = nearestTrackIndex(s.pos, s.idx);
+    }
+  }
+  if (!s.homing) {
+    s.along = (s.along + (s.dir * I.blueSpeed * dt) / spacing + N) % N;
+    const i = Math.floor(s.along), j = (i + 1) % N;
+    const h = Math.min(1 + s.age * 3, I.blueHeight) + Math.sin(s.age * 5) * 0.2; // climbs after launch, bobs
+    s.pos.lerpVectors(roadPoint(i, 0, h, blueA), roadPoint(j, 0, h, blueB), s.along - i);
+    s.idx = i;
+    const ahead = (((tgt.trackIdx - i) * s.dir + N) % N) * spacing;
+    if (ahead < I.blueHome) s.homing = true;
+  }
+  s.mesh.position.copy(s.pos);
+  s.mesh.rotation.y += dt * 16;
+  return false;
 }
 
 function updateItems(dt, racing) {
@@ -2576,6 +2814,7 @@ function updateItems(dt, racing) {
       box.hidden = I.boxRespawn;
       if (!k.item && !k.finished) {
         k.item = rollItem(k.place);
+        k.itemCount = k.item === 'triple' ? 3 : 1;
         k.itemRoll = I.rollTime;
         if (k.ai) k.ai.itemT = rand(0.4, 2.5);
         if (k.isPlayer) sound.itemBox(I.rollTime);
@@ -2586,6 +2825,28 @@ function updateItems(dt, racing) {
 
   for (const k of karts) {
     k.itemRoll = Math.max(0, k.itemRoll - dt);
+    k.tripleT = Math.max(0, k.tripleT - dt);
+    k.shield = Math.max(0, k.shield - dt);
+    if (k.star > 0) {
+      k.star = Math.max(0, k.star - dt);
+      if (k.star === 0 && k.isPlayer) sound.starEnd();
+    }
+    // Bullet over: physical again once no kart is inside it
+    if (k.bullet <= 0 && !k.body.collisionResponse &&
+      !karts.some((o) => o !== k && o.body.position.distanceSquared(k.body.position) < 3.2 * 3.2)) {
+      k.body.collisionResponse = true;
+    }
+    // Star / bullet: anyone touched spins out and gets knocked aside
+    if (racing && (k.star > 0 || k.bullet > 0)) {
+      for (const o of karts) {
+        if (o === k || flat2(o.body.position, k.body.position) > I.bumpRadius ** 2) continue;
+        if (!spinOut(o, k, k.bullet > 0 ? 'bullet' : 'star')) continue;
+        const dx = o.body.position.x - k.body.position.x, dz = o.body.position.z - k.body.position.z;
+        const d = Math.hypot(dx, dz) || 1, shove = k.bullet > 0 ? 6 : 3;
+        o.body.velocity.x += (dx / d) * shove;
+        o.body.velocity.z += (dz / d) * shove;
+      }
+    }
     // --- Boost pads
     k.padT = Math.max(0, k.padT - dt);
     if (!racing) continue;
@@ -2601,7 +2862,7 @@ function updateItems(dt, racing) {
     }
   }
 
-  // --- Bananas
+  // --- Bananas (a star or bullet runs them over without a wobble, a shield takes the hit)
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
     d.age += dt;
@@ -2614,11 +2875,15 @@ function updateItems(dt, racing) {
   }
 
   // --- Shells: green ones fly straight and bounce off the walls; red ones follow the track
-  // and home in on their target once close
+  // and home in on their target once close; the blue one flies over everything to the leader
   for (let i = shells.length - 1; i >= 0; i--) {
     const s = shells[i];
     s.age += dt;
     s.life -= dt;
+    if (s.kind === 'blue') {
+      if (updateBlue(s, dt)) { scene.remove(s.mesh); shells.splice(i, 1); }
+      continue;
+    }
     const tgt = s.target && !s.target.finished ? s.target : null;
     if (s.kind === 'red') {
       let aim;
@@ -2668,27 +2933,34 @@ function updateItems(dt, racing) {
   }
 }
 
-/** Red shell coming for the player within ~45 m: drives the warning icon + alarm. */
-function redShellWarning() {
-  return shells.some((s) => s.kind === 'red' && s.target === kart && !kart.finished &&
-    (s.pos.x - kart.body.position.x) ** 2 + (s.pos.z - kart.body.position.z) ** 2 < 45 * 45);
+/** A red shell within ~45 m or the blue one within ~90 m coming for kart k: the warning icon + alarm. */
+function shellIncoming(k) {
+  if (k.finished) return false;
+  return shells.some((s) => s.target === k && (s.kind === 'red' || s.kind === 'blue') &&
+    (s.pos.x - k.body.position.x) ** 2 + (s.pos.z - k.body.position.z) ** 2 < (s.kind === 'blue' ? 90 : 45) ** 2);
 }
 
-/** AI item use: mushroom on a straight, banana when someone's on its tail, shells at whoever's ahead. */
+/**
+ * AI item use: mushrooms on a straight, banana when someone's on its tail, shells at whoever's ahead,
+ * the shield when a shell (or a star / bullet) is coming, star / bullet / blue shell straight away.
+ */
 function updateAIItem(k, dt) {
   const ai = k.ai;
-  if (!k.item || k.itemRoll > 0 || k.finished || k.spin > 0) return;
+  if (!k.item || k.itemRoll > 0 || k.finished || k.spin > 0 || k.bullet > 0) return;
   ai.itemT -= dt;
   if (ai.itemT > 0) return;
   const { N, radius, spacing } = track;
   const fwd = k.body.quaternion.vmult(LOCAL_FWD, aiFwd);
   let use = false;
-  if (k.item === 'mushroom') {
+  if (k.item === 'mushroom' || k.item === 'triple') {
     let tight = Infinity;
     for (let s = 10; s * spacing < 40; s += 3) tight = Math.min(tight, radius[(k.trackIdx + s) % N]);
     use = tight > 60 || ai.itemT < -6;
-  } else if (k.item === 'red') {
+  } else if (k.item === 'red' || k.item === 'blue' || k.item === 'star' || k.item === 'bullet') {
     use = true;
+  } else if (k.item === 'shield') {
+    use = shellIncoming(k) || ai.itemT < -4 || karts.some((o) => (o.star > 0 || o.bullet > 0) && o !== k &&
+      o.body.position.distanceSquared(k.body.position) < 20 * 20);
   } else {
     const wantBehind = k.item === 'banana';
     use = ai.itemT < (wantBehind ? -7 : -10);
@@ -2704,7 +2976,10 @@ function updateAIItem(k, dt) {
       }
     }
   }
-  if (use) useItem(k);
+  if (!use) return;
+  const triple = k.item === 'triple';
+  useItem(k);
+  if (triple && k.item) ai.itemT = rand(0.6, 1.6); // the next mushroom a moment later
 }
 
 /* ==========================================================================
@@ -2780,7 +3055,13 @@ function driveKart(k, dt, canDrive) {
   // --- Engine & brakes
   let engine = 0, brake = 0;
   k.braking = false;
-  if (k.spin > 0) {
+  if (k.bullet > 0) {
+    // Bullet: bulletGuide (preStep) does the driving; the wheels just roll
+    k.bullet = Math.max(0, k.bullet - dt);
+    if (k.bullet === 0) k.boost = 0.6; // fire out of it instead of hitting a wall of drag
+    vehicle.setSteeringValue(0, 0);
+    vehicle.setSteeringValue(0, 1);
+  } else if (k.spin > 0) {
     // Spun out by a banana / shell: no power, scrub off speed, wheels straight
     k.spin = Math.max(0, k.spin - dt);
     brake = K.wheelBrake;
@@ -2791,7 +3072,8 @@ function driveKart(k, dt, canDrive) {
     k.stall = Math.max(0, k.stall - dt); // jumped the start: the engine bogs down
     brake = K.wheelBrake;
   } else if (canDrive) {
-    const top = K.maxSpeed * k.topMult + (boosting ? K.boostSpeed : 0);
+    // the star's extra speed: AIs get it through their pace (updateAI), so corner braking still works
+    const top = K.maxSpeed * k.topMult + Math.max(boosting ? K.boostSpeed : 0, k.star > 0 && !k.ai ? CFG.items.starSpeed : 0);
     if (ctl.brake) {
       k.boost = 0; // braking cancels a boost
       if (speed > 1) { brake = K.wheelBrake; k.braking = true; }
@@ -2847,6 +3129,7 @@ function applyStabilityAssist(k) {
     body.angularVelocity.y = 0;
     return;
   }
+  if (k.bullet > 0) { bulletGuide(k); return; }
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
 
   // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
@@ -2889,6 +3172,29 @@ function applyStabilityAssist(k) {
   body.angularVelocity.y -= excess * 0.5;
 }
 
+/**
+ * Bullet: on rails. Each sub-step, steer the velocity toward a point ~14 m down the road (easing toward
+ * the middle) at bulletSpeed and turn the kart to face it. Height is left to the physics (hills, jumps).
+ */
+const bulletAim = new CANNON.Vec3();
+function bulletGuide(k) {
+  const I = CFG.items, { N, samples, normals, spacing } = track, body = k.body, dt = CFG.physicsStep;
+  k.wallTouch = false; // no rails slowing it down (collisions are off anyway)
+  k.wallHit = 0;
+  k.bulletLane += clamp(-k.bulletLane, -3 * dt, 3 * dt);
+  const j = (k.trackIdx + Math.round(14 / spacing)) % N;
+  const lat = clampLane(j, k.bulletLane, 2);
+  const ax = samples[j].x + normals[j].x * lat - body.position.x;
+  const az = samples[j].z + normals[j].z * lat - body.position.z;
+  const h = Math.hypot(ax, az) || 1;
+  body.velocity.x += ((ax / h) * I.bulletSpeed - body.velocity.x) * 0.08;
+  body.velocity.z += ((az / h) * I.bulletSpeed - body.velocity.z) * 0.08;
+  const fwd = body.quaternion.vmult(LOCAL_FWD, bulletAim);
+  const turn = wrapAngle(Math.atan2(ax, az) - Math.atan2(fwd.x, fwd.z));
+  body.angularVelocity.y = clamp(turn * 8, -4, 4);
+  if (!k.vehicle.wheelInfos.some((w) => w.raycastResult.hasHit)) airLevel(k);
+}
+
 /* ==========================================================================
  * 5. RENDERING LOOP (sync meshes <- bodies, camera, effects, HUD)
  * ========================================================================== */
@@ -2905,7 +3211,7 @@ const interpQ = new THREE.Quaternion(), bodyP = new THREE.Vector3();
  * frames: the kart and camera visibly hitch even at a steady frame rate.
  */
 function syncMeshes() {
-  for (const { body, vehicle, group, wheelMeshes, spin } of karts) {
+  for (const { body, vehicle, group, wheelMeshes, spin, spinTotal, bullet } of karts) {
     group.position.copy(body.interpolatedPosition);
     group.quaternion.copy(body.interpolatedQuaternion);
     // wheel transforms come from the raw pose: move them by (interpolated pose) * (raw pose)^-1
@@ -2915,13 +3221,15 @@ function syncMeshes() {
     const spinning = spin > 0;
     if (spinning) {
       spinAxis.set(0, 1, 0).applyQuaternion(group.quaternion);
-      spinQ.setFromAxisAngle(spinAxis, (1 - spin / CFG.items.spinTime) * Math.PI * 4);
+      // two turns per spinTime (the blue shell's longer blast spins more)
+      spinQ.setFromAxisAngle(spinAxis, (1 - spin / spinTotal) * (spinTotal / CFG.items.spinTime) * Math.PI * 4);
       group.quaternion.premultiply(spinQ);
     }
     for (let i = 0; i < vehicle.wheelInfos.length; i++) {
       vehicle.updateWheelTransform(i);
       const t = vehicle.wheelInfos[i].worldTransform;
       const w = wheelMeshes[i];
+      w.visible = !(bullet > 0); // inside the bullet
       w.position.copy(t.position).sub(bodyP).applyQuaternion(interpQ).add(group.position);
       w.quaternion.copy(t.quaternion).premultiply(interpQ);
       if (spinning) {
@@ -2959,10 +3267,25 @@ function updateItemVisuals(dt) {
     shown = ITEM_TYPES[Math.floor(rouletteT * 14) % ITEM_TYPES.length];
   }
   if (hud.item.dataset.item !== shown) hud.item.dataset.item = shown;
+  const count = kart.item === 'triple' && kart.itemRoll <= 0 ? `x${kart.itemCount}` : '';
+  if (hud.item.dataset.count !== count) hud.item.dataset.count = count;
   hud.item.classList.toggle('ready', !!kart.item && kart.itemRoll <= 0);
 
-  // Red shell alarm
-  const warn = redShellWarning();
+  // Triple mushroom: what's left circles the kart
+  for (const k of karts) {
+    const want = k.item === 'triple' && k.itemRoll <= 0 ? k.itemCount : 0;
+    while (k.orbit.length > want) scene.remove(k.orbit.pop());
+    while (k.orbit.length < want) k.orbit.push(spawnModel('mushroom', k.group.position));
+    const gp = k.group.position;
+    k.orbit.forEach((m, i) => {
+      const a = itemClock * 4 + (i / 3) * Math.PI * 2;
+      m.position.set(gp.x + Math.cos(a) * 1.7, gp.y + 0.2, gp.z + Math.sin(a) * 1.7);
+      m.rotation.y = -a;
+    });
+  }
+
+  // Red / blue shell alarm
+  const warn = shellIncoming(kart);
   hud.warn.hidden = !warn;
   warnT -= dt;
   if (warn && warnT <= 0) { sound.warn(); warnT = 0.4; }
@@ -3032,6 +3355,29 @@ function updateEffects(dt) {
   for (const k of karts) {
     k.stars.visible = k.spin > 0;
     if (k.stars.visible) k.stars.rotation.y += dt * 7;
+    // Shield bubble (blinks for its last 1.5 s), bullet hull, star rainbow + sparkles
+    k.bubble.visible = k.shield > 0;
+    if (k.bubble.visible) {
+      // pops in with an elastic overshoot; flickers out over the last 1.5 s
+      const age = CFG.items.shieldTime - k.shield;
+      const grow = age < 0.45 ? 1 - Math.exp(-age * 9) * Math.cos(age * 18) : 1;
+      k.bubble.scale.copy(BUBBLE_SCALE).multiplyScalar(grow);
+      const u = k.bubble.material.uniforms;
+      u.time.value = itemClock;
+      u.fade.value = k.shield > 1.5 ? 1 : 0.35 + 0.65 * Math.abs(Math.sin(k.shield * 9));
+    }
+    k.hull.visible = k.bullet > 0;
+    k.bodyMesh.visible = !k.hull.visible;
+    const em = k.bodyMesh.material.emissive;
+    if (k.star > 0 && (k.star > 1 || Math.floor(k.star * 10) % 2 === 0)) {
+      em.setHSL((itemClock * 2.5) % 1, 1, 0.4);
+      if (Math.random() < dt * 30) {
+        const p = k.group.position;
+        emitP.set(p.x + (Math.random() - 0.5) * 2, p.y + Math.random() * 1.2, p.z + (Math.random() - 0.5) * 2);
+        emitV.set(0, 1.5, 0);
+        fx.emit(emitP, emitV, [1, 0.95, 0.5], { life: 0.4, size: 0.3, grow: 0, alpha: 1 });
+      }
+    } else if (em.r || em.g || em.b) em.setRGB(0, 0, 0);
 
     // Smoke + skid marks while drifting, dust on the grass; only near the camera (it's all small stuff)
     const near = k.group.position.distanceToSquared(camera.position) < 45 * 45;
@@ -3069,7 +3415,7 @@ function updateEffects(dt) {
       sp.visible = k.drifting;
       if (sp.visible) sp.scale.setScalar(0.6 + Math.random() * 0.8);
     }
-    const boosting = k.boost > 0;
+    const boosting = k.boost > 0 || k.bullet > 0;
     for (const f of k.flames) {
       f.visible = boosting || (driving && k.ctl.gas);
       const s = boosting ? 1 + Math.random() * 0.6 : 0.35 + Math.random() * 0.15;
@@ -3221,7 +3567,7 @@ document.addEventListener('visibilitychange', () => {
  */
 function warmUpShaders() {
   const extras = Object.keys(itemVis.models).map((kind) => spawnModel(kind, kart.body.position));
-  const shown = [...kart.sparks, ...kart.flames, kart.stars];
+  const shown = [...kart.sparks, ...kart.flames, kart.stars, kart.bubble, kart.hull];
   shown.forEach((o) => { o.visible = true; });
   syncMeshes();
   updateCamera(0);
@@ -3273,7 +3619,7 @@ function ordinal(n) {
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 24 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 27 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
 onResize();
 showMenu();

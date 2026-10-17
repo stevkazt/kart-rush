@@ -300,6 +300,38 @@ button { font: inherit; color: inherit; border: none; outline: none; padding: 0;
   background: radial-gradient(circle at 35% 30%, #9dffb0, #1d8f35);
 }
 #btn-item[data-item="red"]::before { background: radial-gradient(circle at 35% 30%, #ffb0a8, #c41f1c); }
+#btn-item[data-item="blue"]::before {
+  content: "";
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  border: 0.1em solid #fff;
+  background: radial-gradient(circle at 35% 30%, #b8d0ff, #1747c9);
+  box-shadow: -0.3em -0.15em 0 -0.12em #fff, 0.3em -0.15em 0 -0.12em #fff; /* little wings */
+}
+#btn-item[data-item="shield"]::before { content: "\1F6E1\FE0F"; }
+#btn-item[data-item="star"]::before { content: "\2B50"; }
+#btn-item[data-item="triple"]::before { content: "\1F344"; }
+#btn-item[data-item="bullet"]::before {
+  content: "";
+  width: 0.95em;
+  height: 0.55em;
+  border-radius: 0.1em 0.3em 0.3em 0.1em;
+  background: linear-gradient(90deg, #e8322f 0 18%, #2a2b33 18% 70%, #cfd3dc 70% 76%, #2a2b33 76%);
+  border: 0.06em solid #fff;
+}
+#btn-item[data-count]:not([data-count=""])::after {
+  content: attr(data-count);
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: #e8322f;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
 
 /* Red shell incoming */
 #warn {
