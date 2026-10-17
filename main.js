@@ -148,14 +148,26 @@ const CFG = {
     boostSpeed: 6,
   },
 
-  // Colours: [body, accent, driver]. Index 0 is the player.
+  // The six drivers. Colours: [body, accent, driver]. The player picks one on the title screen (Driver);
+  // the other five race as AI with their personality from ai.styles (Nova has the defaults).
   racers: [
-    { name: 'YOU', colors: [0xe8322f, 0xffd23a, 0x2f6bff] },
-    { name: 'Rex', colors: [0x2f6bff, 0xffffff, 0xffd23a] },
-    { name: 'Luna', colors: [0x9b4dff, 0x5cc8ff, 0xffffff] },
-    { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f] },
-    { name: 'Mako', colors: [0x2fbf4a, 0xffffff, 0x333333] },
-    { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff] },
+    { name: 'Nova', colors: [0xe8322f, 0xffd23a, 0x2f6bff], role: 'All-rounder', blurb: 'Balanced, no tricks' },
+    { name: 'Rex', colors: [0x2f6bff, 0xffffff, 0xffd23a], role: 'Ace', blurb: 'Fast lines, rarely slips' },
+    { name: 'Luna', colors: [0x9b4dff, 0x5cc8ff, 0xffffff], role: 'Defender', blurb: 'Blocks on the straights' },
+    { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f], role: 'Wild card', blurb: 'Flat out, all over the road' },
+    { name: 'Mako', colors: [0x2fbf4a, 0xffffff, 0x333333], role: 'Bully', blurb: 'Always armed, lays traps' },
+    { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff], role: 'Steady', blurb: 'Clean and patient' },
+  ],
+  // Kart paint for the player (Kart picker): [body, accent]; null = the driver's own colours. Looks only.
+  paints: [
+    { name: 'Team', colors: null },
+    { name: 'Midnight', colors: [0x1d2340, 0x5cc8ff] },
+    { name: 'Lime', colors: [0x8cdc2a, 0x1d1d1d] },
+    { name: 'Sunset', colors: [0xff7a1f, 0x9b4dff] },
+    { name: 'Chrome', colors: [0xc9ced8, 0xe8322f] },
+    { name: 'Mint', colors: [0x3fe0c5, 0xffffff] },
+    { name: 'Cherry', colors: [0xb0102a, 0xf2f2f2] },
+    { name: 'Coal', colors: [0x2a2b33, 0xffa21f] },
   ],
 
   grid: {
@@ -190,6 +202,7 @@ const CFG = {
     // Personalities, fixed per driver (user: wants the feeling "this guy is so annoying" / "this one is
     // really good"; each will get a matching look later). Anything left out comes from the defaults above.
     styles: {
+      Nova: { role: 'all-rounder' },
       Rex: { role: 'ace', skill: [1.04, 1.08], cornerGrip: [23.5, 25], lineUse: [0.85, 1], bias: 1, laneRange: 1,
         mistakeEvery: [20, 35], startDelay: [0.05, 0.15], overtake: 1, defend: 0.5, aggression: 0.4 },
       Luna: { role: 'defender', skill: [1.02, 1.06], cornerGrip: [23, 24.5], lineUse: [0.75, 0.95], bias: 1.5,
@@ -1208,7 +1221,9 @@ function buildSnow(data) {
   // ---- Far mountains with snow caps ----
   const peaks = baked((add) => {
     add(new THREE.ConeGeometry(1, 1, 6), 0x8fa3bd, 0, 0.5, 0);
-    add(new THREE.ConeGeometry(0.42, 0.42, 6), 0xf2f6fa, 0, 0.79, 0);
+    // cap is a touch wider and taller than the cone it sits on: an exact fit made its faces coplanar with
+    // the rock and they z-fought (flickered) at 300+ m
+    add(new THREE.ConeGeometry(0.46, 0.44, 6), 0xf2f6fa, 0, 0.80, 0);
   });
   const peakMesh = new THREE.InstancedMesh(peaks.geometry, peaks.material, 18);
   const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), ps = new THREE.Vector3(), pp = new THREE.Vector3();
@@ -1642,7 +1657,8 @@ const BUBBLE_MAT = new THREE.ShaderMaterial({
     }`,
 });
 
-const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0));
+const PAINT_ROLES = ['body', 'accent', 'driver']; // the kart parts paintKart recolours (see buildKart)
+const karts = CFG.racers.map((r, i) => makeRacer(r, i === 0)); // names + colours are set again by castDrivers
 const kart = karts[0];
 world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
 // Rails cost speed. 'collide' fires per contact point, before the solver (true impact speed); keep the
@@ -1659,12 +1675,36 @@ function makeRacer({ name, colors }, isPlayer) {
   return Object.assign(buildKart(colors), {
     skid: [{ x: 0, y: 0, z: 0, on: false }, { x: 0, y: 0, z: 0, on: false }], // last skid-mark point per rear wheel
     name, isPlayer,
-    color: '#' + colors[0].toString(16).padStart(6, '0'),
+    color: cssHex(colors[0]),
     ctl: { steer: 0, gas: false, brake: false }, // steer -1..1, positive = right
     topMult: 1,
     orbit: [], // triple mushroom meshes circling the kart
     ai: isPlayer ? null : {},
     ...freshDriveState(),
+  });
+}
+
+function cssHex(n) { return '#' + n.toString(16).padStart(6, '0'); }
+
+/** Recolours a baked kart in place: colors = [body, accent, driver]. */
+function paintKart(k, colors) {
+  const geo = k.bodyMesh.geometry, attr = geo.attributes.color, roles = geo.userData.paint, c = new THREE.Color();
+  for (let i = 0; i < roles.length; i++) {
+    if (roles[i] < 0) continue;
+    c.setHex(colors[roles[i]]);
+    attr.setXYZ(i, c.r, c.g, c.b);
+  }
+  attr.needsUpdate = true;
+  k.color = cssHex(colors[0]);
+}
+
+/** The player (karts[0]) becomes the picked driver in the picked paint; the other five drivers race as AI
+ * (their personality follows the name: newAI in placeOnGrid). */
+function castDrivers() {
+  const me = playerDriver();
+  [me, ...CFG.racers.filter((r) => r !== me)].forEach((r, i) => {
+    karts[i].name = r.name;
+    paintKart(karts[i], i === 0 ? playerColors() : r.colors);
   });
 }
 
@@ -1678,7 +1718,7 @@ function freshDriveState() {
   };
 }
 
-function buildKart([bodyColor, accentColor, driverColor]) {
+function buildKart(colors) {
   const K = CFG.kart;
 
   // --- Physics: chassis + raycast vehicle ---
@@ -1725,30 +1765,33 @@ function buildKart([bodyColor, accentColor, driverColor]) {
 
   // --- Visuals: chassis group ---
   const group = new THREE.Group();
+  // color is a number, or a paint role ('body' / 'accent' / 'driver') that paintKart can change later
   const add = (geo, color, x, y, z, parent = group) => {
-    const mesh = new THREE.Mesh(geo, lambert(color));
+    const role = PAINT_ROLES.indexOf(color);
+    const mesh = new THREE.Mesh(geo, lambert(role < 0 ? color : colors[role]));
+    mesh.userData.paint = role;
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     parent.add(mesh);
     return mesh;
   };
   const y0 = K.chassisYOffset;
-  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), bodyColor, 0, y0 - 0.1, 0);      // floor pan
-  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), bodyColor, 0, y0 + 0.05, 1.1);  // nose
+  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), 'body', 0, y0 - 0.1, 0);      // floor pan
+  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), 'body', 0, y0 + 0.05, 1.1);  // nose
   add(new THREE.BoxGeometry(1.9, 0.16, 0.25), 0x333333, 0, y0 - 0.12, 1.5);   // bumper
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), accentColor, 0.72, y0 + 0.05, 0); // side pods
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), accentColor, -0.72, y0 + 0.05, 0);
+  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', 0.72, y0 + 0.05, 0); // side pods
+  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', -0.72, y0 + 0.05, 0);
   add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6);   // seat back
   add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05); // engine
-  add(new THREE.CylinderGeometry(0.33, 0.4, 0.6, 8), driverColor, 0, y0 + 0.38, -0.3); // driver
+  add(new THREE.CylinderGeometry(0.33, 0.4, 0.6, 8), 'driver', 0, y0 + 0.38, -0.3); // driver
   const helmet = add(new THREE.IcosahedronGeometry(0.33, 1), 0xffffff, 0, y0 + 0.92, -0.3);
   add(new THREE.BoxGeometry(0.44, 0.15, 0.1), 0x1c2340, 0, 0.0, 0.29, helmet); // visor
-  add(new THREE.BoxGeometry(0.7, 0.07, 0.07), bodyColor, 0, 0.17, 0, helmet);   // stripe
+  add(new THREE.BoxGeometry(0.7, 0.07, 0.07), 'body', 0, 0.17, 0, helmet);   // stripe
   const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2);
   wheel.rotation.x = -0.9;
   add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, 0.6, y0 + 0.35, -1.35);  // spoiler struts
   add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, -0.6, y0 + 0.35, -1.35);
-  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), accentColor, 0, y0 + 0.6, -1.4);    // spoiler
+  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), 'accent', 0, y0 + 0.6, -1.4);    // spoiler
 
   // Exhaust + boost flame
   const pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 6);
@@ -1865,20 +1908,21 @@ function bakeMeshes(group, keep = []) {
   group.updateMatrixWorld(true);
   const parts = [];
   group.traverse((o) => { if (o.isMesh && !keep.includes(o)) parts.push(o); });
-  const pos = [], nor = [], col = [];
+  const pos = [], nor = [], col = [], paint = [];
   for (const m of parts) {
     const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
     const flat = g.index ? g.toNonIndexed() : g;
     pos.push(...flat.attributes.position.array);
     nor.push(...flat.attributes.normal.array);
     const { r, g: gr, b } = m.material.color;
-    for (let i = 0; i < flat.attributes.position.count; i++) col.push(r, gr, b);
+    for (let i = 0; i < flat.attributes.position.count; i++) { col.push(r, gr, b); paint.push(m.userData.paint ?? -1); }
   }
   for (const m of parts) m.removeFromParent();
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.userData.paint = paint; // per vertex: index into PAINT_ROLES, -1 = fixed colour (see paintKart)
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
   mesh.castShadow = true;
   group.add(mesh);
@@ -2124,7 +2168,8 @@ const hud = {
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
   item: $('btn-item'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
-  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), knob: $('stick-knob'),
+  pauseScreen: $('pause-screen'), settingsScreen: $('settings-screen'), knob: $('stick-knob'), pickScreen: $('pick-screen'),
+  helloScreen: $('hello-screen'),
 };
 
 const minimap = buildMinimap();
@@ -2160,6 +2205,24 @@ function buildMinimap() {
   };
   map.project = (x, z) => [map.ox + (x - map.minX) * map.scale, map.oz + (z - map.minZ) * map.scale];
   return map;
+}
+
+// Menu buttons fire on pointer release over the button, not on 'click': iOS sometimes drops the
+// click it synthesises from a tap (slight finger roll, page busy, hover heuristics), so START
+// needed a second tap. detail === 0 clicks (keyboard, tests calling .click()) still work.
+// A finger that travelled more than 10 px is a swipe (the picker strips scroll), not a tap.
+function onTap(el, fn) {
+  let down = null, x0 = 0, y0 = 0;
+  el.addEventListener('pointerdown', (e) => { down = e.pointerId; x0 = e.clientX; y0 = e.clientY; });
+  el.addEventListener('pointerup', (e) => {
+    if (down !== e.pointerId) return;
+    down = null;
+    if (Math.hypot(e.clientX - x0, e.clientY - y0) > 10) return;
+    const r = el.getBoundingClientRect();
+    if (e.clientX >= r.left - 12 && e.clientX <= r.right + 12 && e.clientY >= r.top - 12 && e.clientY <= r.bottom + 12) fn();
+  });
+  el.addEventListener('pointercancel', () => { down = null; });
+  el.addEventListener('click', (e) => { if (e.detail === 0) fn(); });
 }
 
 /* ==========================================================================
@@ -2240,29 +2303,13 @@ function initControls() {
   hud.item.addEventListener('pointerdown', (e) => { e.preventDefault(); input.item = true; hud.item.classList.add('pressed'); });
   ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => hud.item.addEventListener(t, () => hud.item.classList.remove('pressed')));
 
-  // Menu buttons fire on pointer release over the button, not on 'click': iOS sometimes drops the
-  // click it synthesises from a tap (slight finger roll, page busy, hover heuristics), so START
-  // needed a second tap. detail === 0 clicks (keyboard, tests calling .click()) still work.
-  const onTap = (el, fn) => {
-    let down = null;
-    el.addEventListener('pointerdown', (e) => { down = e.pointerId; });
-    el.addEventListener('pointerup', (e) => {
-      if (down !== e.pointerId) return;
-      down = null;
-      const r = el.getBoundingClientRect();
-      if (e.clientX >= r.left - 12 && e.clientX <= r.right + 12 && e.clientY >= r.top - 12 && e.clientY <= r.bottom + 12) fn();
-    });
-    el.addEventListener('pointercancel', () => { down = null; });
-    el.addEventListener('click', (e) => { if (e.detail === 0) fn(); });
-  };
-  for (const [id, t] of Object.entries(CFG.tracks)) {
-    const b = document.createElement('button');
-    b.className = 'trk';
-    b.dataset.track = id;
-    b.innerHTML = `<i>${t.icon}</i>${t.name}`;
-    onTap(b, () => { sound.click(); selectTrack(id); });
-    $('track-pick').append(b);
-  }
+  for (const row of document.querySelectorAll('.pick-row')) onTap(row, () => { sound.click(); openPicker(row.dataset.pick); });
+  onTap($('btn-pick-done'), () => { sound.click(); showMenu(); });
+  onTap($('btn-hello'), submitHello);
+  $('hello-form').addEventListener('submit', (e) => { e.preventDefault(); submitHello(); });
+  $('hello-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('hello-age').focus(); } });
+  $('hello-age').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, ''); });
+  onTap($('hello-edit'), () => { sound.click(); showHello(); });
   onTap($('btn-start'), startRace);
   onTap($('btn-again'), startRace);
   onTap($('btn-menu'), () => { sound.click(); showMenu(); });
@@ -2279,22 +2326,16 @@ function initControls() {
     setVolume(pick.dataset.bus, savedVolume(pick.dataset.bus), false);
   }
 
-  // --- Sound: mute toggle; any touch re-wakes audio that iOS suspended (calls, app switch)
-  const muteBtn = $('btn-mute');
-  const showMute = () => { muteBtn.classList.toggle('off', sound.muted); muteBtn.setAttribute('aria-pressed', sound.muted); };
-  muteBtn.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (!state.paused) sound.unlock();
-    sound.setMuted(!sound.muted);
-    showMute();
-  });
+  // --- Sound: on/off in Settings (sound.js remembers it); any touch re-wakes audio that iOS suspended (calls, app switch)
+  const showMute = () => { for (const b of $('mute-pick').children) b.classList.toggle('on', (b.dataset.muted === '1') === sound.muted); };
+  for (const b of $('mute-pick').children) onTap(b, () => { sound.setMuted(b.dataset.muted === '1'); showMute(); sound.click(); });
   showMute();
   // (also the first tap on the title screen, which starts its music: iOS allows no sound before a tap)
   document.addEventListener('pointerdown', () => { if (!state.paused) sound.unlock(); });
 
   // --- Block browser gestures (scroll, pinch, double-tap zoom, long-press menu) ---
   const block = (e) => e.preventDefault();
-  document.addEventListener('touchmove', block, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.pick-list')) e.preventDefault(); }, { passive: false });
   document.addEventListener('gesturestart', block);
   document.addEventListener('gesturechange', block);
   document.addEventListener('gestureend', block);
@@ -2314,6 +2355,7 @@ function initControls() {
     input.right = keys.has('ArrowRight') || keys.has('KeyD');
   };
   window.addEventListener('keydown', (e) => {
+    if (e.target.closest?.('input')) return; // typing on the hello screen
     keys.add(e.code); updateKeys();
     if (e.code === 'KeyR') input.reset = true;
     if (e.code === 'Space' || e.code === 'KeyE') input.item = true;
@@ -2600,7 +2642,8 @@ function selectTrack(id) {
   if (track.id === id) return;
   try { localStorage.setItem(TRACK_KEY, id); } catch { /* storage blocked */ }
   loadTrack(id);
-  showMenu();
+  placeOnGrid();
+  camState.snap = true;
   warmUpShaders(); // the new track's materials, before the race needs them
 }
 
@@ -2617,7 +2660,10 @@ function showMenu() {
   hud.menuRecord.hidden = !rec.race;
   if (rec.race) hud.menuRecord.textContent = `Your record ${fmtTime(rec.race)} · best lap ${fmtTime(rec.lap)}`;
   hud.confetti.replaceChildren();
-  for (const b of $('track-pick').children) b.classList.toggle('on', b.dataset.track === track.id);
+  refreshPickRows();
+  if (!profile) return showHello(); // first launch: name + age before anything else
+  $('hello-edit').hidden = false;
+  $('hello-edit').textContent = `Hi, ${profile.name}! \u270F\uFE0F`;
   showOverlay(hud.menuScreen);
 }
 
@@ -2647,6 +2693,157 @@ function updateWrongWay(dt) {
   if (hud.wrongway.hidden === show) hud.wrongway.hidden = !show;
 }
 const wrongFwd = new CANNON.Vec3();
+
+// ---------- Player profile (per device): name + age, asked once on the hello screen; EDIT from the title ----------
+const PROFILE_KEY = 'kartrush.profile';
+function loadProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY));
+    if (typeof p?.name === 'string' && p.name && Number.isInteger(p.age)) return p;
+  } catch { /* storage blocked or bad JSON */ }
+  return null;
+}
+let profile = loadProfile(); // null until the hello screen is filled in (kept in memory if storage is blocked)
+function showHello() {
+  $('hello-name').value = profile?.name ?? '';
+  $('hello-age').value = profile?.age ?? '';
+  $('hello-error').textContent = '';
+  showOverlay(hud.helloScreen);
+}
+function submitHello() {
+  const name = $('hello-name').value.trim().replace(/\s+/g, ' '), age = parseInt($('hello-age').value, 10);
+  const error = !name ? 'Type your name' : !(age >= 3 && age <= 120) ? 'Type your age (a number)' : '';
+  $('hello-error').textContent = error;
+  if (error) { (name ? $('hello-age') : $('hello-name')).focus(); return; }
+  sound.click();
+  profile = { name, age };
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch { /* storage blocked */ }
+  document.activeElement?.blur(); // drop the keyboard
+  showMenu();
+}
+
+// ---------- Title screen picks (per device): track, driver (karts[0] races as them), kart paint ----------
+const DRIVER_KEY = 'kartrush.driver', PAINT_KEY = 'kartrush.paint';
+function savedPick(key, list) {
+  let v = null;
+  try { v = localStorage.getItem(key); } catch { /* storage blocked */ }
+  return list.some((o) => o.name === v) ? v : list[0].name;
+}
+const picks = { driver: savedPick(DRIVER_KEY, CFG.racers), paint: savedPick(PAINT_KEY, CFG.paints) };
+function playerDriver() { return CFG.racers.find((r) => r.name === picks.driver); }
+function playerColors(paint = picks.paint) {
+  const d = playerDriver(), p = CFG.paints.find((o) => o.name === paint).colors;
+  return p ? [p[0], p[1], d.colors[2]] : d.colors;
+}
+
+/** Side view of a kart in [body, accent, driver] colours. */
+function kartSvg([body, accent, driver]) {
+  const [b, a, d] = [body, accent, driver].map(cssHex);
+  return `<svg class="kart-art" viewBox="0 0 72 44" aria-hidden="true">
+    <rect x="3" y="9" width="15" height="4" rx="1.5" fill="${a}"/><rect x="9" y="12" width="3" height="10" fill="#555"/>
+    <path d="M8 22 H50 L64 25 Q67 26 67 29 V32 H6 Q4 32 4 29 V25 Q4 22 8 22 Z" fill="${b}"/>
+    <rect x="22" y="20" width="22" height="7" rx="2" fill="${a}"/>
+    <rect x="28" y="11" width="11" height="12" rx="3" fill="${d}"/>
+    <circle cx="34" cy="8" r="6.5" fill="#fff"/><rect x="35" y="6" width="6.5" height="3.5" rx="1.5" fill="#1c2340"/>
+    <rect x="28" y="3.2" width="11" height="1.8" fill="${b}"/>
+    <rect x="62" y="29" width="7" height="3" rx="1" fill="#333"/>
+    <circle cx="15" cy="34" r="7.5" fill="#222"/><circle cx="15" cy="34" r="3" fill="#777"/>
+    <circle cx="55" cy="35" r="6.5" fill="#222"/><circle cx="55" cy="35" r="2.6" fill="#777"/>
+  </svg>`;
+}
+
+/** Outline + length of a layout (cached), from its control points like buildTrack. */
+const trackShapes = {};
+function trackShape(id) {
+  if (trackShapes[id]) return trackShapes[id];
+  const curve = new THREE.CatmullRomCurve3(
+    CFG.tracks[id].points.map(([x, z, y = 0]) => new THREE.Vector3(x, y, z)), true, 'centripetal');
+  const pts = curve.getSpacedPoints(160);
+  const xs = pts.map((p) => p.x), zs = pts.map((p) => p.z);
+  const minX = Math.min(...xs), minZ = Math.min(...zs), w = Math.max(...xs) - minX, h = Math.max(...zs) - minZ;
+  const W = 100, H = 64, pad = 7, sc = Math.min((W - pad * 2) / w, (H - pad * 2) / h);
+  const ox = (W - w * sc) / 2, oz = (H - h * sc) / 2;
+  const xy = (p) => `${(ox + (p.x - minX) * sc).toFixed(1)} ${(oz + (p.z - minZ) * sc).toFixed(1)}`;
+  const d = 'M' + pts.map(xy).join(' L') + ' Z';
+  return (trackShapes[id] = {
+    length: Math.round(curve.getLength()),
+    svg: `<svg class="track-art" viewBox="0 0 ${W} ${H}" aria-hidden="true"><path d="${d}" class="road-edge"/>
+      <path d="${d}" class="road"/><circle cx="${xy(pts[0]).split(' ')[0]}" cy="${xy(pts[0]).split(' ')[1]}" r="3.2" class="start"/></svg>`,
+  });
+}
+function recordText(id) {
+  const rec = loadRecords()[id];
+  return rec?.race ? `Record ${fmtTime(rec.race)}` : 'No record yet';
+}
+
+/** The three rows on the title screen show what's picked. */
+function refreshPickRows() {
+  const row = (kind, art, name, sub) => {
+    const el = document.querySelector(`.pick-row[data-pick="${kind}"]`);
+    el.querySelector('.pick-art').innerHTML = art;
+    el.querySelector('b').textContent = name;
+    el.querySelector('em').textContent = sub;
+  };
+  const t = CFG.tracks[track.id], d = playerDriver();
+  row('track', trackShape(track.id).svg, t.name, `${trackShape(track.id).length} m · ${CFG.laps} laps`);
+  row('driver', kartSvg(d.colors), d.name, d.role);
+  row('kart', kartSvg(playerColors()), picks.paint === 'Team' ? `${d.name}'s colours` : picks.paint, 'Paint');
+  document.querySelector('.pick-row[data-pick="track"]').dataset.theme = t.theme;
+}
+
+/** Picker screen for 'track' | 'driver' | 'kart': tapping a card picks it straight away; DONE goes back. */
+function openPicker(kind) {
+  const list = $('pick-list');
+  list.className = `pick-list pick-${kind}`;
+  $('pick-title').textContent = { track: 'CHOOSE A TRACK', driver: 'CHOOSE YOUR DRIVER', kart: 'PAINT YOUR KART' }[kind];
+  const options = {
+    track: () => Object.entries(CFG.tracks).map(([id, t]) => ({
+      on: () => track.id === id, theme: t.theme, pick: () => selectTrack(id),
+      html: `${trackShape(id).svg}<b><i>${t.icon}</i>${t.name}</b><small>${trackShape(id).length} m · ${recordText(id)}</small>`,
+    })),
+    driver: () => CFG.racers.map((r) => ({
+      on: () => picks.driver === r.name,
+      pick: () => {
+        picks.driver = r.name;
+        try { localStorage.setItem(DRIVER_KEY, r.name); } catch { /* storage blocked */ }
+        castDrivers();
+        placeOnGrid();
+      },
+      html: `${kartSvg(r.colors)}<span><b>${r.name}</b><small class="role">${r.role}</small><small>${r.blurb}</small></span>`,
+    })),
+    kart: () => CFG.paints.map((p) => ({
+      on: () => picks.paint === p.name,
+      pick: () => {
+        picks.paint = p.name;
+        try { localStorage.setItem(PAINT_KEY, p.name); } catch { /* storage blocked */ }
+        paintKart(kart, playerColors());
+      },
+      html: `${kartSvg(playerColors(p.name))}<b>${p.name === 'Team' ? `${playerDriver().name}'s` : p.name}</b>`,
+    })),
+  }[kind]();
+  const cards = options.map((o) => {
+    const b = document.createElement('button');
+    b.className = 'pick-card';
+    if (o.theme) b.dataset.theme = o.theme;
+    b.innerHTML = o.html;
+    onTap(b, () => {
+      sound.click();
+      o.pick();
+      cards.forEach((c, i) => c.classList.toggle('on', options[i].on()));
+    });
+    return b;
+  });
+  cards.forEach((c, i) => c.classList.toggle('on', options[i].on()));
+  // one swipeable strip (tracks: one row; drivers / paints: two), so more tracks and drivers just extend it
+  const grid = document.createElement('div');
+  grid.className = 'pick-grid';
+  grid.append(...cards);
+  list.replaceChildren(grid);
+  showOverlay(hud.pickScreen);
+  list.scrollLeft = 0;
+  list.classList.toggle('scrolls', list.scrollWidth > list.clientWidth + 2);
+  cards.find((c) => c.classList.contains('on'))?.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
 
 // ---------- Settings (per device). Steering: 'buttons' (the two arrows) or 'joystick' (analogue). ----------
 const STEER_KEY = 'kartrush.steering';
@@ -2680,7 +2877,7 @@ function teleStart() {
   tele.nextT = 0;
   tele.race = {
     build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id,
-    steering: savedSteering(), laps: CFG.laps,
+    steering: savedSteering(), laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
     karts: karts.map((k) => ({ name: k.name, ...(k.ai && { role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
       lineUse: +k.ai.lineUse.toFixed(2) }) })),
     // every second: t, then per kart [metres raced, km/h, place, AI target speed as % of top], then the player's
@@ -2720,7 +2917,7 @@ function releaseStick() {
 
 /** Shows one overlay screen (menu / results / pause / settings) and hides the HUD behind it. */
 function showOverlay(screen) {
-  for (const el of [hud.menuScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen]) el.hidden = el !== screen;
+  for (const el of [hud.menuScreen, hud.helloScreen, hud.pickScreen, hud.resultsScreen, hud.pauseScreen, hud.settingsScreen]) el.hidden = el !== screen;
   hud.wrongway.hidden = true;
   app.classList.add('overlay-on');
   hud.overlay.classList.remove('hidden');
@@ -2757,7 +2954,7 @@ function showResults() {
     // rows only animate the first time, not on every refresh
     return `<tr class="${k.isPlayer ? 'me' : ''}" style="${first ? `animation-delay:${0.15 + i * 0.07}s` : 'animation:none'}">
       <td class="pos ${medal[k.place - 1] || ''}"><i>${k.place}</i></td>
-      <td class="name"><i class="swatch" style="background:${k.color}"></i>${k.isPlayer ? 'YOU' : k.name}</td>
+      <td class="name"><i class="swatch" style="background:${k.color}"></i>${k.isPlayer ? escapeHtml(profile?.name || 'YOU') : k.name}</td>
       <td class="gap ${k.finished ? '' : 'wait'}">${gap}</td>
     </tr>`;
   }).join('');
@@ -4090,11 +4287,14 @@ function ordinal(n) {
   return n + s;
 }
 
+function escapeHtml(t) { return t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`); }
+
 function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
 // ---------- Boot ----------
-$('build').textContent = `build 30 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
+$('build').textContent = `build 31 · ${location.host || 'local'}${navigator.standalone ? ' · app' : ''}${perf.on ? ' · meter on' : ''}`; // bump with sw.js VERSION
 loadTrack(savedTrack());
+castDrivers();
 onResize();
 showMenu();
 warmUpShaders();

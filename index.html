@@ -72,35 +72,48 @@
       </div>
 
       <button id="btn-reset" aria-label="Reset kart">&#x21BB;</button>
-      <button id="btn-mute" class="round-btn" aria-label="Mute sound"></button>
       <button id="btn-pause" class="round-btn" aria-label="Pause"></button>
     </div>
 
     <!-- ===== Menu / results overlay ===== -->
     <div id="overlay">
-      <!-- Title screen -->
+      <!-- Title screen: start on the left, the three picks (each opens #pick-screen) on the right -->
       <div id="menu-screen" class="screen">
         <div class="side">
           <h1>KART<span>RUSH</span></h1>
+          <button id="hello-edit" class="greeting" hidden></button>
           <p class="tagline">3 laps &middot; 5 rivals &middot; you start last</p>
-          <div id="track-pick" class="track-pick"></div>
           <button id="btn-start" class="btn-primary">START RACE</button>
           <button class="btn-small btn-settings">&#9881;&#65039; SETTINGS</button>
           <p class="record" id="menu-record" hidden></p>
         </div>
         <p id="build"></p>
-        <div class="card howto">
-          <h2>HOW TO PLAY</h2>
-          <ul>
-            <li><span class="key">&#9664; &#9654;</span><span>Steer</span></li>
-            <li><span class="key key-gas">GAS</span><span>Go &middot; <b>BRAKE</b> stops, then reverses</span></li>
-            <li><span class="key">?</span><span>Drive through boxes, then tap <b>ITEM</b></span></li>
-            <li><span class="key">&#127812; &#127820;</span><span>Boost &middot; banana drops behind &middot; shells fly ahead (red ones home in)</span></li>
-            <li><span class="key">&#128737;&#65039; &#11088;</span><span>Shield blocks one hit &middot; star and bullet: unstoppable &middot; the blue shell hunts the leader</span></li>
-            <li><span class="key key-orange">&#9650;</span><span>Orange pads give a boost</span></li>
-            <li><span class="key key-orange">&#10022;</span><span>Hold a hard turn at speed: orange sparks = mini-turbo</span></li>
-          </ul>
+        <div class="card picks">
+          <button class="pick-row" data-pick="track"><span class="pick-art"></span><span class="pick-text"><small>TRACK</small><b></b><em></em></span><span class="chev">&#8250;</span></button>
+          <button class="pick-row" data-pick="driver"><span class="pick-art"></span><span class="pick-text"><small>DRIVER</small><b></b><em></em></span><span class="chev">&#8250;</span></button>
+          <button class="pick-row" data-pick="kart"><span class="pick-art"></span><span class="pick-text"><small>KART</small><b></b><em></em></span><span class="chev">&#8250;</span></button>
         </div>
+      </div>
+
+      <!-- First launch (or EDIT from the title): name + age, saved per device (kartrush.profile) -->
+      <div id="hello-screen" class="screen screen-col" hidden>
+        <div class="pick-title">HELLO, RACER!</div>
+        <form id="hello-form" class="hello-form" autocomplete="off" novalidate>
+          <label class="field"><span class="setting-label">YOUR NAME</span>
+            <input id="hello-name" type="text" maxlength="12" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="next" placeholder="Name"></label>
+          <label class="field field-age"><span class="setting-label">AGE</span>
+            <input id="hello-age" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" enterkeyhint="go" placeholder="Age"></label>
+          <button type="submit" hidden></button>
+        </form>
+        <p id="hello-error" class="hello-error"></p>
+        <button id="btn-hello" class="btn-primary">LET'S RACE</button>
+      </div>
+
+      <!-- Track / driver / kart picker (filled by openPicker) -->
+      <div id="pick-screen" class="screen screen-col" hidden>
+        <div id="pick-title" class="pick-title"></div>
+        <div id="pick-list" class="pick-list"></div>
+        <button id="btn-pick-done" class="btn-primary">DONE</button>
       </div>
 
       <!-- After the race -->
@@ -135,12 +148,21 @@
       <div id="settings-screen" class="screen" hidden>
         <div class="side">
           <div class="paused">SETTINGS</div>
+          <div class="setting-row">
           <div class="setting">
             <span class="setting-label">STEERING</span>
             <div id="steer-pick" class="track-pick">
               <button class="trk" data-steer="buttons"><i>&#9664;&#9654;</i>Buttons</button>
               <button class="trk" data-steer="joystick"><i>&#128377;&#65039;</i>Joystick</button>
             </div>
+          </div>
+          <div class="setting">
+            <span class="setting-label">ALL SOUND</span>
+            <div id="mute-pick" class="track-pick">
+              <button class="trk" data-muted="0"><i>&#128266;</i>On</button>
+              <button class="trk" data-muted="1"><i>&#128263;</i>Off</button>
+            </div>
+          </div>
           </div>
           <div class="setting-row">
           <div class="setting">

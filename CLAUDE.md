@@ -25,9 +25,10 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 
 ## Files
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
-- Overlay = `#menu-screen` (title + how to play) and `#results-screen` (place, time, best lap, standings with gaps,
-  RACE AGAIN / MENU, confetti on a win). `showMenu()` / `showResults()`; `#app.overlay-on` hides HUD + controls
-  (mute stays). Records in localStorage `kartrush.records` `{race, lap}`. Engines duck (`soundMix.duck`) behind menus.
+- Overlay = `#menu-screen` (title, START, SETTINGS, and three pick rows TRACK / DRIVER / KART that open
+  `#pick-screen`; the how-to-play card was removed in build 31) and `#results-screen` (place, time, best lap, standings with gaps,
+  RACE AGAIN / MENU, confetti on a win). `showMenu()` / `showResults()`; `#app.overlay-on` hides HUD + controls.
+  Records in localStorage `kartrush.records` `{race, lap}`. Engines duck (`soundMix.duck`) behind menus.
   `#pause-screen` (RESUME / RESTART / MENU): `pauseGame()` from the pause button, Esc/P, or the app going to the
   background; the loop skips physics + render while `state.paused`, audio is suspended. All screens go through
   `showOverlay(screen)`. Lap counter `#lapbox` sits under the minimap (build 19; turns yellow on the final lap). HUD also has WRONG WAY (`updateWrongWay`: facing and moving backwards > 1 s) and a lap
@@ -35,7 +36,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - **Tracks (build 20):** `CFG.tracks` = layouts (`meadow` "Green Valley", `canyon` "Canyon Run"), each with
   its theme, box rows and pads. `loadTrack(id)` tears down `trackRoot` (all track meshes) + `trackBodies` and
   rebuilds `track`, `itemVis`, `theme`, the minimap; `track`, `itemVis`, `theme` are `let`. Picker on the title
-  screen (`#track-pick`, `selectTrack`), remembered in localStorage `kartrush.track`; `?track=canyon` in the URL
+  screen (TRACK row -> `openPicker`, `selectTrack`), remembered in localStorage `kartrush.track`; `?track=canyon` in the URL
   wins. Records are per track: `kartrush.records` `{ meadow: {race, lap}, canyon: {...} }` (the old flat record
   became the meadow's). `THEMES` (section 1c-2): palette (road/curb/rail/arch), sky/fog/lights (`applyTheme`),
   `build(track)` -> `{ update(dt) }` called every frame for animated scenery.
@@ -87,10 +88,29 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   #app from `screen.*`. Now testing status-bar-style `black` instead of `black-translucent` (the page starts below
   the status bar). Real landscape (rotation unlocked) never had the bug. The title screen shows `build N · host · app` (bump N with `sw.js` VERSION): if the
   phone shows an old N, it is running a stored copy (the home-screen app once never contacted the server at all).
+- **Title picks (build 31):** `openPicker('track' | 'driver' | 'kart')` fills `#pick-list` with cards in one
+  horizontally swipeable strip (`.pick-grid`, tracks 1 row, drivers / paints 2 rows; edges fade when it
+  overflows), so new tracks / drivers just extend it. A tap picks at once; DONE -> `showMenu()`. `onTap` ignores a
+  finger that moved > 10 px (swipes), and the global touchmove block exempts `.pick-list`. Track cards: outline
+  drawn from the control points (`trackShape`, cached; length), theme tint (`data-theme`), record.
+  **Driver:** `CFG.racers` = 6 named drivers (Nova, the old red "YOU" kart, has the default AI style), each with
+  `role` + `blurb` for the card. `karts[0]` is still the player; `castDrivers()` makes it the picked driver and
+  gives the other five the remaining names + colours (AI personality follows the name in `placeOnGrid`). Standings
+  still say YOU. **Kart:** `CFG.paints` = body + accent schemes (`Team` = the driver's own; suit stays the
+  driver's). Looks only. `paintKart(k, colors)` recolours the baked mesh in place: `buildKart` tags parts with a
+  role ('body' / 'accent' / 'driver', `PAINT_ROLES`) and `bakeMeshes` keeps it per vertex
+  (`geometry.userData.paint`). Saved: `kartrush.driver`, `kartrush.paint`; telemetry has `player: {driver, paint}`
+  and real driver names (index 0 = player). Kart/driver art on the cards = `kartSvg(colors)` (side view).
+- **Hello screen (build 31):** `#hello-screen` asks name + age when `kartrush.profile` (`{name, age}`) isn't saved:
+  `showMenu()` sends you there while `profile` is null. `submitHello` checks them (name 1-12 chars, age 3-120) and
+  saves. Name = "Hi, <name>!" button on the title (tap to edit) and replaces YOU in the standings (`escapeHtml`).
+  Age is stored only, not used yet. Inputs re-enable `user-select` (iOS won't type otherwise) and the game's
+  keydown handler ignores keys typed in an input.
 - **Settings (build 28):** `#settings-screen`, opened by the `.btn-settings` buttons on the title and pause screens
   (`showSettings`; BACK returns to `settingsFrom`). Only option so far: **steering** `buttons` (the two arrows) or
   `joystick`, saved in localStorage `kartrush.steering` (`setSteering`, `savedSteering`; `#app.steer-joystick`
-  swaps `#steer` for `#joystick`). Joystick = knob in a base where the arrows were; analogue `input.axis` -1..1 from
+  swaps `#steer` for `#joystick`). ALL SOUND On/Off (`#mute-pick`, `sound.setMuted`) replaced the
+  in-race mute button (build 31); the pause button moved into its corner slot. Joystick = knob in a base where the arrows were; analogue `input.axis` -1..1 from
   the knob's sideways offset only (`CFG.controls.stickDeadZone` 0.12, full lock at `stickFull` 0.85 of the radius),
   springs back on release (`releaseStick`, also on pause). Portrait: screen offsets are turned 90deg back into
   the game's frame. `ctl.steer = clamp(arrows/keys + input.axis)`, so the steering ramp and lock are the same for
@@ -105,7 +125,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - `sound.js`: all audio, synthesised with WebAudio (no assets). `sound.unlock()` runs on the Start tap (iOS needs a
   gesture; also sets `navigator.audioSession.type = 'playback'` so the silent switch doesn't mute it). Player engine
   + one engine voice per AI (panned, faded by distance), drift squeal, SFX one-shots, a step-sequenced chiptune
-  loop during the race, and a mute toggle (top right, saved in localStorage).
+  loop during the race, and mute (Settings -> ALL SOUND, saved in localStorage).
 - **Items:** 3 rows of `?` boxes, 3 boost pads (`CFG.items`). Items: mushroom (boost), banana (dropped behind),
   green shell (straight, bounces off walls), red shell (follows the track, homes in on its target). Odds depend
   on race position. AI red shells lock onto the player whenever the player is ahead within `aiTargetPlayer` m;
@@ -380,9 +400,17 @@ Suggested order: 1, then 2 after the user plays a few races with 1; 3 only if th
 **Small fixes still open:** landing after the canyon jump (user and AIs get stuck / flip there, ~idx 1100-1140);
 shells keep hitting the player after they cross the line (ignore finished karts as targets / hits).
 
+**Build 31 (2026-10-17, not committed yet):** Frost Peak far-peak flicker fixed (snow cap was coplanar with the
+rock cone: z-fighting; user confirmed). GUI: title picks (track / driver / kart paint), how-to-play removed, mute
+moved into Settings. Not tried on the phone yet.
+
+**Note (user 2026-10-17): remove the side rails.** They make every track look the same. Not started; the rails
+are also the walls karts collide with (+ rail reset, `wallHitLoss`, AI recovery, jump `jumpWallHeight`), so
+removing them means deciding what keeps karts on the road instead (off-road slowdown? per-theme edges like snow
+banks, rocks, fences, barriers only where needed). Ask before starting.
+
 **Next**, roughly in order (agreed 2026-10-16):
 - Another themed track: Frost Peak built (build 30, above); waiting for the phone test.
-- Kart colour picker (body / trim / driver).
 - **Driver looks matching their personalities** (user, 2026-10-17: will give them styles later): Rex the ace,
   Luna the defender, Mako the bully, Pip the steady one, Bolt the wild card. Each kart + driver should read as
   its character at a glance (colours, shape, maybe a signature part), and the name should show where it
