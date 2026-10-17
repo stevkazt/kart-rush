@@ -2530,7 +2530,7 @@ function initControls() {
 
   // --- Block browser gestures (scroll, pinch, double-tap zoom, long-press menu) ---
   const block = (e) => e.preventDefault();
-  document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.pick-list')) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (!e.target.closest?.('.pick-list, #debug-card')) e.preventDefault(); }, { passive: false });
   // split stage: drag sideways to turn the 3D kart (it swings gently by itself again after a few seconds)
   const stageEl = $('pick-stage');
   stageEl.addEventListener('pointerdown', (e) => {
