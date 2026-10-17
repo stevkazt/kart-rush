@@ -138,9 +138,11 @@ const CFG = {
     steerYawSlack: 0.15,    // ...plus this much at full lock
     driftYawSlack: 0.2,     // ...plus this much while drifting
     maxYawRate: 3.0,
-    wallHitLoss: 0.02,      // rails: share of speed lost per m/s of impact into the rail...
-    wallHitMax: 0.35,       // ...capped here (a 30deg hit at top speed costs ~25% on top of the bounce)
-    wallScrape: 0.35,       // share of speed lost per second sliding along a rail (~9 m/s^2 at top speed,
+    wallHitLoss: 0.01,      // rails: share of speed lost per m/s of impact into the rail...
+    wallHitMax: 0.15,       // ...capped here (was 0.35; cut in half after a friend said rails brake too hard)
+    railPush: 2,            // m/s the solver may still push a kart out of a rail (frees it when sunk in; more = bouncier)
+    railTurn: 8,            // rad/s^2 swinging a nose-into-the-rail kart along it (build 45: head-on hits stopped it dead / flipped it)
+    wallScrape: 0.2,        // share of speed lost per second sliding along a rail (~9 m/s^2 at top speed,
                             // little when crawling off it; rails had no friction: free to lean on)
 
     miniTurboTime: 1.1,     // seconds of drift needed for a boost
@@ -204,6 +206,7 @@ const CFG = {
     skill: [0.97, 1.05],    // fraction of top speed each AI aims for (rolled per race). Was 0.88-0.98 with a
                             // rubber band; with it gone (build 29) the user's clean laps were ~10% quicker
                             // than the AIs' (meadow 29.5-30 s vs 32.3-35), and the player gets boosts on top
+    easeFrom: 30, easeFull: 150, // rubber band range; strength per difficulty (DIFF)
     cornerGrip: [20, 25],   // lateral accel (m/s^2) each AI dares in corners (rolled per race; kart limit ~22 at speed)
     laneRange: 2.5,         // how far an AI wanders either side of its own line (m)
     lineUse: [0.15, 0.85],  // how much of the racing line each AI takes (rolled per race; 0 = centre line)
@@ -308,7 +311,7 @@ const CFG = {
     lookAhead: 8,      // look-at point down the road: the view centre sits ~16 deg down, so the ear tips (ray
     lookHeight: -0.1,  // ~19 deg down) stay just below it and the road ahead is clear. Lower aims hid the
                        // ears' view line above the centre; higher ones put the kart behind the km/h readout
-    fov: 66, fovSpeed: 3, fovBoost: 2, fovMax: 5, // FOV kick: subtle, at most +5 deg
+    fov: 66, fovSpeed: 3, fovBoost: 7, fovMax: 10, // FOV kick: boost gives +7 (was +2) so pads/cannon feel fast; max +10
   },
 };
 
@@ -383,7 +386,7 @@ const physMats = {
   wall: new CANNON.Material('wall'),
   chassis: new CANNON.Material('chassis'),
 };
-world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.wall, { friction: 0.0, restitution: 0.3 }));
+world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.wall, { friction: 0.0, restitution: 0.02 }));
 world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.ground, { friction: 0.2, restitution: 0 }));
 world.addContactMaterial(new CANNON.ContactMaterial(physMats.chassis, physMats.chassis, { friction: 0.05, restitution: 0.25 }));
 
@@ -2708,7 +2711,9 @@ function updateKartProgress(k, dt, racing) {
   // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
   // reversing uphill barely moves: the AIs' watchdog does the same for them
   const trying = k.isPlayer && !k.ai && racing && !k.finished && k.spin <= 0 && (input.gas || input.brake);
-  k.stuckT = trying && Math.abs(k.speed) < CFG.kart.rescueSpeed ? (k.stuckT || 0) + dt : 0;
+  // ...a pedal released a moment ago still counts: tapping gas/brake alternately never filled the timer (22 s stuck, no reset)
+  k.tryT = trying ? 1.5 : Math.max(0, (k.tryT || 0) - dt);
+  k.stuckT = k.tryT > 0 && racing && Math.abs(k.speed) < CFG.kart.rescueSpeed ? (k.stuckT || 0) + dt : 0;
   const rescue = k.stuckT > CFG.kart.rescueTime;
   const wantsReset = (k.isPlayer && input.reset) || k.flipTimer > 1.5 || k.fallT > 0.6 || onRail || rescue || k.ai?.resetNow;
   if (wantsReset && state.phase !== 'menu') {
@@ -3149,6 +3154,19 @@ function setSteering(mode, save = true) {
   input.left = input.right = false;
   releaseStick();
 }
+// Difficulty (Settings -> DIFFICULTY, saved in kartrush.diff): Hard = the game before build 45 (AIs at their own pace,
+// no rubber band), Medium = AIs far ahead of the player ease off up to 4%, Easy = up to 9% and every AI 4% slower.
+const DIFF = { easy: { ease: 0.09, pace: -0.04 }, medium: { ease: 0.04, pace: 0 }, hard: { ease: 0, pace: 0 } };
+const DIFF_KEY = 'kartrush.diff';
+let difficulty = 'medium';
+try { const d = localStorage.getItem(DIFF_KEY); if (DIFF[d]) difficulty = d; } catch { /* storage blocked */ }
+function setDifficulty(d, save = true) {
+  difficulty = d;
+  if (save) try { localStorage.setItem(DIFF_KEY, d); } catch { /* storage blocked */ }
+  for (const b of $('diff-pick').children) b.classList.toggle('on', b.dataset.diff === d);
+}
+for (const b of $('diff-pick').children) onTap(b, () => { sound.click(); setDifficulty(b.dataset.diff); });
+setDifficulty(difficulty, false);
 // Screen flip (Settings -> SCREEN): under portrait lock the game is turned 90deg clockwise; flipped turns it
 // the other way, for holding the phone the other way round. Saved in kartrush.flip.
 const FLIP_KEY = 'kartrush.flip';
@@ -3485,7 +3503,11 @@ function updateAI(k, dt, canDrive) {
   }
 
   // --- Speed: own pace, capped so it can still brake for every corner ahead
-  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill + ai.tow);
+  // Gentle rubber band (build 45, a friend: the game is hard, nobody should be left far behind): an AI more than
+  // easeFrom metres ahead of the player loses up to easeMax of top speed, full at easeFull. Never speeds anyone up.
+  const gapAhead = (k.progress - kart.progress) * track.spacing;
+  const catchUp = DIFF[difficulty].pace - DIFF[difficulty].ease * clamp((gapAhead - CFG.ai.easeFrom) / (CFG.ai.easeFull - CFG.ai.easeFrom), 0, 1);
+  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill + ai.tow + catchUp);
   let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
   for (let s = 2; s * spacing < 45; s += 2) {
@@ -4221,6 +4243,31 @@ function applyStabilityAssist(k) {
     body.velocity.z *= scale;
     k.wallTouch = false;
     k.wallHit = 0;
+  }
+
+  // No rebound: the solver's push out of a rail (worst where the wall bends: two segments or a seam
+  // at once) is cut every step, along each rail contact's own normal. Sliding along the rail stays.
+  for (const c of world.contacts) {
+    const mine = c.bi === body ? -1 : c.bj === body ? 1 : 0;
+    if (!mine) continue;
+    const other = mine < 0 ? c.bj : c.bi;
+    if (other.material !== physMats.wall) continue;
+    const nx = c.ni.x * mine, nz = c.ni.z * mine, nl = Math.hypot(nx, nz);
+    if (nl < 0.3) continue; // floor-ish contact
+    const away = (body.velocity.x * nx + body.velocity.z * nz) / nl;
+    // Keep up to railPush m/s out of the rail: that is how the solver frees a kart that sank into it (cutting
+    // all of it left karts embedded and stuck); only the rebound above that is removed.
+    if (away > K.railPush) { const cut = away - K.railPush; body.velocity.x -= cut * nx / nl; body.velocity.z -= cut * nz / nl; }
+    // Nose into the rail (a near head-on hit used to stop the kart dead, then flip it or leave it pointing at the
+    // rail until the stuck timer reset it): swing it round to run along the rail, and calm roll/pitch spin.
+    const f = body.quaternion.vmult(LOCAL_FWD, tmpFwd), into = -(f.x * nx + f.z * nz) / nl;
+    if (into > 0.25) {
+      let tx = -nz / nl, tz = nx / nl;
+      if (f.x * tx + f.z * tz < 0) { tx = -tx; tz = -tz; }
+      const dir = Math.sign(f.z * tx - f.x * tz);
+      body.angularVelocity.y = clamp(body.angularVelocity.y + dir * K.railTurn * into * CFG.physicsStep, -K.maxYawRate, K.maxYawRate);
+      body.angularVelocity.x *= 0.7; body.angularVelocity.z *= 0.7;
+    }
   }
 
   const fwd = body.quaternion.vmult(LOCAL_FWD, tmpFwd);

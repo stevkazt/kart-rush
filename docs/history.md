@@ -263,3 +263,12 @@ User asked for game-experience tweaks after the build 39 race analysis (3 races 
 - **Build 44 star:** the star kart now has no kart-vs-kart collision while star > 0 (`k.passT`, solid again once no
   kart is inside it), shove on hit 3 -> 7 m/s, so it drives through rivals instead of stalling behind them.
 - Not done: more item boxes (4-5 rows), softer place odds, ghost-bug watch, boxes per race (9-12 in 38-39).
+
+## Build 58 (2026-10-17): rails, rubber band, difficulty (from a friend's feedback + the user's races)
+- Rails: softer speed loss (`wallHitLoss` .01, `wallHitMax` .15, `wallScrape` .2), restitution .02, and every physics step the
+  solver's rebound out of each rail contact is cut above `railPush` 2 m/s (all of it left karts embedded in the rail: stuck at
+  0 km/h for 22 s). A nose-into-rail kart is swung along the rail (`railTurn`) and its roll/pitch spin damped (head-on hits
+  stopped the kart dead and flipped it). Stuck rescue now counts a pedal released <1.5 s ago (alternate gas/brake tapping never reset).
+- Boost FOV kick +7 (max +10): cheap stand-in for the motion blur he asked for.
+- Difficulty (Settings): Hard = no rubber band, Medium = AIs >30 m ahead of the player lose up to 4% (full at 150 m), Easy = 9% and AIs 4% slower (`DIFF`).
+- Lesson: `node --check main.js` does NOT catch module syntax errors; use `node --input-type=module --check < main.js`.
