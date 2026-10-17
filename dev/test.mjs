@@ -41,7 +41,7 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-if (mode !== 'studio' && mode !== 'pick') await ev(`document.getElementById('btn-start').click()`);
+if (!['studio', 'pick', 'settings'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -92,6 +92,9 @@ if (mode === 'autopilot' || mode === 'trace') {
     profile: [[6, 0.6, 0], [0, 0.3, 0], 30, null], // whole kart side-on: chassis vs driver proportions
     low: [[1.5, 1.2, 2.4], [0, 0.55, -0.3], 34, null], // front 3/4 aimed lower: small drivers (Pip)
     rear: [[-1.6, 1.6, -2.8], [0, 0.75, -0.6], 34, { speed: 0.6, steer: 0.4, drift: 0, boost: 0 }], // rear 3/4 on the move
+    brow: [[-0.75, 1.75, 0.9], [0, 1.1, -0.15], 24, null], // above the face from the driver's right: visor, brow, scars
+    flank: [[1.5, 1.35, -1.7], [0, 0.95, -1.15], 28, null], // the tail from the left, close
+    flankR: [[-1.5, 1.35, -1.7], [0, 0.95, -1.15], 28, null], // ...and from the right
     items: [[1.2, 1.4, 1.2], [1.2, -0.5, 5], 40, null], // item close-up: a banana, green, red parked ahead (on the road)
   };
   await ev(`(() => { document.getElementById('overlay').style.display = 'none';
@@ -131,6 +134,17 @@ if (mode === 'autopilot' || mode === 'trace') {
     await shot(`${kind}-picked`);
     await tap('#btn-pick-done');
     await sleep(1500);
+  }
+} else if (mode === 'settings') {
+  // the Settings screen at each viewport WxH (CSS px; portrait sizes get the rotated layout like the phone)
+  const r = JSON.parse(await ev(`JSON.stringify(document.querySelector('.lobby-top .btn-settings').getBoundingClientRect())`));
+  for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: r.x + r.width / 2, y: r.y + r.height / 2, button: 'left', clickCount: 1 });
+  for (const size of arg.split(',')) {
+    const [width, height] = size.split('x').map(Number);
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+    await sleep(1500);
+    const s = await send('Page.captureScreenshot');
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}settings-${size}.png`), Buffer.from(s.data, 'base64'));
   }
 } else if (mode === 'eval') {
   await sleep(5000); // countdown + ~1 s of racing

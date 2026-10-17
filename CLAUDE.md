@@ -183,6 +183,23 @@ launcher repo later. The LAN server above still works for quick testing (no offl
     front of the standard torso capsule), orange collar + shoulder caps, green clawed hands. Tail = two joints
     (`tail`, `tail2`) with armour bands + spine plates, over the engine, swings against the turn (more in a
     drift), tip lags = a whip. Visor + lines pulse with `R.glow`.
+    **Grizzled veteran (2026-10-17, user spec):** olive-drab skin with discoloured patches (`wear()` sine noise in
+    colorAt), slate crown, sage jaw; visor moved down/forward over the real eye line (bridge of the snout + sides
+    at eye height; user: "goggles but his eyes are somewhere else"), dim cobalt, matte frame, two faint eye glows
+    behind it, **glow stutters every 2-6 s**; heavy drooping lids + furrowed brow capsules; nostrils painted into
+    the head's colorAt at the snout tip (sphere nostrils looked like they floated); yellowed fangs/claws; faded
+    chipped terracotta crest (`plateGeo(size, chips)`, `crestAt`); `grime()` on suit, shoulder caps, hands; tail = plain bands + whole plates, bumpy
+    tail scales. **Scars, visor cracks/scratches and tail bites/slashes/torn plates were built and then removed**
+    (user: they "break the consistency of the design"; see whether the flicker alone reads as old). No textures
+    (one baked vertex-coloured mesh, no UVs). `spec.matte` (bakeRig): Rex roughness 0.72. Head turns slowly and
+    little when steering, stays level against the torso lean.
+  - **Pip chibi (build 39, user: "too small"; from the chase camera only his beanie showed):** body `PIP_SCALE`
+    0.85 (was 0.75), head at full standard size (`PIP_HEAD` = 1 / PIP_SCALE), pom-pom `PIP_POM` 1.2, cushion
+    0.24 tall (was 0.19), torso 5 cm higher. Head + shoulders now clear the seat back from behind.
+  - **Koda goggles (build 39):** dark rubber frames over the eyes, amber gloss lenses with the eye painted through
+    (dark disc + glint), bridge; the strap is a `sweep` from one frame's outer rim round the back of the head
+    into the other (a full torus crossed the eyes; an arc floated off the frames).
+    ~33.7k triangles (was 27k), no gloss group any more (one draw call fewer). Studio views `brow`, `flank`, `flankR`.
   - **Bolt, the TV-bot:** `roundedBox` CRT head (analytic normals; r must be <= half the thinnest side), bezel,
     glossy glass, cyan face glyphs as capsule strokes on joints `happy` (^o^, eyes blink) / `strain` (>_<: bump,
     hard drift / steer, flooring it; held 0.5 s), screen glitch every 3-8 s, knobs + vents. Copper Tesla coil

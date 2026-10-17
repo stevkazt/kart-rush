@@ -325,7 +325,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 1a. Renderer, scene, camera, lights ----------
 const app = $('app');
-const VERSION_N = 38; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
+const VERSION_N = 39; // the build shown on the title screen + in diagnostics: bump with sw.js VERSION
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));

@@ -43,7 +43,7 @@ function rig() {
 }
 
 /** Bakes a rig into one vertex-coloured SkinnedMesh (+ gloss and glow groups). The rig must be at rest. */
-function bakeRig({ root, bones }, colors, smooth = false, gloss = { metalness: 0.6, roughness: 0.2 }) {
+function bakeRig({ root, bones }, colors, smooth = false, gloss = { metalness: 0.6, roughness: 0.2 }, matteOpt = {}) {
   root.updateMatrixWorld(true);
   const parts = [];
   root.traverse((o) => { if (o.isMesh) parts.push(o); });
@@ -82,7 +82,7 @@ function bakeRig({ root, bones }, colors, smooth = false, gloss = { metalness: 0
   geo.userData.paint = paint; // per vertex: index into PAINT_ROLES, -1 = fixed colour (see paintKart)
   // smooth: toy-like Standard material with smooth normals (the character standard); else the old faceted look
   const matte = smooth
-    ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0 })
+    ? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, ...matteOpt })
     : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const mats = [matte];
   let glow = null;
@@ -135,7 +135,7 @@ export function buildRider(r, colors, y0) {
   const R = rig();
   const spec = DRIVERS[r.name] ?? FALLBACK;
   const update = spec.build(R, y0) ?? null;
-  const baked = bakeRig(R, colors, !!spec.smooth, spec.gloss);
+  const baked = bakeRig(R, colors, !!spec.smooth, spec.gloss, spec.matte); // matte: per-driver roughness
   R.glow = baked.glow; // for the animation hook (pulses)
   return {
     name: r.name, ...baked, update,
@@ -909,15 +909,31 @@ const MAKO = {
   },
 };
 
-// ---------- Rex: the cyber-raptor (the ace) ----------
-// Same smooth standard. No helmet: a long emerald-to-cobalt raptor head (one bent sphere, `raptorHead`), mint
-// jaw, a thin smile with two fangs, nostrils, and a wide glowing cyan-to-magenta visor straight across the eyes.
-// An orange segmented crest runs down the back of the head onto the neck. Carbon racing suit with glowing
-// cyan telemetry lines, orange collar + shoulder caps, clawed green hands. From behind: a long armoured tail
-// with orange spine plates over the engine, two joints so it swings like a whip (counterbalance) as he drifts.
+// ---------- Rex: the cyber-raptor, the grizzled veteran (the ace) ----------
+// Same smooth standard, aged (user 2026-10-17, "The veteran"). No helmet: a long raptor head (one bent sphere,
+// `raptorHead`) in weathered olive drab with discoloured scale patches into a muted slate crown, sage jaw, a thin
+// smile with two yellowed fangs, nostrils, and a dull cobalt visor over the eyes (eyes glow faintly through it)
+// whose glow flickers now and then. Heavy hooded lids droop over the visor's top edge and the brow is furrowed
+// (ridges angled down toward the snout). Faded, chipped, sun-bleached terracotta crest. Carbon suit with dim
+// telemetry lines, oil smudges, dirt and scuffs. From behind: the long armoured tail with rough scales and spine
+// plates. No scars, cracks or wounds (user: they broke the game's consistent look; the flicker carries the age).
+// Detail is vertex colour + light geometry (one baked mesh, no UVs), rougher matte (spec.matte). He steers with a
+// still, level head.
 const X = {
-  emerald: 0x059669, cobalt: 0x0284c7, mint: 0x6ee7b7, crest: 0xf97316, crestDark: 0xc2410c, cyan: 0x22d3ee,
-  magenta: 0xe879f9, carbon: 0x1f2937, carbonLight: 0x334155, frame: 0x0b1220, mouth: 0x0f172a, fang: 0xf8fafc,
+  olive: 0x4b5a22, oliveLight: 0x667530, crown: 0x3a5163, sage: 0xa3ab84, patch: 0x7d7542, patchDark: 0x323d16,
+  crest: 0xb45309, crestGold: 0xca8a04, crestBleach: 0xd8b48a, crestChip: 0xe6d6b0,
+  crestCrack: 0x4a220a, visor: 0x0284c7, visorLight: 0x38bdf8, cyan: 0x22d3ee,
+  eyeGlow: 0xb6e6ff, carbon: 0x1f2937, carbonLight: 0x334155, frame: 0x1c232d, mouth: 0x0f172a, fang: 0xe2d29c, claw: 0xc9b383,
+  oil: 0x15120d, dirt: 0x6a593c, scuff: 0xb3a78e,
+};
+/** Smooth 3D pattern -1.5..1.5 (two octaves of sine products): blotches for wear and discoloration. */
+const wear = (x, y, z, f, o = 0) => Math.sin(x * f * 1.3 + 1.7 + o) * Math.sin(y * f + 0.4 + o * 2) * Math.sin(z * f * 1.1 + 2.1 + o)
+  + 0.5 * Math.sin(x * f * 2.7 + 0.3) * Math.sin(y * f * 2.3 + 1.1 + o) * Math.sin(z * f * 2.9 + 0.7);
+/** Grime on a colour: oil smudges, dirt toward the bottom (below y dirtY), pale scuffs. */
+const grime = (c, x, y, z, k = 1, dirtY = -1) => {
+  c = mix(c, X.dirt, smoothstep(dirtY, dirtY - 0.15, y) * 0.35 * k);
+  c = mix(c, X.oil, smoothstep(0.55, 0.9, wear(x, y, z, 13, 3)) * 0.7 * k);
+  return mix(c, X.scuff, smoothstep(0.7, 1, wear(x, y, z, 27, 5)) * 0.45 * k);
 };
 function raptorHead(t, a, out = new THREE.Vector3()) {
   const z = 2 * t - 1, ring = Math.sqrt(Math.max(0, 1 - z * z));
@@ -930,121 +946,177 @@ const chestZ = (x, y) => {
   const dy = Math.max(0, Math.abs(y - 0.27) - 0.07), k = Math.sqrt(Math.max(0, 1 - (dy / 0.24) ** 2));
   return 0.82 * 0.24 * k * Math.sqrt(Math.max(0, 1 - (x / (0.252 * k)) ** 2));
 };
-/** A rounded crest / spine plate (x = back, y = up), height ~0.11 * size. */
-function plateGeo(size) {
+/** A rounded crest / spine plate (x = back, y = up), height ~0.11 * size. chips = [[f 0..1 round the outline,
+ * depth 0..1, width 0..1]]: bites taken out of the edge (jagged), for worn plates. */
+function plateGeo(size, chips = []) {
   const sh = new THREE.Shape();
   sh.moveTo(-0.05, -0.02);
   sh.quadraticCurveTo(-0.05, 0.08, 0.025, 0.11);
   sh.quadraticCurveTo(0.065, 0.06, 0.06, -0.02);
   sh.lineTo(-0.05, -0.02);
-  const g = finGeo(sh, 0.026, 0.11, 0.45);
+  let shape = sh;
+  if (chips.length) {
+    const pts = sh.getPoints(12), n = pts.length, c = new THREE.Vector2(0.005, 0.03);
+    pts.forEach((p, i) => {
+      for (const [f, depth, w] of chips) {
+        const d = Math.abs(i / n - f);
+        if (d < w) p.lerp(c, depth * (1 - d / w) * (i % 2 ? 1 : 0.6)); // alternate depth = a ragged edge
+      }
+    });
+    shape = new THREE.Shape(pts);
+  }
+  const g = finGeo(shape, 0.026, 0.11, 0.45);
   g.scale(size, size, size);
   return g;
 }
+/** Faded terracotta for a crest plate: per-plate hue k between rust and ochre, sun-bleached toward the tip. */
+const crestAt = (k, size) => (x, y, z) => {
+  let c = mix(mix(X.crest, X.crestGold, k), X.crestBleach, smoothstep(0.02 * size, 0.1 * size, y) * 0.55);
+  c = mix(c, X.crestChip, smoothstep(0.75, 1.1, wear(x, y, z, 60 / size, k * 7)) * 0.8);
+  return mix(c, X.crest, smoothstep(0.01, -0.02, y) * 0.5); // darker root
+};
 
 const REX = {
   smooth: true,
+  matte: { roughness: 0.72 }, // weathered: less sheen than the others' 0.55
   build(R, y0) {
     const { root, joint, part } = R;
     const V = (x, y, z) => new THREE.Vector3(x, y, z);
     const S = NOVA_SCALE;
 
-    // Torso: carbon racing suit, lighter side panels, glowing telemetry lines on the chest
+    // Torso: carbon racing suit, lighter side panels, dim telemetry lines; oil, dirt and scuffs
     const torso = joint(root, 0, y0 + 0.12, -0.27);
     torso.scale.setScalar(S);
     const body = new THREE.CapsuleGeometry(0.24, 0.14, 10, 32);
     body.scale(1.05, 1, 0.82);
-    part(torso, body, (x, y) => mix(mix(X.carbon, X.carbonLight, smoothstep(0.16, 0.22, Math.abs(x))), X.frame, smoothstep(0, -0.2, y) * 0.5), 0, 0.27, 0);
+    part(torso, body, (x, y, z) => grime(mix(mix(X.carbon, X.carbonLight, smoothstep(0.16, 0.22, Math.abs(x))), X.frame, smoothstep(0, -0.2, y) * 0.5), x, y, z, 0.8, 0.05), 0, 0.27, 0);
     const line = (pts, r = 0.0075) => pts.slice(1).forEach((q, i) => part(torso, capsuleBetween(r, pts[i], q, 8), X.cyan, 0, 0, 0, { glow: true }));
     for (const sx of [1, -1]) {
       const at = (x, y) => V(sx * x, y, chestZ(x, y) + 0.004);
       line([at(0.05, 0.47), at(0.11, 0.4), at(0.11, 0.2), at(0.16, 0.13)]);
       part(torso, new THREE.SphereGeometry(0.016, 12, 8), X.cyan, ...at(0.16, 0.13).toArray(), { glow: true });
-      part(torso, new THREE.SphereGeometry(0.095, 20, 14), (x, y) => mix(X.crestDark, X.crest, smoothstep(-0.05, 0.06, y)), sx * 0.25, 0.45, 0); // shoulder cap
+      // shoulder cap (pauldron): faded terracotta, the worst of the grime
+      part(torso, new THREE.SphereGeometry(0.095, 24, 16), (x, y, z) => grime(mix(mix(X.crest, X.crestBleach, smoothstep(0, 0.09, y) * 0.4), X.crest, smoothstep(0.02, -0.06, y) * 0.5), x + sx, y, z, 1.4), sx * 0.25, 0.45, 0);
       // carbon sleeve with a glowing seam, clawed green hand on the wheel
       const sh = V(sx * 0.26, 0.44, 0.03);
       const hand = V(sx * WHEEL_GRIP[0], y0 + WHEEL_GRIP[1] - torso.position.y, WHEEL_GRIP[2] - torso.position.z).divideScalar(S);
-      part(torso, capsuleBetween(0.062, sh, hand, 16), X.carbon);
+      part(torso, capsuleBetween(0.062, sh, hand, 16), (x, y, z) => grime(X.carbon, x, y, z, 0.8));
       line([sh.clone().add(V(0, 0.06, 0)), hand.clone().lerp(sh, 0.15).add(V(0, 0.058, 0))], 0.006);
-      const paw = new THREE.SphereGeometry(0.072, 20, 14);
+      const paw = new THREE.SphereGeometry(0.072, 24, 18);
       paw.scale(1, 0.85, 1.1);
-      part(torso, paw, (x, y) => mix(X.mint, X.emerald, smoothstep(-0.05, 0.03, y)), hand.x, hand.y, hand.z);
+      part(torso, paw, (x, y, z) => grime(mix(X.sage, X.olive, smoothstep(-0.05, 0.03, y)), x * 3 + sx, y * 3, z * 3, 1.3), hand.x, hand.y, hand.z);
       for (const dx of [-0.035, 0, 0.035]) {
         const claw = new THREE.ConeGeometry(0.011, 0.04, 10);
         claw.rotateX(Math.PI / 2 + 0.6);
-        part(torso, claw, X.fang, hand.x + dx, hand.y + 0.04, hand.z + 0.06);
+        part(torso, claw, X.claw, hand.x + dx, hand.y + 0.04, hand.z + 0.06);
       }
     }
-    part(torso, new THREE.CylinderGeometry(0.12, 0.15, 0.16, 24, 1, true), X.emerald, 0, 0.6, 0); // neck
+    part(torso, new THREE.CylinderGeometry(0.12, 0.15, 0.16, 24, 1, true), X.olive, 0, 0.6, 0); // neck
     const collar = new THREE.TorusGeometry(0.16, 0.035, 10, 32);
     collar.rotateX(Math.PI / 2);
-    part(torso, collar, X.crest, 0, 0.56, 0);
-    for (const [y, z, a, sz] of [[0.66, -0.12, -0.7, 0.75], [0.6, -0.17, -0.9, 0.62]]) part(torso, plateGeo(sz), X.crest, 0, y, z, { rot: [a, 0, 0] });
+    part(torso, collar, (x, y, z) => grime(mix(X.crest, X.crestBleach, 0.25), x, y, z, 0.9), 0, 0.56, 0);
+    for (const [y, z, a, sz, k] of [[0.66, -0.12, -0.7, 0.75, 0.3], [0.6, -0.17, -0.9, 0.62, 0.7]]) {
+      part(torso, plateGeo(sz, [[0.45, 0.3, 0.08]]), crestAt(k, sz), 0, y, z, { rot: [a, 0, 0] });
+    }
 
-    // Head: long raptor head, emerald snout into a cobalt crown, mint jaw
+    // Head: long raptor head in weathered olive drab, discoloured patches, muted slate crown, sage jaw
     const head = joint(torso, 0, 0.6, 0.02);
     head.scale.setScalar(1.06);
     const C0 = V(0, 0.2, 0.05);
+    // nostrils: painted into the skin at the snout tip (little spheres there looked like they floated)
+    const nostrils = [-1, 1].map((u) => raptorHead(0.975, Math.PI / 2 - u * 0.55));
     part(head, surfGeo(raptorHead, 48, 32), (x, y, z) => {
-      const base = mix(X.emerald, X.cobalt, clamp(smoothstep(0.3, -0.2, z) * 0.7 + smoothstep(0, 0.2, y) * 0.5, 0, 1));
-      return mix(base, X.mint, smoothstep(-0.02, -0.08, y) * 0.85);
+      const nd = Math.min(...nostrils.map((q) => Math.hypot(x - q.x, (y - q.y) * 1.6, z - q.z)));
+      if (nd < 0.011) return mix(X.patchDark, X.mouth, smoothstep(0.011, 0.005, nd));
+      let c = mix(X.olive, X.crown, clamp(smoothstep(0.3, -0.2, z) * 0.55 + smoothstep(0, 0.2, y) * 0.35, 0, 1));
+      c = mix(c, X.oliveLight, smoothstep(0.2, 0.9, wear(x, y, z, 9, 1)) * 0.5);
+      c = mix(c, X.patch, smoothstep(0.45, 0.85, wear(x, y, z, 15, 2)) * 0.6);   // sun-faded scale patches
+      c = mix(c, X.patchDark, smoothstep(0.6, 1, wear(x, y, z, 31, 4)) * 0.5);   // dark mottling
+      return mix(c, X.sage, smoothstep(-0.02, -0.08, y) * 0.85);
     }, C0.x, C0.y, C0.z);
     const on = (g) => g.translate(C0.x, C0.y, C0.z);
     const smile = (u) => [0.95 - 0.42 * u * u, -Math.PI / 2 + u * 1.45];
     part(head, on(surfRibbon(raptorHead, smile, () => 0.006, () => -0.006, 0.004, 32)), X.mouth);
-    for (const u of [-0.42, 0.42]) { // two little fangs
+    for (const u of [-0.42, 0.42]) { // two little fangs, yellowed
       const { P, n, B } = onSurf(raptorHead, smile, u);
       part(head, on(tooth(P.clone().addScaledVector(B, 0.004).addScaledVector(n, 0.006), B.clone().negate().addScaledVector(n, 0.3).normalize(), n, 0.014, 0.036)), X.fang);
     }
-    for (const u of [-1, 1]) {
-      const { P } = onSurf(raptorHead, (v) => [0.9, Math.PI / 2 - v * 0.42], u);
-      part(head, on(new THREE.SphereGeometry(0.013, 10, 8)), X.mouth, P.x, P.y, P.z);
-    }
-    // the cyber-visor: dark frame + a glowing cyan -> magenta band wrapped straight across the eyes
-    const eyes = (u) => [0.76 - 0.24 * u * u, Math.PI / 2 - u * 1.3]; // across the top of the snout, down to the eyes
+    // the cyber-visor: matte gunmetal frame + a dim cobalt band (its glow flickers: the veteran's old kit)
+    // over the eyes: across the bridge of the snout and down the sides to eye height (not up on the crown)
+    const eyes = (u) => [0.83 - 0.26 * u * u, Math.PI / 2 - u * 1.45];
     const vTop = pw([[0, 0.05], [0.85, 0.046], [1, 0.022]]), vBot = pw([[0, -0.028], [0.85, -0.036], [1, -0.012]]);
-    part(head, on(surfRibbon(raptorHead, eyes, (u) => vTop(u) + 0.014, (u) => vBot(u) - 0.014, 0.016, 64)), X.frame, 0, 0, 0, { gloss: true });
-    part(head, on(surfRibbon(raptorHead, eyes, vTop, vBot, 0.024, 64)), (x) => mix(X.magenta, X.cyan, smoothstep(-0.2, 0.2, -x)), 0, 0, 0, { glow: true });
-    // crest: plates down the back of the head, tallest on the crown
-    [[0.6, 0.8], [0.49, 1], [0.38, 1.05], [0.27, 1], [0.16, 0.9], [0.06, 0.8]].forEach(([t, sz]) => {
+    part(head, on(surfRibbon(raptorHead, eyes, (u) => vTop(u) + 0.014, (u) => vBot(u) - 0.014, 0.016, 64)), X.frame);
+    part(head, on(surfRibbon(raptorHead, eyes, vTop, vBot, 0.024, 64)), (x) => mix(mix(X.visor, X.visorLight, smoothstep(0.2, -0.2, x) * 0.6), 0x000000, 0.25), 0, 0, 0, { glow: true });
+    // which way the band's 'up' (B) points: +1 = toward the back of the head (the brow side)
+    const eye0 = onSurf(raptorHead, eyes, 0.3), back = raptorHead(eyes(0.3)[0] - 0.02, eyes(0.3)[1]).sub(eye0.P);
+    const bs = eye0.B.dot(back) > 0 ? 1 : -1;
+    // his eyes glowing faintly through the visor, so it reads as worn over them
+    for (const u of [-0.74, 0.74]) {
+      const { P, n } = onSurf(raptorHead, eyes, u);
+      part(head, new THREE.SphereGeometry(0.016, 14, 10), X.eyeGlow, ...P.addScaledVector(n, 0.013).add(C0).toArray(), { glow: true });
+    }
+    const browEdge = (u) => (bs > 0 ? vTop(u) : -vBot(u)) + 0.014; // distance from the band's centre line to its brow edge
+    const onVisor = (u, h, lift) => { const { P, n, B } = onSurf(raptorHead, eyes, u); return P.addScaledVector(B, h * bs).addScaledVector(n, lift).add(C0); };
+    // heavy lids drooping over the visor's brow edge (more at the outer corners: weary), furrowed brow ridges
+    const lidCover = (u) => Math.min(0.02 + 0.014 * Math.abs(u) ** 1.5, 0.55 * (vTop(u) - vBot(u)));
+    const lidA = (u) => bs * (browEdge(u) + 0.006), lidB = (u) => bs * (browEdge(u) - 0.014 - lidCover(u));
+    part(head, on(surfRibbon(raptorHead, eyes, (u) => Math.max(lidA(u), lidB(u)), (u) => Math.min(lidA(u), lidB(u)), 0.032, 64)), (x, y, z) => mix(X.olive, X.patchDark, 0.25 + 0.3 * smoothstep(0.3, 0.9, wear(x, y, z, 20))));
+    const brow = (u0, u1, h0, h1) => part(head, capsuleBetween(0.017, onVisor(u0, browEdge(u0) + h0, 0.03), onVisor(u1, browEdge(u1) + h1, 0.03), 12), X.olive);
+    brow(0.14, 0.56, -0.002, 0.008);    // left: inner end low, outer high (furrowed)
+    brow(-0.14, -0.56, -0.002, 0.008);  // right
+    // crest: plates down the back of the head, tallest on the crown; faded, chipped, one snapped short
+    [[0.6, 0.8, 0.2, [[0.2, 0.35, 0.07]]], [0.49, 1, 0.6, [[0.55, 0.4, 0.06], [0.3, 0.25, 0.05]]], [0.38, 0.62, 0.4, [[0.4, 0.75, 0.2]]],
+      [0.27, 1, 0.8, [[0.65, 0.3, 0.06]]], [0.16, 0.9, 0.3, [[0.35, 0.45, 0.07]]], [0.06, 0.8, 0.6, []]].forEach(([t, sz, k, chips]) => {
       const { P, n } = onSurf(raptorHead, (u) => [u, Math.PI / 2], t);
-      part(head, plateGeo(sz), (x, y) => mix(X.crestDark, X.crest, smoothstep(0, 0.07 * sz, y)), P.x + C0.x, P.y + C0.y - 0.012, P.z + C0.z, { rot: [Math.atan2(n.z, n.y), 0, 0] });
+      part(head, plateGeo(sz, chips), crestAt(k, sz), P.x + C0.x, P.y + C0.y - 0.012, P.z + C0.z, { rot: [Math.atan2(n.z, n.y), 0, 0] });
     });
 
-    // Tail: two joints (a whip), armour bands, spine plates; rises from behind the seat back over the engine
+    // Tail: two joints (a whip), rough armour bands, spine plates
     const tail = joint(root, 0, y0 + 0.66, -0.72);
     tail.scale.setScalar(S);
-    const armour = (x, y, z) => mix(mix(X.cobalt, X.emerald, smoothstep(0.02, -0.06, y) * 0.8), X.frame, smoothstep(0.8, 0.98, Math.abs(Math.sin(z * Math.PI / 0.09))) * 0.35);
-    part(tail, sweep([[0, -0.02, 0.1], [0, 0.0, -0.12], [0, 0.03, -0.33]], (u) => lerp(0.11, 0.08, u), 20, 20), armour);
+    const bumpy = (r) => (u, v) => r(u) * (1 + 0.012 * Math.sin(u * 60) * Math.sin(v * Math.PI * 14) + 0.005 * Math.sin(u * 150 + v * 30));
+    const T1 = [40, 24], T2 = [52, 24]; // dense enough for the bumpy scales
+    const g1 = sweep([[0, -0.02, 0.1], [0, 0.0, -0.12], [0, 0.03, -0.33]], bumpy((u) => lerp(0.11, 0.08, u)), ...T1);
+    const g2 = sweep([[0, 0, 0], [0, 0.02, -0.18], [0, 0.07, -0.36], [0, 0.15, -0.52]], bumpy((u) => 0.08 * (1 - u) ** 0.8 + 0.004), ...T2);
+    // plain armour bands (no blotches: on the tail they read as scars)
+    const armour = (x, y, z) => mix(mix(X.crown, X.olive, smoothstep(0.02, -0.06, y) * 0.8), X.frame, smoothstep(0.8, 0.98, Math.abs(Math.sin(z * Math.PI / 0.09))) * 0.35);
+    part(tail, g1, armour);
     const tail2 = joint(tail, 0, 0.03, -0.33);
-    part(tail2, new THREE.SphereGeometry(0.08, 20, 14), armour); // hides the bend between the two halves
-    part(tail2, sweep([[0, 0, 0], [0, 0.02, -0.18], [0, 0.07, -0.36], [0, 0.15, -0.52]], (u) => 0.08 * (1 - u) ** 0.8 + 0.004, 28, 20), armour);
-    for (const [j, z, y, sz] of [[tail, -0.06, 0.1, 0.8], [tail, -0.2, 0.11, 0.75], [tail2, -0.04, 0.075, 0.7], [tail2, -0.18, 0.085, 0.6], [tail2, -0.32, 0.12, 0.48], [tail2, -0.44, 0.17, 0.36]]) {
-      part(j, plateGeo(sz), X.crest, 0, y, z, { rot: [-0.25, 0, 0] });
+    part(tail2, new THREE.SphereGeometry(0.08, 24, 16), armour); // hides the bend between the two halves
+    part(tail2, g2, armour);
+    for (const [j, z, y, sz, k] of [[tail, -0.06, 0.1, 0.8, 0.3], [tail, -0.2, 0.11, 0.75, 0.6],
+      [tail2, -0.04, 0.075, 0.7, 0.8], [tail2, -0.18, 0.085, 0.6, 0.2], [tail2, -0.32, 0.12, 0.48, 0.5], [tail2, -0.44, 0.17, 0.36, 0.7]]) {
+      part(j, plateGeo(sz, []), crestAt(k, sz), 0, y, z, { rot: [-0.25, 0, 0] }); // whole plates: no chips on the tail
     }
 
     // ---- Animation hook ----
-    const st = { t: 0, lean: 0, s1: 0, s2: 0 };
+    // The veteran: composed lean, the head stays level and turns slowly, only a little, where he means to go
+    const st = { t: 0, lean: 0, look: 0, s1: 0, s2: 0, next: 3, flick: 0 };
     return (dt, s) => {
       const ease = (rate) => 1 - Math.exp(-dt * rate);
       st.t += dt;
       const speed = clamp(Math.abs(s.speed), 0, 1.3);
       st.lean = lerp(st.lean, s.steer * (0.7 + 0.5 * s.drift), ease(6));
+      st.look = lerp(st.look, s.steer, ease(1.1));                    // slow, deliberate
       st.s1 = lerp(st.s1, st.lean * (1 + 0.9 * s.drift), ease(3));   // the tail swings out against the turn...
       st.s2 = lerp(st.s2, st.s1, ease(2.2));                          // ...and its tip follows a beat later (a whip)
-      torso.rotation.z = st.lean * 0.1;                              // the ace stays composed
-      head.rotation.z = st.lean * 0.06;
-      head.rotation.y = -st.lean * 0.18;
+      torso.rotation.z = st.lean * 0.1;
+      head.rotation.z = -torso.rotation.z * 0.85;                     // holds the horizon against the lean
+      head.rotation.y = -st.look * 0.07;
       head.rotation.x = -0.04 * speed;
       const idle = Math.sin(st.t * 1.6) * 0.07 * (1 - clamp(speed * 2, 0, 0.8));
       tail.rotation.y = -st.s1 * 0.3 + idle * 0.5;
       tail2.rotation.y = -st.s2 * 0.42 + idle;
       tail.rotation.x = -0.06 * speed;
-      if (R.glow) R.glow.color.setScalar(0.9 + 0.12 * Math.sin(st.t * 3) + 0.35 * s.boost); // visor + lines
+      // the damaged visor: dim, and every 2-6 s it stutters for a moment
+      if (st.t > st.next) { st.flick = 0.25 + Math.random() * 0.3; st.next = st.t + 2 + Math.random() * 4; }
+      st.flick = Math.max(0, st.flick - dt);
+      const stutter = st.flick > 0 ? (Math.random() < 0.5 ? 0.25 : 0.9) : 1;
+      if (R.glow) R.glow.color.setScalar((0.72 + 0.05 * Math.sin(st.t * 3) + 0.3 * s.boost) * stutter); // visor + lines
     };
   },
   avatar() {
-    const [em, co, mint, cr, crd, cy, mg, cb, fr, mo] = [X.emerald, X.cobalt, X.mint, X.crest, X.crestDark, X.cyan, X.magenta, X.carbon, X.frame, X.mouth].map(css);
+    const [em, co, mint, cr, crd, cy, mg, cb, fr, mo] = [X.olive, X.crown, X.sage, mix(X.crest, X.crestBleach, 0.3), X.crest, X.visorLight, X.visor, X.carbon, X.frame, X.mouth].map(css);
     return `<svg class="driver-art" viewBox="0 0 48 48" aria-hidden="true">
     <defs><linearGradient id="rex-skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${co}"/><stop offset="0.75" stop-color="${em}"/></linearGradient>
     <linearGradient id="rex-visor" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${cy}"/><stop offset="1" stop-color="${mg}"/></linearGradient></defs>
@@ -1060,12 +1132,13 @@ const REX = {
     <ellipse cx="21.4" cy="23" rx="0.9" ry="0.7" fill="${mo}"/><ellipse cx="26.6" cy="23" rx="0.9" ry="0.7" fill="${mo}"/>
     <path d="M8 13.4 L40 13.4 L39.3 20.8 L8.7 20.8 Z" fill="${fr}"/>
     <path d="M9.2 14.6 L38.8 14.6 L38.2 19.6 L9.8 19.6 Z" fill="url(#rex-visor)"/>
-    <path d="M11.5 16.2 H22" stroke="#fff" stroke-opacity="0.7" stroke-width="1" stroke-linecap="round"/>
+    <path d="M11.5 16.2 H22" stroke="#fff" stroke-opacity="0.35" stroke-width="1" stroke-linecap="round"/>
+    <path d="M9.5 13.6 Q16 15.6 22.6 15.2 M25.4 15.2 Q32 15.6 38.5 13.6" fill="none" stroke="${em}" stroke-width="1.6" stroke-linecap="round"/>
   </svg>`;
   },
 
   kartArt() {
-    const [em, co, mint, cr, cy, mg, cb, fr, mo] = [X.emerald, X.cobalt, X.mint, X.crest, X.cyan, X.magenta, X.carbon, X.frame, X.mouth].map(css);
+    const [em, co, mint, cr, cy, mg, cb, fr, mo] = [X.olive, X.crown, X.sage, mix(X.crest, X.crestBleach, 0.3), X.visor, X.visorLight, X.carbon, X.frame, X.mouth].map(css);
     return `<path d="M29 13 Q19 11.5 6.5 6.8 Q5.6 7.8 7 9 Q18.5 15.5 29 17 Z" fill="${co}"/>
     <path d="M10 7.6 L11.6 5.4 L13 8.6 Z M15.4 9.4 L17.2 7.1 L18.6 10.4 Z M21 11 L22.8 8.8 L24 12 Z" fill="${cr}"/>
     <rect x="28" y="14" width="11" height="9" rx="3" fill="${cb}"/><path d="M30 22 V18 L33 16" fill="none" stroke="${cy}" stroke-width="0.8"/>
@@ -1076,7 +1149,8 @@ const REX = {
     <path d="M30.6 4.8 C32.4 3.4 35 2.8 37.6 3.1 C40.4 3.4 42.4 4.4 44 5.6 C40 5.2 34.4 5 30.6 4.8 Z" fill="${co}"/>
     <path d="M31 11.6 Q38 12 46.8 9.2 C46.4 9.8 46 9.8 45.6 10 C42 11.8 37.6 13 34 12.8 C32.6 12.6 31.6 12.2 31 11.6 Z" fill="${mint}"/>
     <path d="M37.6 10.9 Q42 10.6 46.2 9" fill="none" stroke="${mo}" stroke-width="0.5"/><path d="M41.4 10.6 L42.2 10.4 L41.9 11.8 Z" fill="#fff"/>
-    <path d="M35.2 5.2 L43.6 6.2 L43.2 8.6 L35 8.2 Z" fill="${fr}"/><path d="M35.8 5.8 L43 6.7 L42.7 8 L35.6 7.6 Z" fill="${cy}"/>`;
+    <path d="M35.2 5.2 L43.6 6.2 L43.2 8.6 L35 8.2 Z" fill="${fr}"/><path d="M35.8 5.8 L43 6.7 L42.7 8 L35.6 7.6 Z" fill="${cy}"/>
+    `;
   },
 };
 
@@ -1310,14 +1384,14 @@ const BOLT = {
 
 // ---------- Koda: the red panda (the drifter) ----------
 // Same smooth standard. No helmet: a round rust head with cream bandit markings (muzzle, cheeks, brow spots),
-// dark tear marks, shiny black eyes, rounded white-rimmed ears, and a red headband tied at the back with two
+// dark tear marks, shiny black eyes behind amber racing goggles, rounded white-rimmed ears, and a red headband tied at the back with two
 // streaming ends that flutter at speed. Bamboo-green bomber jacket with cream ribbed knit collar, cuffs and hem,
 // dark paws. From behind: a huge fluffy ring-striped tail that curls up the right side of the seat like a
 // paintbrush, on a spring so it swings out in drifts.
 const K = {
   rust: 0xc2410c, rustDark: 0x9a3412, cream: 0xfff7ed, creamShade: 0xf5dcc0, mask: 0x7c2d12, dark: 0x1c1917,
   paw: 0x3b1a0a, band: 0xdc2626, bandDark: 0xa51d1d, jacket: 0x6f8f3a, jacketLight: 0x9cb85e, knit: 0xfef3c7,
-  ring: 0xfcd9a8,
+  ring: 0xfcd9a8, rubber: 0x26262b, strap: 0x3f3f46, lens: 0xf59e0b, lensDark: 0x9a4a06,
 };
 
 const KODA = {
@@ -1387,6 +1461,34 @@ const KODA = {
       part(head, new THREE.SphereGeometry(0.04, 20, 14), K.dark, sx * 0.1, 0.245, fz(0.1, 0.245) - 0.014, { gloss: true });
       part(head, new THREE.SphereGeometry(0.012, 10, 8), 0xffffff, sx * 0.1 + 0.012, 0.262, fz(0.1, 0.245) + 0.02, { glow: true });
     }
+    // racing goggles over the eyes: dark rubber frames, amber lenses with his eye showing through, strap round
+    // the head under the headband
+    const goggle = (sx) => ({ at: [sx * 0.1, 0.245, fz(0.1, 0.245) + 0.006], rot: [-0.12, sx * 0.38, 0] });
+    // the strap: from the outer rim of one frame, hugging the head round the back, into the other frame
+    const rimEdge = (sx) => { const { at, rot } = goggle(sx); return new THREE.Vector3(sx * 0.06, 0, 0).applyEuler(new THREE.Euler(...rot)).add(new THREE.Vector3(...at)); };
+    const SY = 0.25, ringR = Math.sqrt(1 - ((SY - HY) / A[1]) ** 2);
+    const strapPts = [rimEdge(1).toArray()];
+    for (let i = 0; i <= 16; i++) {
+      const f = lerp(0.95, Math.PI * 2 - 0.95, i / 16); // angle from the front (+Z) toward +X, round the back
+      strapPts.push([Math.sin(f) * (A[0] * ringR + 0.008), SY, Math.cos(f) * (A[2] * ringR + 0.008)]);
+    }
+    strapPts.push(rimEdge(-1).toArray());
+    part(head, sweep(strapPts, () => 0.014, 72, 8), K.strap);
+    for (const sx of [1, -1]) {
+      const { at, rot } = goggle(sx);
+      part(head, new THREE.TorusGeometry(0.066, 0.016, 12, 36), K.rubber, ...at, { rot });
+      const lens = new THREE.SphereGeometry(0.064, 28, 16);
+      lens.scale(1, 1, 0.38);
+      part(head, lens, (x, y) => {
+        const glint = smoothstep(0.016, 0.008, Math.hypot(x - 0.016, y - 0.02));
+        const eye = smoothstep(0.034, 0.028, Math.hypot(x, y + 0.003));
+        const tint = mix(K.lensDark, K.lens, smoothstep(-0.06, 0.05, y));
+        return mix(mix(tint, K.dark, eye * 0.85), 0xffffff, glint);
+      }, ...at, { rot, gloss: true });
+    }
+    const bridge = new THREE.CapsuleGeometry(0.012, 0.03, 4, 10);
+    bridge.rotateZ(Math.PI / 2);
+    part(head, bridge, K.rubber, 0, 0.255, fz(0, 0.255) + 0.012);
     // rounded ears with cream rims and dark insides
     const ears = [1, -1].map((sx) => {
       const ear = joint(head, sx * 0.2, 0.42, -0.03);
@@ -1514,14 +1616,16 @@ const KODA = {
 // ---------- Pip: the penguin chick (steady) ----------
 // No helmet: a round black-and-white emperor-chick puffball in an oversized cream / grey striped knit sweater,
 // pink knit beanie with a huge fluffy white pom-pom (the highest point: it bobs with every change of speed or
-// direction), oversized brass aviator goggles over the eyes and beak. Short flippers on the wheel. 0.75x the
-// standard driver, so he sits on a thick brown corduroy booster cushion to see over the wheel.
+// direction), oversized brass aviator goggles over the eyes and beak. Short flippers on the wheel. Chibi: a 0.85x
+// body under a full-size head, on a thick brown corduroy booster cushion so he shows over the seat back.
 const P = {
   black: 0x1f2229, blackSoft: 0x2f333c, white: 0xf8fafc, down: 0x9ca3af, beak: 0x30343c, feet: 0x52525b,
   cream: 0xf5ecd7, grey: 0xc9ccd3, pink: 0xf472b6, pinkDark: 0xdb2777, pom: 0xfdfdfd, pomShade: 0xd9dde4,
   brass: 0xc8963e, lens: 0x2f6470, strap: 0x6b4423, cord: 0x8b5a2b, cordDark: 0x5e3a18,
 };
-const PIP_SCALE = 0.75; // x the standard driver
+const PIP_SCALE = 0.85; // x the standard driver: his body
+const PIP_HEAD = 1 / PIP_SCALE; // chibi: the head (goggles, beanie) at full standard size on the small body
+const PIP_POM = 1.2;
 
 const PIP = {
   smooth: true,
@@ -1533,15 +1637,15 @@ const PIP = {
 
     // Booster cushion on the seat (full size, not scaled with Pip): brown corduroy ridges running front to back,
     // darker welted edges
-    const CW = 0.6, CH = 0.19, CD = 0.55;
+    const CW = 0.6, CH = 0.24, CD = 0.55;
     part(root, roundedBox(CW, CH, CD, 0.05, 24), (x, y, z) => {
       const ridge = 0.5 + 0.5 * Math.cos((x / 0.06) * Math.PI * 2);
       const edge = Math.max(smoothstep(CW / 2 - 0.045, CW / 2, Math.abs(x)), smoothstep(CD / 2 - 0.045, CD / 2, Math.abs(z)), smoothstep(CH / 2 - 0.03, CH / 2, Math.abs(y)) * 0.4);
       return mix(mix(P.cord, P.cordDark, 0.35 * ridge), P.cordDark, edge * 0.7);
-    }, 0, y0 + 0.115, -0.2);
+    }, 0, y0 + 0.14, -0.2);
 
     // Torso: the round chick body inside the sweater (pivot at the bottom, on the cushion)
-    const torso = joint(root, 0, y0 + 0.2, -0.17);
+    const torso = joint(root, 0, y0 + 0.25, -0.17);
     torso.scale.setScalar(S);
     const sweater = (x, y, z) => { // y in torso space: soft horizontal stripes + vertical knit ribs
       const stripe = smoothstep(-0.25, 0.25, Math.sin((y / 0.1) * Math.PI * 2));
@@ -1587,6 +1691,7 @@ const PIP = {
 
     // Head: black with the white face mask; the goggles, the beanie and the pom-pom
     const head = joint(torso, 0, 0.36, 0);
+    head.scale.setScalar(PIP_HEAD);
     const HY = 0.2, HA = [0.25, 0.235, 0.235]; // a big chick head
     const skull = new THREE.SphereGeometry(1, 48, 32);
     skull.scale(...HA);
@@ -1624,6 +1729,7 @@ const PIP = {
     part(head, cuff, (x, y, z) => mix(P.pinkDark, P.pink, 0.45 * (0.5 + 0.5 * Math.sin(Math.atan2(x, z) * 28))), 0, HY + BR * Math.cos(cap) * BS, 0);
     // the giant pom-pom on its own joint (bobs)
     const pom = joint(head, 0, HY + BR * BS - 0.02, -0.01);
+    pom.scale.setScalar(PIP_POM);
     const ball = fluff(new THREE.SphereGeometry(0.16, 72, 48), 0.009, 110);
     ball.translate(0, 0.13, 0);
     part(pom, ball, (x, y) => mix(P.pomShade, P.pom, smoothstep(0.02, 0.18, y)));

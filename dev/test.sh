@@ -5,6 +5,7 @@
 #   dev/test.sh shots 300,880:3           screenshots with the player parked at sample idx[:lane] (OUT_DIR)
 #   dev/test.sh studio [front,side,back,fast,turn,chase,face]  lobby close-ups of the player's driver
 #   dev/test.sh pick [driver,kart,track]    lobby picker screens: open, screenshot, pick the 3rd card, screenshot
+#   dev/test.sh settings [WxH,...]       the Settings screen at those viewports (portrait = rotated)
 #   dev/test.sh profile [seconds]           CPU profile of a race with drawing off (top functions by self time)
 #   dev/test.sh eval '<js expr>'          print a page expression ~1 s after GO (debug globals available)
 #   dev/test.sh tap [hold seconds ...]      steering response on open grass (default: 0.25 0.6 1.0)
@@ -19,8 +20,8 @@ GAME_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 MODE="${1:-autopilot}"; shift || true
 TMP="$(mktemp -d)"
-export OUT_DIR="${OUT_DIR:-$TMP}" GAME_PORT=8765
-DEBUG_PORT=9333
+export OUT_DIR="${OUT_DIR:-$TMP}" GAME_PORT="${GAME_PORT:-8765}"
+DEBUG_PORT="${DEBUG_PORT:-9333}" # both overridable, to run two tests at once
 
 if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
@@ -56,6 +57,8 @@ elif [ "$MODE" = "studio" ]; then
   run studio "${1:-front,side,back,fast,turn,chase,face}"
 elif [ "$MODE" = "pick" ]; then
   run pick "${1:-driver,kart}"
+elif [ "$MODE" = "settings" ]; then
+  run settings "${1:-844x390,667x375,308x528}"
 elif [ "$MODE" = "profile" ]; then
   run profile "${1:-8}"
 elif [ "$MODE" = "eval" ]; then

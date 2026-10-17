@@ -1028,11 +1028,25 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 .pick-kart .pick-card.on { background: radial-gradient(ellipse at 50% 42%, rgba(255, 225, 74, 0.28), rgba(60, 50, 20, 0.85) 68%); }
 
 /* ============ Settings: card + icons + master mute ============ */
-.settings-card { flex: 0 0 auto; max-width: none; padding: clamp(10px, calc(var(--app-h) * 0.035), 16px) 26px 4px !important; }
+.screen .settings-card { flex: 0 0 auto; max-width: none; padding: clamp(10px, calc(var(--app-h) * 0.035), 16px) 26px 4px !important; }
 .settings-card .setting-row { justify-content: center; }
 .trk .ico { width: 15px; height: 15px; vertical-align: -3px; }
-#volume-row { transition: opacity 0.2s; }
-#volume-row.dim { opacity: 0.4; pointer-events: none; }
+/* dims the children, not the row: the row is display: contents in the narrow layout below */
+#volume-row .setting > * { transition: opacity 0.2s; }
+#volume-row.dim { pointer-events: none; }
+#volume-row.dim .setting > * { opacity: 0.4; }
+/* Narrow screens (Safari with its toolbars, ~530 px wide under portrait lock): the side-by-side groups overflow
+ * the card, so it becomes one list, label left + buttons right. Sized by the screen's own width (works rotated). */
+#settings-screen { container-type: inline-size; }
+@container (max-width: 660px) {
+  .settings-card { display: grid; grid-template-columns: auto auto; align-items: center; gap: 7px 14px;
+    padding: 10px 16px !important; }
+  .settings-card .setting-row, .settings-card .setting { display: contents; }
+  .settings-card .setting-label { justify-self: end; text-align: right; letter-spacing: 1.5px; white-space: nowrap; }
+  .settings-card .setting .track-pick { margin: 0; }
+  .settings-card .trk { padding: 5px 12px; }
+  .settings-card .vol-pick .trk { padding: 5px 10px; }
+}
 .btn-small .ico { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
 .ico { display: inline-block; width: 1em; height: 1em; vertical-align: middle; }
 
