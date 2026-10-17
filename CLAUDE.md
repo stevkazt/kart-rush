@@ -238,7 +238,7 @@ ended last after item hits: they judged it fine (variance comes from items), no 
 Lane changes at top speed after the cut (0.25 s tap 14 -> 9 deg): user says "feels ok... hard but normal at high
 speeds". Keep. Nothing open before expansion.
 
-**Build 20 (2026-10-16, not committed until the user has tried it):** Canyon Run (hills, bridge, jump, crest,
+**Builds 20-23 (2026-10-16, committed 37bbae6 + 7d75563, not pushed):** Canyon Run (hills, bridge, jump, crest,
 banking, desert theme with life), track picker, per-track records. User asked for it as the physics test bed
 for future tracks. Phone feedback: jump "feels very realistic"; canyon walls and theme "perfect"; 60 fps
 (meter's worst-frame stat showed 20 once, not noticed); banked turns "don't help" (expected: the stability
@@ -252,8 +252,7 @@ held by `brakeForce` 600, whose left/right impulses fought on the grid's 0.1-0.2
 **Next**, roughly in order (agreed 2026-10-16):
 - Another themed track (idea: snowy night with falling snow + an icy section).
 - Kart colour picker (body / trim / driver).
-- Maybe later: stronger drift as its own experiment (steering feel: ask first), hills/jumps (engine change),
-  track editor with shareable links, ghost of the best lap, steering-sensitivity setting.
+- Maybe later: stronger drift as its own experiment (steering feel: ask first), track editor with shareable links, ghost of the best lap, steering-sensitivity setting.
 - Push to GitHub only when the user asks.
 
 **Someday maybe (user 2026-10-16: "may never come to life"): online multiplayer.** Sketch discussed: WebRTC via
