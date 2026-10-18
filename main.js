@@ -370,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '68'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '69'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -395,7 +395,8 @@ const blurPass = {
       void main() {
         vec2 c = vec2(0.5, 0.52);
         vec2 off = vUv - c;
-        float d = length(off * vec2(aspect, 1.0));
+        vec2 sc = aspect >= 1.0 ? vec2(aspect, 1.0) : vec2(2.1); // portrait: same strength on all four edges (the sides were nearly clear)
+        float d = length(off * sc);
         float edge = smoothstep(0.18, 0.95, d);
         vec2 dir = -off * edge * strength * 0.16;
         vec3 sum = vec3(0.0);

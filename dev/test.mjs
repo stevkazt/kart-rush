@@ -146,6 +146,22 @@ if (mode === 'autopilot' || mode === 'trace') {
     const s = await send('Page.captureScreenshot');
     fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}settings-${size}.png`), Buffer.from(s.data, 'base64'));
   }
+} else if (mode === 'blur') {
+  // speed blur check: arg = WxH[:vertical],... ; each gets a boost + the cannon on a straight, screenshot while it is on
+  while ((await ev('__s.phase')) !== 'race') await sleep(100);
+  for (const spec of arg.split(',')) {
+    const [size, vert] = spec.split(':'); const [width, height] = size.split('x').map(Number);
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+    await ev(`document.getElementById('app').classList.toggle('vertical', ${!!vert}); window.dispatchEvent(new Event('resize'))`);
+    await sleep(1000);
+    for (const fx of ['bullet', 'boost']) {
+      await ev(`__k.${fx} = 3; __k.speed = 30`); await sleep(1500); await ev(`__k.${fx} = 3`); await sleep(300);
+      console.log(spec, fx, await ev(`'aspect ' + document.querySelector('canvas').width + 'x' + document.querySelector('canvas').height + ' fx ' + (window.__fx ? __fx.v : '?')`));
+      const s = await send('Page.captureScreenshot');
+      fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}blur-${size}${vert ? '-vertical' : ''}-${fx}.png`), Buffer.from(s.data, 'base64'));
+      await ev(`__k.${fx} = 0`); await sleep(1500);
+    }
+  }
 } else if (mode === 'eval') {
   await sleep(5000); // countdown + ~1 s of racing
   console.log(await ev(`(() => { try { return String(${arg}); } catch (e) { return 'ERR ' + e.stack; } })()`));

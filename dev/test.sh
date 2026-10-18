@@ -27,7 +27,7 @@ if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
 fi
 cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/ui-icons.js "$GAME_DIR"/drivers.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;#' \
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__fx=speedFx;#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -55,6 +55,8 @@ elif [ "$MODE" = "shots" ]; then
   run shots "$1"
 elif [ "$MODE" = "studio" ]; then
   run studio "${1:-front,side,back,fast,turn,chase,face}"
+elif [ "$MODE" = "blur" ]; then
+  run blur "${1:-844x390,390x844:vertical}"
 elif [ "$MODE" = "pick" ]; then
   run pick "${1:-driver,kart}"
 elif [ "$MODE" = "settings" ]; then
