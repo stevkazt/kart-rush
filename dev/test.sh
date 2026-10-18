@@ -2,6 +2,7 @@
 # Headless regression tests (macOS + Google Chrome + Node 22+).
 #   dev/test.sh autopilot [seconds=80]      full race driven by dev/autopilot.js
 #   dev/test.sh trace <probe.js> [seconds=40]  autopilot race + a probe script that pushes lines to __log
+#   dev/test.sh film [maxFrames=600]       bomb hit on the player (gore on), every frame at a fixed 1/30 s: PNGs + film.jsonl (OUT_DIR)
 #   dev/test.sh shots 300,880:3           screenshots with the player parked at sample idx[:lane] (OUT_DIR)
 #   dev/test.sh studio [front,side,back,fast,turn,chase,face]  lobby close-ups of the player's driver
 #   dev/test.sh pick [driver,kart,track]    lobby picker screens: open, screenshot, pick the 3rd card, screenshot
@@ -27,7 +28,7 @@ if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
 fi
 cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/ui-icons.js "$GAME_DIR"/drivers.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__fx=speedFx;#' \
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__fx=speedFx;window.__G=()=>({goreFx,eye1,eye2,lens,blood,dots,goreSkel,camFocus,camState,kart,camera,fx,goreSplats});#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -51,6 +52,8 @@ run() {
 
 if [ "$MODE" = "trace" ]; then
   run trace "${2:-40}" "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+elif [ "$MODE" = "film" ]; then
+  run film "${1:-600}"
 elif [ "$MODE" = "shots" ]; then
   run shots "$1"
 elif [ "$MODE" = "studio" ]; then

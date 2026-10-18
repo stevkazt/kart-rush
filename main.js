@@ -103,10 +103,73 @@ const CFG = {
       ],
       spots: [['Start', 0], ['Sweeper', 3], ['Straight', 5], ['Corner 90', 7], ['Chicane', 11], ['Corner W', 17], ['Corner SW', 21]],
       bumps: [[60, 14, 0.8]],
-      banks: [[165, 35, 10]],
+      banks: [[165, 45, 5]], // 70.3: was 10 deg over 35 m (user: too inclined; canyon's were cut in 69.4 but this one was missed)
       ice: [[205, 255]],
       boxRows: [80, 215, 310, 470, 600],
       pads: [[20, 0], [230, -2], [300, 2], [560, 0]],
+    },
+    // Shape tests (70.6, debug only, meadow theme, flat, no new scenery): lengths/radii checked offline.
+    // Tech Run: 1049 m, 20 control points, many medium corners (tightest R12), start straight on the south side.
+    tech: {
+      name: 'Tech Run', icon: 'gear', theme: 'meadow', debug: true, plain: true,
+      points: [
+        [-120, -110], [-60, -110], [0, -110], [60, -105], [105, -75], [105, -35], [65, -10], [75, 30],
+        [115, 50], [125, 95], [85, 130], [40, 120], [5, 85], [-35, 110], [-80, 132], [-125, 125],
+        [-165, 95], [-145, 50], [-170, 15], [-172, -45],
+      ],
+      bumps: [[420, 14, 0.6]],
+      boxRows: [80, 300, 520, 740, 960],
+      pads: [[30, 0], [400, 0], [800, 0]],
+    },
+    // Big Flow: 1485 m, 17 control points, wide flowing bends (tightest R21), long straights; fits the 700 m ground.
+    flow: {
+      name: 'Big Flow', icon: 'gear', theme: 'meadow', debug: true, plain: true,
+      points: [
+        [-176, -176], [-88, -189], [18, -176], [123, -185], [207, -141], [229, -62], [189, 9], [123, 44],
+        [97, 101], [123, 167], [70, 224], [-18, 229], [-97, 189], [-132, 123], [-202, 97], [-238, 18], [-220, -88],
+      ],
+      boxRows: [100, 350, 600, 850, 1100, 1350],
+      pads: [[30, 0], [500, 0], [1000, 0], [1400, 0]],
+    },
+    // Long Flow: Big Flow x1.2 = 1782 m (user: test 1800 m to see if it is too long), tightest R25, ~63 s laps. Extents +-290 m.
+    long: {
+      name: 'Long Flow', icon: 'gear', theme: 'meadow', debug: true, plain: true,
+      points: [
+        [-211, -211], [-106, -227], [22, -211], [148, -222], [248, -169], [275, -74], [227, 11], [148, 53],
+        [116, 121], [148, 200], [84, 269], [-22, 275], [-116, 227], [-158, 148], [-242, 116], [-286, 22], [-264, -106],
+      ],
+      boxRows: [120, 420, 720, 1020, 1320, 1620],
+      pads: [[30, 0], [600, 0], [1200, 0], [1700, 0]],
+    },
+    // Spiral Run (user: the long track is boring, "a spiral of 3 levels in the middle"). 70.14: the helix is a CONE (R40 -> R30
+    // over 2.5 turns, tighter as it climbs), climbs in steps (per turn: plateau 60 deg, ramp +5 m over 120 deg, twice, so the
+    // coils stay exactly 10 m apart) to y 25, with one long BANK RUN (`bankRuns`: 9.5 deg, 150 m smooth entry inside the
+    // spiral, 75 m exit). Then a wide turn and a 70 m straight ending in 3 RED pads (full-width strips, top speed +10 m/s,
+    // 1.6x longer), then the road is CUT (`gaps`: control point 43 = the lip, idx ~1274, to the foot at ~1312): a 32 m hole
+    // and a 14 m fall (gravity 20) onto the lower level (y 11). 70.19: the foot (receiving edge) is 10 m below the lip (y 15) and a ~15% landing RAMP
+    // (~30 m) takes it down to y 11, so a boosted kart lands along the slope (it lost ~130 km/h on the flat landing). 70.18 had the foot
+    // at y 17.3: the user hit its edge ~2 m short. Any kart arriving at >= 32 m/s (boosted) clears the edge; an unboosted one (26) does not. The user keeps the 32 m hole. Then a 60 m landing run and
+    // one gentle descent. 1823 m, N 1961, tightest R16 (after the spiral). Offline check: dev/track-check.py.
+    spiral: {
+      name: 'Spiral Run', icon: 'gear', theme: 'meadow', debug: true, plain: true, gaps: [43],
+      bankRuns: [[374, 1010, 9.5, 150, 75]], // helix start .. end + exit
+      axis: [0, 70, 7.5, 34],                // x, z, radius, height of the centre piece (70.20: tower + platforms + bridges + signs)
+      helix: [374, 965],                     // sample range of the helix: the gantry bridges are spread along it
+      signs: [440, 565, 685, 800, 905],      // chevron boards beside the start of each ramp
+      levelColors: { from: 374, to: 1274, step: 10, colors: [[0x2f6bff, 0xf3f6fa], [0xffc400, 0xf3f6fa], [0xe03030, 0xf3f6fa]] }, // blue, yellow, red (top + the straight to the lip)
+      points: [
+        [91, -137, 0], [153, -104, 0], [169, -46, 0], [140, 7, 0], [101, 38, 0], [62, 30, 0],
+        [0, 30, 0], [-20, 36, 0], [-34, 50, 0], [-39, 70, 1.25], [-33, 89, 2.5], [-19, 103, 3.75],
+        [0, 108, 5.0], [19, 103, 5.0], [32, 89, 5.0], [37, 70, 6.25], [32, 52, 7.5], [18, 39, 8.75],
+        [0, 34, 10.0], [-18, 39, 10.0], [-31, 52, 10.0], [-35, 70, 11.25], [-30, 87, 12.5], [-17, 100, 13.75],
+        [0, 104, 15.0], [17, 99, 15.0], [29, 87, 15.0], [33, 70, 16.25], [28, 54, 17.5], [16, 42, 18.75],
+        [0, 38, 20.0], [-16, 43, 20.0], [-27, 54, 20.0], [-31, 70, 21.25], [-27, 85, 22.5], [-15, 96, 23.75],
+        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0], [140, 150, 25.0], [135, 186, 25.0], [100, 200, 25.0],
+        [70, 200, 25.0], [40, 200, 25.0], [8, 200, 15.0], [-18, 200, 11.6], [-44, 199, 11.0], [-76, 196, 11.0],
+        [-98, 164, 9.2], [-108, 104, 7.3], [-140, 66, 5.5], [-152, 12, 3.7], [-130, -60, 1.8],
+      ],
+      boxRows: [100, 300, 560, 850, 1130, 1500, 1780],   // none near the drop (idx ~1214-1362)
+      pads: [[30, 0], [250, 0], [473, 0, 'wide'], [600, 0, 'wide'], [720, 0, 'wide'], [833, 0, 'wide'], [939, 0, 'wide'], [1247, 0, 'red'], [1257, 0, 'red'], [1267, 0, 'red'], [1570, 0], [1820, 0]], // red full-width boosters right before the lip (1274)
     },
   },
 
@@ -313,6 +376,7 @@ const CFG = {
     shieldTime: 10,                   // bubble that blocks the next hit (any kind), gone after this anyway
     // invincible + faster; karts touched spin out. User (build 33 races): the star "should give more speed": at
     // +4 m/s with engine power only it held ~108 km/h and gained ~20 m over 6 s. Now pushed like a mushroom.
+    redPadSpeed: 10, redPadTime: 1.6, // red boost pads (70.13): + m/s on top of the orange boost's speed, and x its duration
     starTime: 6, starSpeed: 8, starAccel: 150, // + m/s on top speed (~122 km/h), push m/s^2 up to it (high = at once)
     bulletHalfW: 2.2, bulletRear: 3.0, bulletFront: 3.4, // bullet hit zone (m): the hull's width / length plus the other kart's half size, in the bullet kart's frame
     bumpRadius: 2.3,                  // star / bullet kart this close to another one = hit
@@ -370,7 +434,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '70'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '71'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -622,6 +686,16 @@ function buildTrack(def, th) {
     lineRadius.push(ang > 1e-4 ? Math.hypot(cx - ax, cz - az) / ang : Infinity); // arc / turn
   }
   const hilly = samples.some((p) => Math.abs(p.y) > 1e-3) || bank.some((b) => b !== 0);
+  // Gaps (70.12): `gaps: [control point index]` cuts the road between that control point (the lip) and the next (the foot):
+  // no surface, curbs, rails or colliders there, so karts fly across and fall to the lower level. Samples i in [lip, foot) are cut.
+  const gap = new Uint8Array(N + 1);
+  const nearestSample = (pi) => {
+    const [px, pz, py = 0] = def.points[pi % def.points.length];
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < N; i++) { const q = samples[i], d = (q.x - px) ** 2 + (q.z - pz) ** 2 + (q.y - py) ** 2; if (d < bd) { bd = d; best = i; } }
+    return best;
+  };
+  for (const pi of def.gaps || []) { const end = nearestSample(pi + 1); for (let i = nearestSample(pi); i !== end; i = (i + 1) % N) gap[i] = 1; }
   // Ice: 0..1 per sample, ramping in and out over ~8 m
   const ice = new Float32Array(N + 1);
   const edge = Math.max(1, Math.round(8 / spacing));
@@ -632,7 +706,7 @@ function buildTrack(def, th) {
     }
   }
   ice[N] = ice[0];
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, bank, wallH, hilly, ice };
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, bank, wallH, hilly, ice, gap, levelColors: def.levelColors };
   track = data; // the road helpers below (surfaceY, roadPoint...) read the global
 
   if (hilly) {
@@ -656,7 +730,9 @@ function buildTrack(def, th) {
     (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : (P.ice && ice[i] > 0.5 ? P.ice : P.road)[((i / 10) | 0) % 2])));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
   trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
-  const curbColor = (i) => P.curb[((i / 3) | 0) % 2];
+  const lc = def.levelColors; // the curbs follow the rails' level colours (70.17)
+  const curbColor = (i) => (lc && i >= lc.from && i <= lc.to
+    ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : P.curb)[((i / 3) | 0) % 2];
   trackRoot.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, curbColor));
   trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, curbColor));
 
@@ -697,6 +773,20 @@ function shapeTrack(def, samples, tangents, normals, N, spacing) {
       bank[i] = Math.tan((sign * deg * (0.5 - 0.5 * Math.cos(Math.PI * f)) * Math.PI) / 180);
     });
   }
+  // bankRuns (70.14): [from idx, to idx, degrees, ease-in m, ease-out m]: one long bank with its own smooth entry and exit
+  // (cosine), for a continuous bend like a spiral. Raises the outside, like `banks`; the side comes from the bend at the middle.
+  for (const [from, to, deg, inM, outM] of def.bankRuns || []) {
+    const a = steps(inM), b = steps(outM), mid = Math.round((from + to) / 2);
+    const na = normals[(mid - 4 + N) % N], tb = tangents[(mid + 4) % N];
+    const sign = tb.x * na.x + tb.z * na.z > 0 ? -1 : 1;
+    for (let i = from; i <= to; i++) {
+      const f = Math.min(1, (i - from) / a, (to - i) / b);
+      bank[i % N] = Math.tan((sign * deg * (0.5 - 0.5 * Math.cos(Math.PI * f)) * Math.PI) / 180);
+    }
+  }
+  // Flat-ground themes (meadow, the Test Lab): the low edge of a banked road would sink under the grass plane at y=0
+  // (looked like half the road was grass), so the whole road rides up by what the bank drops its low edge.
+  if (def.theme === 'meadow') for (let i = 0; i < N; i++) samples[i].y += Math.abs(bank[i]) * (T.halfWidth + T.curb);
   samples[N].y = samples[0].y;
   bank[N] = bank[0];
   wallH[N] = wallH[0];
@@ -739,7 +829,7 @@ function roadBasis(i, m = new THREE.Matrix4()) {
  *   through the mesh). Flat boxes can't follow banking that eases in and out: neighbours met with a ~20 cm
  *   step at the road edges, which beached karts when the boxes were the driving surface.
  */
-function buildRoadBodies({ N, samples, normals, wL, wR, bank }) {
+function buildRoadBodies({ N, samples, normals, wL, wR, bank, gap }) {
   const T = CFG.track, k = T.roadStride, thick = 1;
   const edgeL = (i) => wL[i] + T.curb + T.wallThickness, edgeR = (i) => -(wR[i] + T.curb + T.wallThickness);
   const ROWS = 40; // samples per trimesh body
@@ -751,7 +841,7 @@ function buildRoadBodies({ N, samples, normals, wL, wR, bank }) {
         const p = roadPoint(i, lat);
         verts.push(p.x - o.x, p.y - o.y, p.z - o.z);
       }
-      if (i > i0) {
+      if (i > i0 && !gap[i - 1]) {
         const a = (i - i0 - 1) * 2, b = a + 2; // a: right, a+1: left on the previous row
         tris.push(a, b, a + 1, a + 1, b, b + 1); // (b - a) x (c - a) points up: ray tests skip backfaces
       }
@@ -765,6 +855,7 @@ function buildRoadBodies({ N, samples, normals, wL, wR, bank }) {
   const chunks = staticChunks(physMats.ground);
   for (let i = 0; i < N; i += k) {
     const j = Math.min(i + k, N);
+    if (gap.subarray(i, j).some((g) => g)) continue; // the cut road has no safety net either
     a.copy(samples[i]);
     b.copy(samples[j]);
     f.subVectors(b, a);
@@ -861,7 +952,7 @@ function racingLine(samples, normals, N, wL, wR) {
 }
 
 /** Builds a strip between two signed lateral offsets along the centre line, `y` above the road surface. */
-function makeRibbon({ N, samples, normals, bank }, inner, outer, y, colorAt) {
+function makeRibbon({ N, samples, normals, bank, gap }, inner, outer, y, colorAt) {
   // inner / outer: a lateral offset, or a function of the sample index
   const lo = typeof inner === 'function' ? inner : () => inner;
   const hi = typeof outer === 'function' ? outer : () => outer;
@@ -871,6 +962,7 @@ function makeRibbon({ N, samples, normals, bank }, inner, outer, y, colorAt) {
   const p = (i, off) => [samples[i].x + normals[i].x * off, samples[i].y + off * bank[i] + y, samples[i].z + normals[i].z * off];
 
   for (let i = 0; i < N; i++) {
+    if (gap[i]) continue;
     const color = colorAt(i);
     if (color === null) continue;
     const a0 = p(i, lo(i)), a1 = p(i, hi(i)), b0 = p(i + 1, lo(i + 1)), b1 = p(i + 1, hi(i + 1));
@@ -893,7 +985,7 @@ function makeRibbon({ N, samples, normals, bank }, inner, outer, y, colorAt) {
  * z-fought: the rails flickered as the camera moved.) Rails follow the road's height and reach 0.5 m
  * below it, so no gap opens under them on slopes.
  */
-function buildWalls({ N, samples, normals, wL, wR, wallH }, P) {
+function buildWalls({ N, samples, normals, wL, wR, wallH, gap, levelColors: lc }, P) {
   const T = CFG.track;
   const th = T.wallThickness, k = T.wallStride, sink = 0.5;
   const pos = [], col = [];
@@ -914,11 +1006,14 @@ function buildWalls({ N, samples, normals, wL, wR, wallH }, P) {
     };
     for (let i = 0; i < N; i += k) {
       const j = Math.min(i + k, N);
+      if (gap.subarray(i, j).some((g) => g)) continue; // no rail over the cut road
       const inA = -th / 2, outA = th / 2, hi = wallH[i], hj = wallH[j];
       quad(edge(i, inA, -sink), edge(j, inA, -sink), edge(i, inA, hi), edge(j, inA, hj));     // road-side face
       quad(edge(i, outA, hi), edge(j, outA, hj), edge(i, outA, -sink), edge(j, outA, -sink)); // outside face
       quad(edge(i, inA, hi), edge(j, inA, hj), edge(i, outA, hi), edge(j, outA, hj));         // top
-      c.set(P.rail[((i / k) | 0) % 2]);
+      // levelColors (70.16): { from, to, step, colors: [[a, b], ...] } rail colours by height (the spiral's levels)
+      c.set((lc && i >= lc.from && i <= lc.to
+        ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : P.rail)[((i / k) | 0) % 2]);
       for (let v = 0; v < 18; v++) col.push(c.r, c.g, c.b);
 
       // collider: one box per segment (overlap is harmless for physics), from `sink` below to the top,
@@ -1036,12 +1131,65 @@ const THEMES = {
   },
 };
 
-function buildMeadow({ N, samples }) {
+function buildMeadow({ N, samples, def, tangents, normals, wL }) {
   const rand = seededRand(1337);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), lambert(0x6cc04a));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(def?.plain ? 1400 : 700, def?.plain ? 1400 : 700), lambert(0x6cc04a));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   trackRoot.add(ground);
+  if (def?.axis) { // 70.20: the centre piece of a spiral, basic shapes, visual only (no colliders): a tower, a platform per level,
+    // radial bridges (beam + rails) at heights between the road's levels, and yellow chevron boards beside the ramps
+    const [ax, az, ar, ah] = def.axis;
+    const group = new THREE.Group(); group.position.set(ax, 0, az); trackRoot.add(group);
+    const lc = def.levelColors?.colors || [[0x2f6bff], [0xffc400], [0xe03030]];
+    const levelCol = (y) => lc[clamp(Math.floor((y + 1) / (def.levelColors?.step || 10)), 0, lc.length - 1)][0];
+    const grey = lambert(0x66728a), dark = lambert(0x2f3b52);
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(ar, ar * 1.12, ah, 20, 1), grey);
+    tower.position.y = ah / 2; group.add(tower);
+    for (let y = 2.5; y < ah; y += 5) { // a platform ring per 5 m, coloured by level
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(ar + 1.6, ar + 1.6, 0.5, 20), lambert(levelCol(y)));
+      ring.position.y = y; group.add(ring);
+    }
+    // bridges (70.21, was short radial stubs inside the inner rail that the chase camera never sees): gantries that cross OVER the
+    // road, from the tower to 13 m past the road's centre line, 6.5 m above the road surface at that spot (the coil above is 10 m
+    // up, so 3.5 m clear of it), ten spread along the helix (`def.helix` = [from idx, to idx]), so they come up ahead of the kart
+    if (def.helix) {
+      const [h0, h1] = def.helix, count = 10, mats = {};
+      const matFor = (y) => (mats[levelCol(y)] ||= lambert(levelCol(y)));
+      for (let k = 0; k < count; k++) {
+        const i = Math.round(h0 + ((k + 0.5) * (h1 - h0)) / count), sp = samples[i];
+        const dx = sp.x - ax, dz = sp.z - az, rr = Math.hypot(dx, dz), len = rr + 13 - ar, y = sp.y + 6.5;
+        const g = new THREE.Group(), m = matFor(y);
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(len, 0.5, 2.8), m));
+        for (const side of [-1, 1]) for (const h of [0.5, 1.15]) {
+          const r = new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.14), m); r.position.set(0, h, side * 1.35); g.add(r);
+        }
+        const under = new THREE.Mesh(new THREE.BoxGeometry(len, 0.3, 0.3), dark); under.position.set(0, -0.6, 0); g.add(under); // a spine below
+        g.rotation.y = Math.atan2(-dz, dx);
+        g.position.set((dx / rr) * (ar + len / 2), y, (dz / rr) * (ar + len / 2)); // the group already sits at the centre
+        group.add(g);
+      }
+    }
+    // chevron boards: a post just outside the inner rail (the bend's centre side), facing the oncoming kart
+    if (def.signs?.length) {
+      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 48;
+      const g = cv.getContext('2d');
+      g.fillStyle = '#f2b705'; g.fillRect(0, 0, 128, 48);
+      g.strokeStyle = '#1b1b1b'; g.lineWidth = 8; g.lineJoin = 'miter';
+      for (const x of [20, 62, 104]) { g.beginPath(); g.moveTo(x + 10, 8); g.lineTo(x - 8, 24); g.lineTo(x + 10, 40); g.stroke(); } // '<<<': the bend goes left
+      const signMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
+      for (const i of def.signs) {
+        const t = tangents[i], n = normals[i];
+        const off = wL[i] + CFG.track.curb + CFG.track.wallThickness + 1.2;
+        const sy = surfaceY(i, off); // the banked road's surface at the post (the inner side is lower)
+        const px = samples[i].x + n.x * off, pz = samples[i].z + n.z * off;
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.2, 0.25), dark); post.position.set(px, sy + 1.6, pz); trackRoot.add(post);
+        const board = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.6), signMat);
+        board.position.set(px, sy + 3.3, pz); board.rotation.y = Math.atan2(-t.x, -t.z); trackRoot.add(board);
+      }
+    }
+  }
+  if (def?.plain) return { update() {} }; // 70.8: shape-test tracks get the ground only (the ring of mountains at r 240-280 stood on the big loops' road)
 
   const distToTrack = (x, z) => {
     let d = Infinity;
@@ -2332,15 +2480,31 @@ function buildItemVisuals() {
   padTex.wrapS = padTex.wrapT = THREE.RepeatWrapping;
   padTex.repeat.set(1, 2);
   const padMat = new THREE.MeshBasicMaterial({ map: padTex });
+  // red pad: a strip across the whole road (side to side), red with white chevrons
+  const redTex = canvasTex(64, 64, (g) => {
+    g.fillStyle = '#d81e1e'; g.fillRect(0, 0, 64, 64);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 9; g.lineJoin = 'miter';
+    g.beginPath(); g.moveTo(6, 50); g.lineTo(32, 14); g.lineTo(58, 50); g.stroke();
+  });
+  redTex.wrapS = redTex.wrapT = THREE.RepeatWrapping;
+  redTex.repeat.set(5, 1);
+  const redMat = new THREE.MeshBasicMaterial({ map: redTex });
+  const wideTex = padTex.clone(); wideTex.needsUpdate = true; wideTex.repeat.set(5, 2); // orange 'wide' pad: the same chevrons repeated side to side
+  const wideMat = new THREE.MeshBasicMaterial({ map: wideTex });
   const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
-  const pads = padSpots.map(([idx, lane]) => {
-    const geo = new THREE.PlaneGeometry(I.padWidth, I.padLength);
+  const pads = padSpots.map(([idx, lane0, kind]) => {
+    const red = kind === 'red', full = red || kind === 'wide';
+    // red / wide: the full road width (left edge to right edge) as a strip (red: 5 m, boosts harder; wide: orange, the normal
+    // boost); plain orange: a lane-wide pad
+    const lane = full ? (track.wL[idx] - track.wR[idx]) / 2 : lane0;
+    const width = full ? track.wL[idx] + track.wR[idx] : I.padWidth, length = red ? 5 : I.padLength;
+    const geo = new THREE.PlaneGeometry(width, length);
     geo.rotateX(-Math.PI / 2);
-    const mesh = new THREE.Mesh(geo, padMat);
+    const mesh = new THREE.Mesh(geo, red ? redMat : full ? wideMat : padMat);
     mesh.position.copy(roadPoint(idx, lane, 0.08));
     mesh.quaternion.setFromRotationMatrix(roadBasis(idx)).multiply(flip); // on the slope; chevrons point forward
     trackRoot.add(mesh);
-    return { idx, lane, len: Math.ceil(I.padLength / track.spacing) };
+    return { idx, lane, red, half: width / 2, len: Math.ceil(length / track.spacing) };
   });
 
   // Banana + shell templates (baked to one mesh each; instances share geometry + material). Scaled per kind
@@ -3365,7 +3529,7 @@ function setSteering(mode, save = true) {
 // speed while far behind (full at CFG.ai.easeFull); calm = seconds at the start with no AI weapons; leadCool = min seconds between AI forward shells
 // at a player who leads; blue = share of blue-shell odds kept; blueShield = a blue shell aimed at the player first gives them a shield.
 const DIFF = {
-  easy: { ease: 0.09, pace: -0.04, grace: 4, graceAI: 1.5, weapons: 1, cap: 0.95, from: 15, catchUp: 0.05, calm: 10, leadCool: 25, blue: 0.5, blueShield: true },
+  easy: { ease: 0.09, pace: -0.04, grace: 4, graceAI: 1.5, weapons: 1, cap: 0.95, from: 15, catchUp: 0.05, calm: 10, leadCool: 25, blue: 0.5, blueShield: false },
   medium: { ease: 0.04, pace: 0, grace: 2.5, graceAI: 1.5, weapons: 1, cap: 0.99, from: 30, catchUp: 0.02, calm: 4, leadCool: 0, blue: 1, blueShield: false },
   hard: { ease: 0, pace: 0, grace: 1.5, graceAI: 1, weapons: 1, cap: 9, from: 30, catchUp: 0, calm: 0, leadCool: 0, blue: 1, blueShield: false },
 };
@@ -3396,9 +3560,9 @@ setDifficulty(difficulty, false);
 // Menu / pause -> DEBUG. Pick the track (menu only), park the rivals (invisible, no collisions), a start spot
 // (applied at the start of a race, or at once when paused), an item you always carry (refilled after each use)
 // and one-shot effects. Races played with any of it on are not sent to the telemetry log.
-const dbg = { on: false, parked: false, spot: null, items: [], next: 0, laps: 3, aggro: false }; // aggro: bots use weapons on the player; items: the ticked powers, carried in rotation // `on`: this race was started from the panel (or changed from pause)
-const dbgActive = () => DEBUG && (track.id === 'lab' || dbg.on);
-function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, items: [], next: 0, laps: 3, aggro: false }); CFG.laps = 3; }
+const dbg = { on: false, parked: false, spot: null, items: [], next: 0, laps: 3, aggro: false, self: false }; // self: the CPU drives your kart (70.22); // aggro: bots use weapons on the player; items: the ticked powers, carried in rotation // `on`: this race was started from the panel (or changed from pause)
+const dbgActive = () => DEBUG && (track.def?.debug || dbg.on);
+function dbgClear() { Object.assign(dbg, { on: false, parked: false, spot: null, items: [], next: 0, laps: 3, aggro: false, self: false }); CFG.laps = 3; }
 let dbgFrom = null;
 function dbgSpots() {
   const def = CFG.tracks[track.id], N = track.N;
@@ -3446,6 +3610,7 @@ function dbgTick() { // every frame
   }
   if (dbg.on && dbg.items.length && state.phase === 'race' && !kart.item && kart.itemRoll <= 0) dbgHold(dbgNextItem());
 }
+let dbgDuckUntil = 0; // the DEBUG 'Full' gore-sound preview ducks the music itself until then
 function dbgRender() {
   const card = $('debug-card'), rows = [];
   const row = (label, opts) => {
@@ -3466,11 +3631,31 @@ function dbgRender() {
   if (!racing) row('TRACK', Object.entries(CFG.tracks).map(([id, t]) => ({ text: t.name, on: track.id === id, pick: () => { dbg.spot = null; selectTrack(id); } })));
   row('AI ITEMS', [{ text: 'Normal', on: !dbg.aggro, pick: () => { dbg.aggro = false; } }, { text: 'Aggressive', on: dbg.aggro, pick: () => { dbg.aggro = true; } }]); // aggressive: weapons only, used on you sooner and from further away
   row('RIVALS', [{ text: 'Race', on: !dbg.parked, pick: () => { dbg.parked = false; } }, { text: 'Parked', on: dbg.parked, pick: () => { dbg.parked = true; } }]);
+  row('SELF DRIVE', [{ text: 'Off', on: !dbg.self, pick: () => { dbg.self = false; } }, { text: 'On', on: dbg.self, pick: () => { dbg.self = true; } }]); // the CPU drives your kart (items too): watch a track, test it hands-off
   row('LAPS', [1, 3].map((n) => ({ text: n === 1 ? '1 lap' : '3 laps', on: dbg.laps === n, pick: () => { dbg.laps = n; CFG.laps = n; } })));
   row(racing ? 'GO TO' : 'START AT', [{ text: 'Grid', on: !dbg.spot, pick: () => { dbg.spot = null; } },
     ...dbgSpots().map((s) => ({ text: s.name, on: dbg.spot?.idx === s.idx, pick: () => dbgGoto(s) }))]);
   row('ITEMS', [{ text: 'Normal', on: !dbg.items.length, pick: () => dbgToggle(null) },
     ...ITEM_TYPES.map((t) => ({ text: t, on: dbg.items.includes(t), pick: () => dbgToggle(t) }))]); // tick several: you carry them in rotation, and the bots' boxes give only these (random)
+  // plays the gore sounds on their own (no hit needed): the full sequence runs on the real timeline, music ducked like in the game
+  const snd = (f) => () => { sound.unlock(); f(); };
+  row('GORE SOUNDS', [
+    { text: 'Full', on: false, pick: snd(() => {
+      dbgDuckUntil = performance.now() + 5200; sound.setDuck(1);
+      sound.explosion(1, true);
+      setTimeout(() => { sound.eyePop(); sound.whoosh(1.1); }, 300);
+      setTimeout(() => sound.eyeSplat(), 1400);
+      setTimeout(() => sound.landing(), 2700);
+      setTimeout(() => sound.patter(5), 3000); setTimeout(() => sound.patter(5), 3250);
+      setTimeout(() => { sound.pop(); sound.setDuck(0); }, 4800);
+    }) },
+    { text: 'Blast', on: false, pick: snd(() => sound.explosion(1, true)) },
+    { text: 'Eye pop', on: false, pick: snd(() => { sound.eyePop(); sound.whoosh(1.1); }) },
+    { text: 'Eye splat', on: false, pick: snd(() => sound.eyeSplat()) },
+    { text: 'Landing', on: false, pick: snd(() => sound.landing()) },
+    { text: 'Splat', on: false, pick: snd(() => sound.splat(1)) },
+    { text: 'Bones', on: false, pick: snd(() => sound.bones(1, 8)) },
+  ]);
   if (racing) row('NOW', [
     { text: 'Boost', on: false, pick: () => { kart.boost = CFG.kart.boostDuration * 1.3; } },
     { text: 'Spin out', on: false, pick: () => spinOut(kart, null, 'debug') },
@@ -3521,6 +3706,20 @@ function setFlip(on, save = true) {
   for (const b of $('flip-pick').children) b.classList.toggle('on', (b.dataset.flip === '1') === on);
   releaseStick();
 }
+// Gore (Settings -> GORE): the row only shows for profiles aged 13+ (the age asked on the hello screen); off by default.
+// Gore effects must check goreOn() before drawing anything.
+const GORE_KEY = 'kartrush.gore';
+const goreAllowed = () => (profile?.age ?? 0) >= 13;
+let goreSaved = false;
+try { goreSaved = localStorage.getItem(GORE_KEY) === '1'; } catch { /* storage blocked */ }
+const goreOn = () => goreSaved && goreAllowed();
+function setGore(on, save = true) {
+  goreSaved = on;
+  if (save) try { localStorage.setItem(GORE_KEY, on ? '1' : '0'); } catch { /* storage blocked */ }
+  for (const b of $('gore-pick').children) b.classList.toggle('on', (b.dataset.gore === '1') === on);
+}
+for (const b of $('gore-pick').children) onTap(b, () => { sound.click(); setGore(b.dataset.gore === '1'); });
+setGore(goreSaved, false);
 // Volume levels: 'music' and 'sfx' (effects + engines + drift squeal), 0..1 in four steps
 const volKey = (bus) => `kartrush.volume.${bus}`;
 function savedVolume(bus) {
@@ -3584,6 +3783,7 @@ window.addEventListener('pagehide', teleHidden);
 
 function showSettings() {
   settingsFrom = state.paused ? hud.pauseScreen : hud.menuScreen;
+  $('gore-row').hidden = !goreAllowed();
   showOverlay(hud.settingsScreen);
 }
 function releaseStick() {
@@ -4049,7 +4249,7 @@ function useItem(k, flip = false) { // flip = the opposite throw: green shell ba
     // the player's green shell (build 64.45): aimed at the closest rival ahead (within 28 m, 70 deg of the nose),
     // else along the road's centre line 22 m ahead, so it doesn't just follow wherever the kart happens to point
     let dx = fx, dz = fz;
-    if (item === 'green' && k.isPlayer && !back) {
+    if (item === 'green' && !back) { // build 70.4: the bots aim the same way (they used to fire along their nose into the wall they were facing)
       let aim = null, best = 28 * 28;
       for (const o of karts) {
         if (o === k || o.finished) continue;
@@ -4059,6 +4259,16 @@ function useItem(k, flip = false) { // flip = the opposite throw: green shell ba
       if (!aim) aim = track.samples[(k.trackIdx + Math.round(22 / track.spacing)) % track.N];
       const ax = aim.x - pos.x, az = aim.z - pos.z, al = Math.hypot(ax, az) || 1;
       dx = ax / al; dz = az / al;
+    }
+    // build 70.4 (user: shells bounce back and hit their thrower): a shell whose first 14 m would end beyond a wall (kart
+    // against an edge and facing it, or the line cutting across the inside of a bend) flies along the road instead
+    if (item === 'green') {
+      const ex = pos.x + dx * 14, ez = pos.z + dz * 14, ei = nearestTrackIndex({ x: ex, y: pos.y, z: ez }, k.trackIdx);
+      const el = (ex - track.samples[ei].x) * track.normals[ei].x + (ez - track.samples[ei].z) * track.normals[ei].z;
+      if (Math.abs(el) > (el > 0 ? track.wL[ei] : track.wR[ei]) + CFG.track.curb - 1.2) {
+        const t = track.tangents[k.trackIdx], tl = Math.hypot(t.x, t.z) || 1, sg = back ? -1 : 1;
+        dx = (sg * t.x) / tl; dz = (sg * t.z) / tl;
+      }
     }
     shells.push({
       kind: item, mesh: spawnModel(item, pos), pos,
@@ -4175,6 +4385,7 @@ function spinOut(k, by, what, time = CFG.items.spinTime, ctx = {}) {
   }
   k.spin = k.spinTotal = time;
   k.spinKind = what;
+  k.noGrace = what === 'banana';
   k.launch = null;
   k.hitBy = `${what} from ${by?.name}`;
   if (CFG.items.hit[what]) startHit(k, by, what, CFG.items.hit[what], ctx);
@@ -4232,6 +4443,7 @@ function startHit(k, by, what, H, ctx) {
   k.launch = L;
   k.spin = k.spinTotal = H.time;
   if (H.eject) startEject(k, H);
+  if (H.eject && k.isPlayer && goreOn()) { startGoreSkeleton(k); goreFx.t = 0; }
 }
 
 const smokeP = new THREE.Vector3(), smokeV = new THREE.Vector3();
@@ -4277,7 +4489,7 @@ function blastVictims(owner, at, centre, radius, what) {
     const main = k === at;
     if (spinOut(k, owner, what, undefined, { scale: main ? 1 : H.scale, push: !main, centre })) {
       caught.push(karts.indexOf(k));
-      if (H.burn) k.burn = H.burn * (main ? 1 : H.scale);
+      if (H.burn) { k.burn = H.burn * (main ? 1 : H.scale); k.charT = 1; }
     }
   }
   teleEvent('blast', owner, { what, at: karts.indexOf(at), caught, r: radius });
@@ -4286,8 +4498,8 @@ function blastVictims(owner, at, centre, radius, what) {
 /** The bomb's explosion (build 65.4): a white-hot flash, a big rolling orange fireball, sparks, and black smoke rising after it. */
 function bombFire(pos) {
   const y = pos.y + 0.7, R = Math.random;
-  const put = (spread, up, cols, o) => {
-    emitP.set(pos.x + (R() - 0.5) * 0.6, y + (R() - 0.5) * 0.4, pos.z + (R() - 0.5) * 0.6);
+  const put = (spread, up, cols, o, dy = 0) => {
+    emitP.set(pos.x + (R() - 0.5) * 0.6, y + dy + (R() - 0.5) * 0.4, pos.z + (R() - 0.5) * 0.6);
     const a = R() * Math.PI * 2, e = (R() - 0.3) * 1.2, h = Math.cos(e);
     emitV.set(Math.cos(a) * h * spread * (0.4 + R() * 0.6), Math.sin(e) * spread * 0.7 + up * (0.5 + R() * 0.5), Math.sin(a) * h * spread * (0.4 + R() * 0.6));
     fx.emit(emitP, emitV, cols[(R() * cols.length) | 0], o);
@@ -4295,22 +4507,23 @@ function bombFire(pos) {
   for (let i = 0; i < 8; i++) put(2, 1, [[1, 1, 0.85]], { life: 0.28, size: 5, grow: 2.2, alpha: 1 });                       // flash
   for (let i = 0; i < 60; i++) put(9, 3, [[1, 0.75, 0.15], [1, 0.45, 0.08], [0.95, 0.25, 0.05]], { life: 0.55 + R() * 0.55, size: 2.4 + R() * 1.6, grow: 1.1, alpha: 0.95 }); // fireball
   for (let i = 0; i < 26; i++) put(15, 8, [[1, 0.9, 0.4], [1, 0.6, 0.2]], { life: 0.5 + R() * 0.5, size: 0.45, grow: 0.2, alpha: 1 }); // sparks
-  for (let i = 0; i < 22; i++) put(4, 7, [[0.14, 0.14, 0.16], [0.28, 0.26, 0.26]], { life: 1.2 + R() * 0.6, size: 2.2, grow: 2.2, alpha: 0.7 }); // smoke
+  for (let i = 0; i < 12; i++) put(3, 8, [[0.3, 0.27, 0.25], [0.42, 0.38, 0.34]], { life: 1.4 + R() * 0.6, size: 1.1, grow: 2, alpha: 0.28 }, 1.8); // smoke: starts above the fireball and rises (in front of it, it hid the fire: a dark hole in an orange ring)
 }
 
 /** The bomb goes off where a kart ran into it (or a shell hit it). */
 function bombBlast(hit, owner, pos) {
   blastVictims(owner, hit, pos, CFG.items.bombBlast, 'bomb');
   bombFire(pos);
+  scorchMark(pos, hit.trackIdx);
   const dist = Math.hypot(pos.x - kart.body.position.x, pos.z - kart.body.position.z);
-  if (dist < 80) sound.explosion(clamp(1.2 - dist / 80, 0.3, 1));
+  if (dist < 80) sound.explosion(clamp(1.2 - dist / 80, 0.3, 1), hit.isPlayer && goreOn());
 }
 
 // ---------- Ejected driver (bomb hit, build 65.3) ----------
 // The driver is lifted out of the kart as its own object (reparented to the scene, ballistic arc + spin, a bounce or two),
 // then flies back into the seat. The player's camera follows the driver meanwhile (camFocus).
 const EJECT_G = 22;
-const camFocus = new THREE.Vector3();
+const camFocus = new THREE.Vector3(), ejPrevV = new THREE.Vector3(), ejAcc = new THREE.Vector3();
 const ejQ = new THREE.Quaternion(), ejV = new THREE.Vector3(), ejSeat = new THREE.Vector3(), ejSeatQ = new THREE.Quaternion(), ejS = new THREE.Vector3();
 
 function startEject(k, H) {
@@ -4321,9 +4534,10 @@ function startEject(k, H) {
     lp: R.position.clone(), lq: R.quaternion.clone(), ls: R.scale.clone(), ground: 0, bounces: 0, back: null };
   R.getWorldPosition(e.pos); R.getWorldQuaternion(e.q); R.getWorldScale(ejS);
   const lat = clamp(lateral(k.trackIdx, e.pos), -2, 2);
-  e.ground = surfaceY(k.trackIdx, lat) + Math.max(0.4, e.pos.y - surfaceY(k.trackIdx, lat)); // rests at its seated height
-  const v = k.body.velocity, a = Math.random() * Math.PI * 2;
-  e.vel.set(v.x * 0.5 + Math.cos(a) * E.side, Math.sqrt(2 * EJECT_G * E.up), v.z * 0.5 + Math.sin(a) * E.side);
+  e.seatH = Math.max(0.4, e.pos.y - surfaceY(k.trackIdx, lat)); e.idx = k.trackIdx;
+  e.ground = surfaceY(k.trackIdx, lat) + e.seatH; // rests at its seated height
+  const v = k.body.velocity, t = track.tangents[k.trackIdx], n = track.normals[k.trackIdx], sd = (Math.random() - 0.5) * 2.4 - clamp(lat, -2, 2) * 0.3;
+  e.vel.set(v.x * 0.3 + t.x * E.side * 0.5 + n.x * sd, Math.sqrt(2 * EJECT_G * E.up), v.z * 0.3 + t.z * E.side * 0.5 + n.z * sd); // forward down the road, a little sideways toward the middle
   e.av.set((Math.random() - 0.5) * E.spin, (Math.random() - 0.5) * E.spin, (Math.random() - 0.5) * E.spin);
   scene.add(R);
   R.position.copy(e.pos); R.quaternion.copy(e.q); R.scale.copy(ejS);
@@ -4335,8 +4549,10 @@ function endEject(k) {
   const e = k.eject, R = k.rider?.mesh;
   k.eject = null;
   if (!R) return;
+  if (e.skel) { goreSkel.removeFromParent(); goreSkel.visible = true; R.visible = true; endGoreEyes(); endGuts(); }
   k.group.add(R);
   R.position.copy(e.lp); R.quaternion.copy(e.lq); R.scale.copy(e.ls);
+  if (k.isPlayer) sound.pop();
   if (near(k, 70)) for (let i = 0; i < 10; i++) { // a puff where the driver drops back in
     emitP.copy(k.group.position); emitP.y += 0.5;
     emitV.set((Math.random() - 0.5) * 4, 1 + Math.random() * 2, (Math.random() - 0.5) * 4);
@@ -4344,6 +4560,692 @@ function endEject(k) {
   }
 }
 
+
+// ---------- Gore (Settings -> GORE): skeleton driver, blood, camera. Shared materials: ----------
+const goreMat = {
+  bone: new THREE.MeshStandardMaterial({ color: 0xf2ead6, emissive: 0x3a342a, roughness: 0.6 }), // (emissive: the green grass bounce light turned it olive)
+};
+/** A smooth lumpy blob (flesh chunk): a sphere with a random offset per position (the same at the seam), amplitude `amp` (0.3 = +-30%). */
+function lumpGeo(w, h, amp) {
+  const g = new THREE.SphereGeometry(1, w, h), pp = g.attributes.position, seen = new Map();
+  for (let i = 0; i < pp.count; i++) {
+    const key = `${pp.getX(i).toFixed(3)},${pp.getY(i).toFixed(3)},${pp.getZ(i).toFixed(3)}`;
+    if (!seen.has(key)) seen.set(key, 1 - amp + Math.random() * amp * 2);
+    const f = seen.get(key); pp.setXYZ(i, pp.getX(i) * f, pp.getY(i) * f, pp.getZ(i) * f);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+// ---------- Gore: blood droplets (rewritten in 70.40) ----------
+// One InstancedMesh of teardrops (pointed tail, round head). Each is stretched along its velocity with the head leading: a long thin streak
+// when fast, a small drop when slow. They fall under heavy gravity and, on reaching the road (its real height at that spot, banks and
+// slopes included), become flat decals: irregular blobs lying in the road's plane, stretched the way the drop was travelling.
+const BLOOD_MAX = 900, BLOOD_G = 34, DOT_MAX = 240;
+const blood = { mesh: null, hi: 0, cursor: 0, ground: 0, hint: 0, p: new Float32Array(BLOOD_MAX * 3), v: new Float32Array(BLOOD_MAX * 3), life: new Float32Array(BLOOD_MAX), size: new Float32Array(BLOOD_MAX) };
+const bM = new THREE.Matrix4(), bQ = new THREE.Quaternion(), bQ2 = new THREE.Quaternion(), bP = new THREE.Vector3(), bS = new THREE.Vector3(), bD = new THREE.Vector3(), bY = new THREE.Vector3(0, 1, 0), bX = new THREE.Vector3(1, 0, 0);
+const bloodMats = {
+  drop: new THREE.MeshStandardMaterial({ color: 0xa30a0a, emissive: 0x200000, roughness: 0.15, metalness: 0 }),
+  dot: new THREE.MeshBasicMaterial({ color: 0x6a0505, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+};
+const dots = { meshes: [], cursor: 0, geos: null };
+const roadUp = new THREE.Vector3();
+/** The road's height under (x, z) near track index `hint` (banks and slopes included). With wantUp, roadUp = the surface normal there. */
+function roadAt(x, z, hint, wantUp) {
+  const { N, samples } = track;
+  let best = hint, bd = Infinity;
+  for (let k = -30; k <= 30; k++) {
+    const i = (((hint + k) % N) + N) % N, sm = samples[i], d = (sm.x - x) ** 2 + (sm.z - z) ** 2;
+    if (d < bd) { bd = d; best = i; }
+  }
+  const i = best;
+  bP.set(x, 0, z);
+  const y = surfaceY(i, clamp(lateral(i, bP), -track.wR[i] - 1, track.wL[i] + 1));
+  if (wantUp) {
+    const n = track.normals[i], t = track.tangents[i], bk = track.bank[i], nx = samples[(i + 1) % N], pv = samples[(i - 1 + N) % N];
+    const sl = (nx.y - pv.y) / Math.max(1e-3, Math.hypot(nx.x - pv.x, nx.z - pv.z)); // slope along the track
+    roadUp.set(-bk * n.x - sl * t.x, 1, -bk * n.z - sl * t.z).normalize();
+  }
+  return y;
+}
+/** Irregular flat blob (a fan of jittered radii) with a spike along +X: the direction the blood was going. */
+function bloodBlobGeos() {
+  return [0, 1, 2].map(() => {
+    const n = 18, pos = [0, 0, 0], idx = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, wrap = Math.atan2(Math.sin(a), Math.cos(a));
+      const r = (0.55 + Math.random() * 0.6) * (1 + 1.9 * Math.exp(-((wrap / 0.32) ** 2))) * (1 + 0.5 * Math.exp(-(((Math.abs(wrap) - Math.PI) / 0.3) ** 2)) * 0);
+      pos.push(Math.cos(a) * r, Math.sin(a) * r * 0.8, 0);
+      idx.push(0, 1 + i, 1 + ((i + 1) % n));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+    return g;
+  });
+}
+function initBlood() { // at boot (before warmUpShaders), so no shader compiles mid-race
+  if (blood.mesh) return;
+  const prof = [[0, -1], [0.12, -0.7], [0.3, -0.3], [0.44, 0.15], [0.46, 0.5], [0.36, 0.82], [0.18, 0.97], [0, 1]].map(([r, y]) => new THREE.Vector2(r, y)); // teardrop: tail at -Y, head at +Y
+  blood.mesh = new THREE.InstancedMesh(new THREE.LatheGeometry(prof, 8), bloodMats.drop, BLOOD_MAX);
+  blood.mesh.frustumCulled = false; blood.mesh.count = 0; blood.mesh.castShadow = false;
+  blood.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(blood.mesh);
+}
+function goreGround(k) { blood.hint = k.trackIdx; blood.ground = roadAt(k.body.position.x, k.body.position.z, k.trackIdx); }
+/** n droplets from `pos`, thrown at ~speed m/s in every direction (biased up); `base` (a velocity) is added to each. */
+function goreBlood(pos, n, speed, base) {
+  initBlood();
+  const R = Math.random;
+  for (let i = 0; i < n; i++) {
+    const s = blood.cursor++ % BLOOD_MAX, a = R() * Math.PI * 2, e = (R() - 0.25) * 1.6, h = Math.cos(e), sp = speed * (0.35 + R() * 0.9);
+    blood.p[s * 3] = pos.x + (R() - 0.5) * 0.3; blood.p[s * 3 + 1] = pos.y + (R() - 0.5) * 0.3; blood.p[s * 3 + 2] = pos.z + (R() - 0.5) * 0.3;
+    blood.v[s * 3] = Math.cos(a) * h * sp + (base ? base.x : 0); blood.v[s * 3 + 1] = Math.sin(e) * sp * 0.8 + sp * 0.25 + (base ? base.y : 0); blood.v[s * 3 + 2] = Math.sin(a) * h * sp + (base ? base.z : 0);
+    blood.life[s] = 3; blood.size[s] = 0.06 + R() * 0.08;
+    if (s + 1 > blood.hi) blood.hi = s + 1;
+  }
+}
+function goreDot(x, z, vx, vz, size) {
+  if (!dots.geos) {
+    dots.geos = bloodBlobGeos();
+    for (let i = 0; i < DOT_MAX; i++) { const m = new THREE.Mesh(dots.geos[i % 3], bloodMats.dot); m.visible = false; m.frustumCulled = false; scene.add(m); dots.meshes.push(m); }
+  }
+  const m = dots.meshes[dots.cursor++ % DOT_MAX], sp = Math.hypot(vx, vz);
+  const y = roadAt(x, z, blood.hint, true);
+  m.visible = true; m.age = 0;
+  m.position.set(x + roadUp.x * 0.03, y + 0.03, z + roadUp.z * 0.03);
+  bQ2.setFromAxisAngle(bY, Math.atan2(-vz, vx)).multiply(bQ.setFromAxisAngle(bX, -Math.PI / 2)); // flat, +X along the travel direction
+  m.quaternion.setFromUnitVectors(bY, roadUp).multiply(bQ2); // then tilted into the road's plane
+  const w = size * (1.4 + Math.min(sp * 0.05, 1.6));
+  m.scale.set(w, w, 1);
+}
+function updateGoreBlood(dt) {
+  if (!blood.mesh || !blood.hi) return;
+  let top = 0, landed = 0;
+  for (let s = 0; s < blood.hi; s++) {
+    if (blood.life[s] <= 0) continue;
+    const i3 = s * 3;
+    blood.life[s] -= dt;
+    blood.v[i3 + 1] -= BLOOD_G * dt;
+    blood.p[i3] += blood.v[i3] * dt; blood.p[i3 + 1] += blood.v[i3 + 1] * dt; blood.p[i3 + 2] += blood.v[i3 + 2] * dt;
+    if (blood.life[s] <= 0 || (blood.v[i3 + 1] < 0 && blood.p[i3 + 1] < blood.ground + 4 && blood.p[i3 + 1] < roadAt(blood.p[i3], blood.p[i3 + 2], blood.hint))) {
+      if (blood.life[s] > 0) { goreDot(blood.p[i3], blood.p[i3 + 2], blood.v[i3], blood.v[i3 + 2], blood.size[s]); landed++; } // splat on the road
+      blood.life[s] = 0; bM.makeScale(0, 0, 0); blood.mesh.setMatrixAt(s, bM);
+      continue;
+    }
+    bD.set(blood.v[i3], blood.v[i3 + 1], blood.v[i3 + 2]);
+    const speed = bD.length(), stretch = clamp(1 + speed * 0.05, 1, 1.7), sz = blood.size[s];
+    const wid = sz * 0.9 * clamp(1.2 / Math.sqrt(stretch), 0.6, 1);  // a little thinner when fast, but still a drop (not a needle)
+    bQ.setFromUnitVectors(bY, bD.multiplyScalar(1 / (speed || 1)));
+    bP.set(blood.p[i3], blood.p[i3 + 1], blood.p[i3 + 2]); bS.set(wid, sz * stretch * 1.2, wid);
+    bM.compose(bP, bQ, bS); blood.mesh.setMatrixAt(s, bM);
+    top = s + 1;
+  }
+  blood.mesh.count = blood.hi;
+  blood.mesh.instanceMatrix.needsUpdate = true;
+  if (landed) sound.patter(landed);
+  if (!top) blood.hi = 0;
+  for (const m of dots.meshes) {
+    if (!m.visible) continue;
+    m.age += dt;
+    if (m.age > 25) m.visible = false;
+  }
+}
+
+// ---------- Gore: bomb-hit camera (build 70.30). goreFx.t = seconds since the player's bomb hit (-1 = off, real time). ----------
+// Hit-stop (a freeze at the blast), then slow-mo easing back to normal; a punch-in (FOV), a shake, a white flash and a red vignette.
+const GORE_SWAP = 0.1; // real seconds the rider is still visible after the blast, before the skeleton replaces it
+const goreFx = { t: -1, l: -1, fov: 0, shown: false }, GORE_FX_END = 1.5, GORE_LAND_END = 1.5; // t: blast clock, l: landing clock
+function goreTimeScale(t) {
+  if (t < 0.12) return 0.03;
+  if (t < 0.8) return 0.3;
+  const u = clamp((t - 0.8) / 0.7, 0, 1);
+  return 0.3 + 0.7 * u * u * (3 - 2 * u);
+}
+/** The skeleton's landing: a short thud-freeze, then a lighter, shorter slow-mo than the blast's (two long ones made it stop-start). */
+function goreLandScale(l) {
+  if (l < 0.06) return 0.05;
+  if (l < 0.9) return 0.3;
+  const u = clamp((l - 0.9) / 0.6, 0, 1);
+  return 0.3 + 0.7 * u * u * (3 - 2 * u);
+}
+/** Camera part (end of updateCamera): FOV punch-in + shake. The HUD overlays are updated here too. */
+function goreCamera() {
+  const t = goreFx.t, l = goreFx.l, on = t >= 0 || l >= 0;
+  const ut = t >= 0 ? clamp(t / GORE_FX_END, 0, 1) : 0, ul = l >= 0 ? clamp(l / GORE_LAND_END, 0, 1) : 0;
+  const punch = on ? Math.min(t >= 0 ? -22 * Math.sin(Math.PI * Math.min(1, ut * 1.3)) : 0, l >= 0 ? -14 * Math.sin(Math.PI * Math.min(1, ul * 1.25)) : 0) : 0;
+  const fov = Math.min(punch, -camState.ej * Math.max(0, camera.fov - CINE_FOV)); // (camera.fov here = the base: chaseCamera took the offset off)
+  if (fov !== goreFx.fov) { camera.fov += fov - goreFx.fov; goreFx.fov = fov; camera.updateProjectionMatrix(); }
+  const lp = lens.on ? (performance.now() - lens.t0) / 1000 : 9; // the eyeball's impact on the glass jolts the camera too
+  const shake = Math.max(t >= 0 && t < 0.9 ? 0.22 * (1 - t / 0.9) : 0, l >= 0 && l < 0.5 ? 0.14 * (1 - l / 0.5) : 0, lp < 0.3 ? 0.18 * (1 - lp / 0.3) : 0);
+  if (shake) {
+    camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; camera.position.z += (Math.random() - 0.5) * shake;
+    camera.rotateZ((Math.random() - 0.5) * shake * 0.3);
+  }
+  if (!on && !goreFx.shown) return;
+  goreFx.shown = on;
+  $('gore-flash').style.opacity = t >= 0 && t < 0.25 ? String(0.9 * (1 - t / 0.25)) : '0';
+  const vt = t >= 0 ? clamp(Math.min(t / 0.2, (GORE_FX_END - t) / 0.7), 0, 1) : 0, vl = l >= 0 ? clamp(Math.min(l / 0.2, (GORE_LAND_END - l) / 0.7), 0, 1) : 0;
+  $('gore-vig').style.opacity = String(Math.max(vt, vl));
+}
+
+// Blood on the road: flat dark-red splats (one big pool + droplets + streaks) where the skeleton lands and, smaller, where it bounces.
+const goreSplats = [];
+let splatGeo = null;
+function goreSplat(k, pos, size, drops) {
+  const R = Math.random;
+  dots.geos ??= bloodBlobGeos();
+  const y = roadAt(pos.x, pos.z, k.trackIdx, true), grp = new THREE.Group();
+  grp.position.set(pos.x, y + 0.04, pos.z);
+  grp.quaternion.setFromUnitVectors(bY, roadUp); // lies in the road's plane (banks + slopes)
+  const add = (x, z, sx, sz, col) => {
+    const m = new THREE.Mesh(dots.geos[(R() * 3) | 0], new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    m.rotation.set(-Math.PI / 2, 0, R() * Math.PI * 2); m.position.set(x, 0, z); m.scale.set(sx, sz, 1); grp.add(m);
+  };
+  add(0, 0, size, size, 0x6e0505);                                          // the pool
+  add(size * 0.3, size * 0.2, size * 0.6, size * 0.6, 0x8c0a0a);
+  for (let i = 0; i < drops; i++) {                                         // droplets and streaks thrown outward
+    const a = R() * Math.PI * 2, d = size * (0.9 + R() * 2.2), w = size * (0.08 + R() * 0.14);
+    add(Math.cos(a) * d, Math.sin(a) * d, w, w, R() < 0.5 ? 0x6e0505 : 0x9a0c0c);
+  }
+  scene.add(grp);
+  goreSplats.push({ grp, age: 0 });
+}
+function goreLanding(k, e) {
+  goreFx.l = 0;
+  goreSplat(k, e.pos, 1.5, 18);
+  goreGround(k); goreBlood(e.pos, 45, 6);
+  sound.landing();
+}
+function updateGoreSplats(dt) {
+  for (let i = goreSplats.length - 1; i >= 0; i--) {
+    const sp = goreSplats[i];
+    sp.age += dt;
+    if (sp.age < 20) continue;
+    scene.remove(sp.grp);
+    sp.grp.traverse((o) => { if (o.isMesh) o.material.dispose(); });
+    goreSplats.splice(i, 1);
+  }
+}
+
+// The skeleton driver (swapped in for the rider as soon as the bomb goes off): skull with googly eyes and teeth, ribs, spine,
+// pelvis, one arm (the other is the torn-off prop), both legs, charred patches. Built once, in the rider's local frame.
+let goreSkel = null;
+function buildSkeleton(y0) {
+  const outer = new THREE.Group(), g = new THREE.Group(), joints = [], V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const bone = goreMat.bone, M = (col, r = 0.8) => new THREE.MeshStandardMaterial({ color: col, roughness: r });
+  const eyeW = M(0xffffff, 0.3), eyeK = M(0x111111, 0.3), dark = M(0x0c0a09, 1), meatDark = M(0x6a1212, 0.55), meatRaw = M(0x9e2a2a, 0.5);
+    const ball = (r) => new THREE.SphereGeometry(r, 12, 10);
+  // A joint = a Group at p inside parent that swings freely (stepSkeleton). d / L = the limb's rest direction and length.
+  const joint = (parent, p, d, L, o = {}) => {
+    const n = new THREE.Group(); n.position.copy(p); parent.add(n);
+    joints.push({ n, d: d.clone().normalize(), L, k: o.k ?? 4, c: o.c ?? 0.8, lim: o.lim ?? 2.4, th: V(0, 0, 0), w: V(0, 0, 0) });
+    return n;
+  };
+  const put = (parent, geo, mat, p, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(geo, mat); m.position.copy(p); m.scale.set(sx, sy, sz); parent.add(m); return m; };
+  const meatGeos = [0, 1, 2].map(() => lumpGeo(10, 8, 0.3)); // wet lumps
+  const meat = (parent, p, sz, sx = 1, sy = 1, sz2 = 1) => { sz *= 1.25; const m = put(parent, meatGeos[(Math.random() * 3) | 0], Math.random() < 0.55 ? meatRaw : meatDark, p, sz * sx, sz * sy, sz * sz2); m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); return m; };
+  // Flesh clinging to one side of a bone: a long tapered strip along a->b (middle 60%, so bone shows at both ends), not a blob floating beside it.
+  const strip = (parent, a, b, r) => {
+    const d = b.clone().sub(a), L = d.length(); d.normalize();
+    const side = V(1, 0, 0).cross(d).normalize().multiplyScalar(r * 0.5);
+    const m = put(parent, meatGeos[(Math.random() * 3) | 0], Math.random() < 0.6 ? meatRaw : meatDark, a.clone().addScaledVector(d, L * 0.5).add(side), r, L * 0.3, r * 0.7);
+    m.quaternion.setFromUnitVectors(V(0, 1, 0), d); return m;
+  };
+  const rod = (parent, a, b, r, mat = bone) => {
+    const d = b.clone().sub(a), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), 8), mat);
+    m.position.copy(a).add(b).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(V(0, 1, 0), d.normalize()); parent.add(m); return m;
+  };
+  g.position.set(0, y0 + 0.38, -0.3); g.scale.setScalar(1.9); // the seat; bigger than the rider so it reads from the chase camera
+  const H = new THREE.Group(); H.position.set(0, -0.02, 0); g.add(H);                // hips
+  put(H, new THREE.BoxGeometry(0.34, 0.07, 0.14), bone, V(0, -0.04, 0));            // pelvis
+  const S = joint(H, V(0, 0, 0), V(0, 1, 0), 0.5, { k: 8, c: 1, lim: 1.2 });              // spine + ribs
+  rod(S, V(0, 0, 0), V(0, 0.52, 0), 0.03);
+  for (let i = 0; i < 5; i++) put(S, ball(0.045), bone, V(0, 0.04 + i * 0.11, 0));
+  for (let i = 0; i < 4; i++) { const r = 0.19 - i * 0.012;
+    const m = put(S, new THREE.TorusGeometry(r, 0.016, 6, 20), bone, V(0, 0.18 + i * 0.075, 0.02), 1, 1, 0.75); m.rotation.x = Math.PI / 2; }
+  rod(S, V(-0.18, 0.48, 0), V(0.18, 0.48, 0), 0.02);                                // collarbone
+  put(S, ball(0.07), dark, V(0.05, 0.32, 0.14), 1, 1.3, 0.6);                       // char on the ribs
+  for (const [x, y, z] of [[-0.17, 0.3, 0.06], [0.17, 0.24, 0.04], [0.1, 0.4, 0.12]]) meat(S, V(x, y, z), 0.025, 0.7, 1.8, 0.7).material = meatDark; // a few small torn shreds on the ribs; the chest is otherwise clean bone
+  const N = joint(S, V(0, 0.52, 0), V(0, 1, 0), 0.25, { k: 3, c: 0.7, lim: 2.2 });   // head
+  put(N, ball(0.19), bone, V(0, 0.2, 0.02), 1, 0.95, 1.05);                          // skull
+  for (const x of [-0.08, 0.08]) put(N, ball(0.062), dark, V(x, 0.22, 0.17), 1, 1.1, 0.5); // sockets
+  put(N, ball(0.05), eyeW, V(-0.075, 0.235, 0.19)); put(N, ball(0.022), eyeK, V(-0.079, 0.235, 0.235)); // the left googly eye stays
+  put(N, ball(0.045), meatDark, V(0.08, 0.22, 0.16)); // the right socket: raw and empty, the other eye hangs from it
+  const sockR = new THREE.Object3D(); sockR.position.set(0.08, 0.22, 0.2); N.add(sockR);
+  const accSlot = new THREE.Group(); accSlot.position.set(0, 0.2, 0.02); N.add(accSlot); // the charred signature item goes here
+  for (let i = -3; i <= 3; i++) put(N, new THREE.BoxGeometry(0.022, 0.035, 0.02), eyeW, V(i * 0.027, 0.075, 0.17)); // upper teeth
+  const J = joint(N, V(0, 0.09, 0.02), V(0, -0.4, 1), 0.14, { k: 7, c: 0.8, lim: 1.1 }); // jaw: flaps
+  put(J, new THREE.BoxGeometry(0.2, 0.05, 0.16), bone, V(0, -0.04, 0.07));
+  for (let i = -3; i <= 3; i++) put(J, new THREE.BoxGeometry(0.022, 0.03, 0.02), eyeW, V(i * 0.027, -0.005, 0.15)); // lower teeth
+  for (const x of [-1, 1]) { // arms to the wheel
+    const SH = joint(S, V(0.18 * x, 0.46, 0), V(0.04 * x, -0.24, 0.12), 0.27);
+    rod(SH, V(0, 0, 0), V(0.04 * x, -0.24, 0.12), 0.022);
+    strip(SH, V(0, 0, 0), V(0.04 * x, -0.24, 0.12), 0.045);
+    const EL = joint(SH, V(0.04 * x, -0.24, 0.12), V(-0.05 * x, 0.28, 0.24), 0.37, { lim: 2.6 });
+    rod(EL, V(0, 0, 0), V(-0.05 * x, 0.28, 0.24), 0.02); put(EL, ball(0.035), bone, V(-0.05 * x, 0.29, 0.25));
+    strip(EL, V(0, 0, 0), V(-0.05 * x, 0.28, 0.24), 0.04); // flesh left along the forearm and upper arm
+  }
+  for (const x of [-0.1, 0.1]) { // legs, bent to the pedals
+    const HP = joint(H, V(x, -0.04, 0), V(0, 0.06, 0.34), 0.35);
+    rod(HP, V(0, 0, 0), V(0, 0.06, 0.34), 0.03);
+    strip(HP, V(0, 0, 0), V(0, 0.06, 0.34), 0.06); // clinging to the femur
+    const KN = joint(HP, V(0, 0.06, 0.34), V(0, -0.25, 0.16), 0.3, { lim: 2.6 });
+    put(HP, ball(0.04), bone, V(0, 0.06, 0.34)); rod(KN, V(0, 0, 0), V(0, -0.25, 0.16), 0.025);
+    strip(KN, V(0, 0, 0), V(0, -0.25, 0.16), 0.05); // calf
+  }
+  meat(N, V(0.1, 0.34, 0.02), 0.045, 1.4, 0.7, 1); // a scrap of scalp
+  const gutA = (par, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); par.add(o); return o; };
+  outer.userData.gutAnchors = [gutA(S, 0.06, 0.12, 0.13), gutA(S, -0.09, 0.02, 0.12), gutA(H, 0.02, -0.04, 0.1)]; // where the entrails hang from
+  outer.add(g);
+  outer.userData.joints = joints; outer.userData.sockR = sockR; outer.userData.acc = accSlot;
+  return outer;
+}
+const sF = new THREE.Vector3(), sW = new THREE.Vector3(), sT = new THREE.Vector3(), sA = new THREE.Vector3(), sQ = new THREE.Quaternion();
+/**
+ * Free swing of the skeleton's joints: each limb is a damped pendulum in the body's frame. The force on it is gravity minus the body's
+ * real acceleration (so it floats in free fall and flops on the bounces) plus the centrifugal push of the spin; `acc` = null at rest.
+ */
+function stepSkeleton(dt, acc, av, q) {
+  const joints = goreSkel.userData.joints;
+  sQ.copy(q).invert();
+  sF.set(0, -EJECT_G, 0); if (acc) sF.sub(acc);
+  if (sF.length() > 70) sF.setLength(70);
+  sF.applyQuaternion(sQ);
+  sW.copy(av).applyQuaternion(sQ);
+  const n = Math.max(1, Math.ceil(dt / 0.016)), h = dt / n;
+  for (let i = 0; i < n; i++) for (const j of joints) {
+    sA.copy(j.d).multiplyScalar(j.L * 0.5); sA.crossVectors(sW, sA); sA.crossVectors(sW, sA); // w x (w x r)
+    sT.copy(sF).sub(sA);                                    // force incl. centrifugal
+    sT.crossVectors(j.d, sT).multiplyScalar(1.0 / j.L);     // torque: swings the limb toward the force
+    j.w.addScaledVector(sT, h).addScaledVector(j.th, -j.k * h).addScaledVector(j.w, -j.c * h);
+    j.th.addScaledVector(j.w, h);
+    for (const a of ['x', 'y', 'z']) if (Math.abs(j.th[a]) > j.lim) { j.th[a] = Math.sign(j.th[a]) * j.lim; j.w[a] *= -0.3; }
+    j.n.rotation.set(j.th.x, j.th.y, j.th.z);
+  }
+}
+// Charred signature items (the skull's slot, head centre = origin): enough to tell who just blew up. Built once per driver.
+const charAccs = {};
+function charAccessory(name) {
+  if (charAccs[name]) return charAccs[name];
+  const g = new THREE.Group(), V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const char = new THREE.MeshStandardMaterial({ color: 0x17120f, roughness: 1 });
+  const ember = new THREE.MeshStandardMaterial({ color: 0x331000, emissive: 0xff4a10, emissiveIntensity: 0.9, roughness: 0.6 });
+  const add = (geo, p, rot = [0, 0, 0], mat = char) => { const m = new THREE.Mesh(geo, mat); m.position.copy(p); m.rotation.set(...rot); g.add(m); return m; };
+  const cone = (r, h, seg = 6) => new THREE.ConeGeometry(r, h, seg), ball = (r) => new THREE.SphereGeometry(r, 8, 6);
+  switch (name) {
+    case 'Nova': for (const x of [-1, 1]) { add(cone(0.07, 0.24), V(0.11 * x, 0.25, -0.02), [0, 0, -0.35 * x]); add(ball(0.02), V(0.13 * x, 0.37, -0.02), [0, 0, 0], ember); } break; // fox ears
+    case 'Luna': for (const x of [-1, 1]) { add(cone(0.035, 0.16), V(0.06 * x, -0.12, 0.17), [Math.PI, 0, 0]); add(ball(0.07), V(0.1 * x, 0.2, 0.0)); } break; // tusks + fur tufts
+    case 'Mako': add(cone(0.08, 0.3, 4), V(0, 0.28, -0.06), [-0.5, 0, 0]).scale.z = 0.35; add(ball(0.02), V(0, 0.4, -0.12), [0, 0, 0], ember); break; // dorsal fin
+    case 'Rex': for (let i = 0; i < 3; i++) add(cone(0.035, 0.18 - i * 0.03), V(0, 0.22 - i * 0.02, -0.02 - i * 0.1), [-0.5 - i * 0.2, 0, 0]); break; // crest
+    case 'Bolt': for (const x of [-1, 1]) { add(new THREE.CylinderGeometry(0.01, 0.01, 0.34, 5), V(0.1 * x, 0.34, -0.02), [0, 0, -0.5 * x]); add(ball(0.03), V(0.19 * x, 0.49, -0.02), [0, 0, 0], ember); } break; // antennae
+    case 'Koda': for (const x of [-1, 1]) add(ball(0.09), V(0.15 * x, 0.18, -0.03), [0, 0, 0]).scale.set(1, 1, 0.45); break; // round ears
+    case 'Pip': for (let i = -1; i <= 1; i++) add(new THREE.CylinderGeometry(0.008, 0.012, 0.18, 4), V(0.04 * i, 0.27, 0.02), [0.1, 0, -0.35 * i]); break; // chick tuft
+    case 'Hex': add(cone(0.15, 0.38, 8), V(0.03, 0.38, 0), [0, 0, -0.35]); add(new THREE.CylinderGeometry(0.24, 0.24, 0.025, 12), V(0, 0.2, 0)); add(ball(0.025), V(0.15, 0.55, 0), [0, 0, 0], ember); break; // wizard hat
+    default: add(new THREE.SphereGeometry(0.22, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), V(0, 0.04, 0)); // the helmet
+  }
+  return (charAccs[name] = g);
+}
+
+// ---------- Gore: the dangling eyeball + the eyeball that hits the lens (build 70.39) ----------
+// Eye 1 hangs from the right socket on an optic nerve: a 6-point position-based chain (heavy eyeball at the end) simulated in world space,
+// drawn as a TubeGeometry rebuilt every frame, so it whips with the skull. Eye 2 flies straight at the chase camera; on arrival it
+// becomes a 3D eyeball in front of the camera that slides down the lens over a shader-drawn smear (startLens).
+let eyeTex = null;
+const eyeMats = { iris: new THREE.MeshStandardMaterial({ color: 0x2a8a48, emissive: 0x0f3a1c, roughness: 0.3 }), pupil: new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.2 }),
+  nerve: new THREE.MeshStandardMaterial({ color: 0xa51e1e, roughness: 0.5 }) };
+function makeEyeball(r) {
+  if (!eyeTex) { // bloodshot sclera
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#f6eee8'; c.fillRect(0, 0, 256, 128);
+    const gr = c.createRadialGradient(128, 64, 10, 128, 64, 130); gr.addColorStop(0.5, 'rgba(160,20,20,0)'); gr.addColorStop(1, 'rgba(160,20,20,0.5)');
+    c.fillStyle = gr; c.fillRect(0, 0, 256, 128);
+    c.strokeStyle = 'rgba(190,20,20,0.75)'; c.lineWidth = 1.4;
+    for (let i = 0; i < 46; i++) { c.beginPath(); let x = Math.random() * 256, y = Math.random() * 128; c.moveTo(x, y); for (let j = 0; j < 5; j++) { x += (Math.random() - 0.5) * 26; y += (Math.random() - 0.3) * 16; c.lineTo(x, y); } c.stroke(); }
+    eyeTex = new THREE.CanvasTexture(cv); eyeTex.colorSpace = THREE.SRGBColorSpace;
+  }
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(r, 18, 12), new THREE.MeshStandardMaterial({ map: eyeTex, roughness: 0.15 })));
+  const iris = new THREE.Mesh(new THREE.SphereGeometry(r * 0.58, 24, 16), eyeMats.iris); iris.position.z = r * 0.88; iris.scale.z = 0.35; g.add(iris);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 24, 16), eyeMats.pupil); pupil.position.z = r * 1.0; pupil.scale.z = 0.3; g.add(pupil); // wide: it is terrified
+  const glint = new THREE.Mesh(new THREE.SphereGeometry(r * 0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff })); glint.position.set(-r * 0.17, r * 0.17, r * 1.07); g.add(glint); // a wet highlight: it looks alive
+  return g;
+}
+const EYE_N = 6, EYE_SEG = 0.075, EYE_W = [0, 1, 1, 1, 1, 0.3];
+const eye1 = { on: false, mesh: null, tube: null, p: [], o: [], v: [] };
+const eye2 = { on: false, mesh: null, t: 0, s0: new THREE.Vector3(), q0: new THREE.Quaternion(), tx: 0, ty: 0, sc: 1 };
+const EYE_POP = 0.3, EYE_FLY = 1.1; // eye 2 (real seconds): out of the socket, then the flight at the lens
+const eyeV = new THREE.Vector3(), eyeD = new THREE.Vector3(), eyeQ = new THREE.Quaternion(), eyeZ = new THREE.Vector3(0, 0, 1);
+function startGoreEyes(k, e) {
+  goreSkel.updateMatrixWorld(true);
+  const anchor = goreSkel.userData.sockR.getWorldPosition(new THREE.Vector3());
+  eye1.mesh ??= makeEyeball(0.1);
+  eye1.p = []; eye1.o = []; eye1.v = [];
+  for (let i = 0; i < EYE_N; i++) {
+    eye1.p.push(anchor.clone().add(new THREE.Vector3(0, -i * 0.01, 0)));
+    eye1.o.push(anchor.clone());
+    eye1.v.push(new THREE.Vector3((Math.random() - 0.5) * 9, 2 + Math.random() * 5, (Math.random() - 0.5) * 9).add(e.vel)); // the blast flings it out
+  }
+  scene.add(eye1.mesh); eye1.on = true;
+  eye2.mesh ??= makeEyeball(0.14);
+  eye2.mesh.scale.setScalar(0.4); eye2.mesh.position.copy(anchor); eye2.t = 0; eye2.on = true; scene.add(eye2.mesh);
+  const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); // where it hits the glass: upper left, clear of the skeleton in the middle
+  eye2.tx = -0.36 * th * camera.aspect; eye2.ty = 0.3 * th;
+}
+function endGoreEyes() {
+  if (eye1.on) { eye1.on = false; eye1.mesh.removeFromParent(); if (eye1.tube) { eye1.tube.removeFromParent(); eye1.tube.geometry.dispose(); eye1.tube = null; } }
+  if (eye2.on) { eye2.on = false; eye2.mesh.removeFromParent(); } // (a lens eye keeps sliding on its own clock)
+}
+function updateGoreEyes(dt, rdt) {
+  updateGoreLens();
+  if (eye2.on && rdt > 0) updateEye2(rdt);
+  if (!(dt > 1e-4)) return;
+  if (eye1.on) {
+    const P = eye1.p, O = eye1.o, V = eye1.v;
+    P[0].copy(goreSkel.userData.sockR.getWorldPosition(eyeV)); V[0].set(0, 0, 0);
+    for (let i = 1; i < EYE_N; i++) {
+      O[i].copy(P[i]);
+      V[i].y -= 26 * dt; V[i].multiplyScalar(Math.pow(0.35, dt));
+      P[i].addScaledVector(V[i], dt);
+    }
+    for (let it = 0; it < 5; it++) for (let i = 0; i < EYE_N - 1; i++) {
+      const a = P[i], b = P[i + 1];
+      eyeD.copy(b).sub(a); const d = eyeD.length() || 1e-5, diff = (d - EYE_SEG) / d, wa = EYE_W[i], wb = EYE_W[i + 1], sum = wa + wb;
+      a.addScaledVector(eyeD, diff * wa / sum); b.addScaledVector(eyeD, -diff * wb / sum);
+    }
+    for (let i = 1; i < EYE_N; i++) {
+      if (P[i].y < blood.ground + 0.05) { P[i].y = blood.ground + 0.05; O[i].y = P[i].y + (P[i].y - O[i].y) * 0.0; }
+      V[i].copy(P[i]).sub(O[i]).divideScalar(dt);
+    }
+    const tipP = P[EYE_N - 1];
+    eye1.mesh.position.copy(tipP);
+    eyeD.copy(tipP).sub(P[EYE_N - 2]).normalize();
+    eye1.mesh.quaternion.setFromUnitVectors(eyeZ, eyeD);
+    if (eye1.tube) { eye1.tube.geometry.dispose(); eye1.tube.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P.map((q) => q.clone())), 10, 0.016, 5, false); }
+    else { eye1.tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P.map((q) => q.clone())), 10, 0.016, 5, false), eyeMats.nerve); eye1.tube.frustumCulled = false; scene.add(eye1.tube); }
+  }
+}
+const e2L = new THREE.Vector3(), e2C = new THREE.Vector3(), e2E = new THREE.Vector3(), e2Q = new THREE.Quaternion(), e2Spin = new THREE.Vector3(0.6, 1, 0.3).normalize();
+/**
+ * Eye 2 runs on real time (the world is in slow motion around it). Pop: it bulges out of the socket and tears free (scale overshoot, wobble).
+ * Fly: a curve in the camera's own frame from where it tore free to its spot on the glass, so the camera moving can't take it off screen;
+ * it accelerates at you, tumbling, and turns its pupil to you just before it hits.
+ */
+function updateEye2(rdt) {
+  const m = eye2.mesh, endS = lens.r / 0.14;
+  eye2.t += rdt;
+  camera.updateMatrixWorld();
+  if (eye2.t < EYE_POP) {
+    const u = eye2.t / EYE_POP;
+    goreSkel.userData.sockR.getWorldPosition(m.position);
+    m.scale.setScalar(0.4 + 0.75 * Math.sin(u * Math.PI * 0.75) ** 2);   // bulges, a bit past full size
+    m.quaternion.copy(camera.quaternion).multiply(e2Q.setFromAxisAngle(eyeZ, Math.sin(u * 40) * 0.25)); // stares at you, quivering
+    if (eye2.t + rdt >= EYE_POP) { // it tears free: remember where, in camera space
+      e2L.copy(m.position).applyMatrix4(camera.matrixWorldInverse.copy(camera.matrixWorld).invert());
+      eye2.s0.copy(e2L); eye2.q0.copy(m.quaternion); eye2.sc = m.scale.x;
+      goreBlood(m.position, 14, 6);
+      sound.eyePop(); sound.whoosh(EYE_FLY);
+    }
+    return;
+  }
+  const u = clamp((eye2.t - EYE_POP) / EYE_FLY, 0, 1), e = u * u * (1.6 - 0.6 * u); // slow out of the socket, then rushing at you
+  e2E.set(eye2.tx * lens.dE, eye2.ty * lens.dE, -lens.dE);                         // its spot on the glass
+  e2C.copy(eye2.s0).lerp(e2E, 0.35); e2C.y += 1.4 + Math.abs(eye2.s0.z) * 0.15;    // a hop up first, so you see it coming
+  const a = 1 - e;
+  e2L.copy(eye2.s0).multiplyScalar(a * a).addScaledVector(e2C, 2 * a * e).addScaledVector(e2E, e * e);
+  m.position.copy(e2L).applyMatrix4(camera.matrixWorld);
+  m.scale.setScalar(eye2.sc + (endS - eye2.sc) * e);
+  const face = clamp((u - 0.55) / 0.4, 0, 1);                                      // tumbling, then the pupil turns to you
+  e2Q.setFromAxisAngle(e2Spin, (1 - face) * u * 14);
+  m.quaternion.copy(camera.quaternion).multiply(e2Q);
+  if (u >= 1) { eye2.on = false; startLens(m, eye2.tx, eye2.ty); }
+}
+// ---------- The lens eyeball (70.40): a real 3D eyeball held just in front of the camera (lit by the world), sliding down while a
+// full-screen shader quad draws the translucent, irregular blood trail on the "glass" behind it. Positions are in camera "tan space"
+// (x / depth, y / depth), so the eye and the trail always agree whatever the FOV or aspect.
+const lens = { on: false, t0: 0, tx: 0, ty: 0, seed: 0, r: 0.125, dE: 1.1, dP: 0.7, mesh: null, smear: null };
+const LENS_SLIDE = 3.2, LENS_END = 4.2, LENS_HIT = 0.35; // seconds: the slide, the fade-out end, the impact squash
+const lensQ = new THREE.Quaternion(), lensRoll = new THREE.Quaternion(); // (the eyeball's +Z is its pupil: camera.quaternion alone points it at you)
+const lensV = new THREE.Vector3();
+function lensSmear() {
+  return new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({
+    transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+    uniforms: { uImp: { value: new THREE.Vector2() }, uEye: { value: new THREE.Vector2() }, uHalf: { value: new THREE.Vector2(1, 1) }, uR: { value: 0.2 }, uFade: { value: 0 }, uSeed: { value: 0 }, uGrow: { value: 1 } },
+    vertexShader: 'uniform vec2 uHalf; varying vec2 vT; void main() { vT = position.xy * 2.0 * uHalf; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+      uniform vec2 uImp; uniform vec2 uEye; uniform float uR; uniform float uFade; uniform float uSeed; uniform float uGrow; varying vec2 vT;
+      float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float nz(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+      // one wobbling vertical streak under the impact: x offset, width, how far down it runs (0..1 of the eye's travel), seed
+      float streak(vec2 p, float ox, float wid, float len, float sd, float span) {
+        float t = (uImp.y - p.y) / span;
+        if (t < 0.0 || t > len) return 0.0;
+        float cx = uImp.x + ox + (uEye.x - uImp.x) * t + (nz(vec2(p.y / uR * 1.2, sd)) - 0.5) * uR * 0.5;
+        float w = wid * (0.5 + 0.8 * nz(vec2(p.y / uR * 3.0, sd + 3.0))) * (1.0 - 0.4 * t / len);
+        float m = (1.0 - smoothstep(w * 0.7, w, abs(p.x - cx))) * (1.0 - smoothstep(len * 0.85, len, t));
+        vec2 e = vec2(uImp.x + ox + (uEye.x - uImp.x) * len, uImp.y - len * span);        // a fat drop where it stops
+        return max(m, 1.0 - smoothstep(wid * 0.9, wid * 1.5, length(p - e)));
+      }
+      void main() {
+        vec2 p = vT, d = p - uImp;
+        float span = max(uImp.y - uEye.y, 0.002), ang = atan(d.y, d.x);
+        float br = uGrow * uR * 1.5 * (0.7 + 0.55 * nz(vec2(ang * 1.7 + uSeed, 2.0)) + 0.3 * nz(vec2(ang * 6.0, uSeed * 2.0)));
+        float m = 1.0 - smoothstep(br * 0.8, br, length(d));                              // the splat where it hit
+        m = max(m, streak(p, 0.0, uR * 0.6, 1.0, uSeed, span));                           // the main trail behind the eye
+        m = max(m, 0.85 * streak(p, -uR * 1.0, uR * 0.17, 0.62, uSeed + 7.0, span));     // thinner runs beside it
+        m = max(m, 0.85 * streak(p, uR * 0.95, uR * 0.13, 0.45, uSeed + 13.0, span));
+        for (int i = 0; i < 7; i++) {                                                     // spatter
+          float fi = float(i);
+          vec2 c = uImp + vec2(cos(fi * 2.4 + uSeed), sin(fi * 2.4 + uSeed)) * uGrow * uR * (1.7 + 0.6 * h(vec2(fi, uSeed)));
+          float rr = uR * (0.07 + 0.1 * h(vec2(fi, 3.0)));
+          m = max(m, 1.0 - smoothstep(rr * 0.7, rr, length(p - c)));
+        }
+        float eyeMask = smoothstep(uR * 0.93, uR * 1.0, length(p - uEye));               // not over the eyeball itself
+        float a = m * eyeMask * 0.6 * (1.0 - uFade);
+        vec3 col = mix(vec3(0.36, 0.0, 0.0), vec3(0.66, 0.03, 0.03), nz(p / uR * 2.0));
+        col += vec3(0.5, 0.25, 0.25) * smoothstep(0.78, 0.96, nz(p / uR * 5.0 + uSeed)) * 0.5; // wet glints
+        gl_FragColor = vec4(col, a);
+      }`,
+  }));
+}
+/** The flying eyeball hit the lens at (tx, ty) (camera tan space): splat, squash, then it slides. */
+function startLens(m, tx, ty) {
+  lens.tx = tx; lens.ty = ty;
+  sound.eyeSplat();
+  lens.seed = Math.random() * 20; lens.t0 = performance.now(); lens.on = true;
+  lens.dE = Math.max(1.1, camera.near + lens.r + 0.25); lens.dP = camera.near + 0.2;
+  lens.mesh = m; m.visible = true; m.scale.setScalar(lens.r / 0.14); scene.add(m);
+  lens.smear ??= lensSmear();
+  lens.smear.frustumCulled = false; lens.smear.renderOrder = 999; scene.add(lens.smear);
+}
+function endLens() {
+  lens.on = false;
+  lens.mesh?.removeFromParent(); lens.smear?.removeFromParent();
+}
+function updateGoreLens() {
+  if (!lens.on) return;
+  camera.updateMatrixWorld();
+  const p = (performance.now() - lens.t0) / 1000, SLIDE = LENS_SLIDE, END = LENS_END;
+  if (p > END) { endLens(); return; }
+  const u = clamp(p / SLIDE, 0, 1), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2; // slow start (it sticks), then slides
+  const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), tw = th * camera.aspect;
+  const ex = lens.tx + Math.sin(p * 2.1) * 0.015 * th, ey = lens.ty + (-1.5 * th - lens.ty) * e;
+  lens.mesh.visible = p < SLIDE + 0.2;
+  lens.mesh.position.set(ex * lens.dE, ey * lens.dE, -lens.dE).applyMatrix4(camera.matrixWorld);
+  lensQ.copy(camera.quaternion).multiply(lensRoll.setFromAxisAngle(lensV.set(1, 0, 0), -0.3 * e + Math.sin(p * 1.7) * 0.04)); // the pupil stares at you; it tips up to keep looking as it slides down
+  lens.mesh.quaternion.copy(lensQ);
+  const hit = p < LENS_HIT ? Math.sin((p / LENS_HIT) * Math.PI * 2.5) * (1 - p / LENS_HIT) : 0, s0 = lens.r / 0.14; // flattens on the glass, wobbles back
+  lens.mesh.scale.set(s0 * (1 + 0.3 * hit), s0 * (1 + 0.3 * hit), s0 * (1 - 0.55 * Math.abs(hit)));
+  const sm = lens.smear;
+  sm.position.set(0, 0, -lens.dP).applyMatrix4(camera.matrixWorld);
+  sm.quaternion.copy(camera.quaternion); sm.scale.set(2 * tw * lens.dP, 2 * th * lens.dP, 1);
+  const U = sm.material.uniforms;
+  U.uHalf.value.set(tw, th); U.uImp.value.set(lens.tx, lens.ty); U.uEye.value.set(ex, ey);
+  U.uR.value = lens.r / lens.dE; U.uSeed.value = lens.seed; U.uGrow.value = clamp(p / 0.12, 0.25, 1); // the splat bursts out on impact U.uFade.value = p > SLIDE ? clamp((p - SLIDE) / (END - SLIDE), 0, 1) : 0;
+}
+
+// ---------- Gore: flesh (build 70.47) ----------
+// Gibs: ~30 jagged wet chunks thrown from the rider at the blast; they bleed while they fly, splat the first time they land, bounce and lie on the road.
+// Guts: three entrails hang off the skeleton (the same chain simulation as the eye's nerve) and whip around with it.
+const GIB_MAX = 34, GIB_G = 26, GIB_LIFE = 9;
+const gibCols = [0xc0343a, 0x9a1c22, 0xe58a90, 0x7a1418, 0xb8463a].map((c) => new THREE.Color(c));
+const gibs = { mesh: null, list: [], hint: 0, snd: 0 };
+const gM = new THREE.Matrix4(), gQ = new THREE.Quaternion(), gS = new THREE.Vector3(), gV = new THREE.Vector3();
+function initGibs() {
+  if (gibs.mesh) return;
+  const geo = lumpGeo(12, 9, 0.28);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.18 }), GIB_MAX);
+  mesh.frustumCulled = false; mesh.count = 0; mesh.castShadow = false;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  for (let i = 0; i < GIB_MAX; i++) mesh.setColorAt(i, gibCols[i % gibCols.length]);
+  scene.add(mesh); gibs.mesh = mesh;
+}
+function spawnGibs(pos, vel, n, hint) {
+  initGibs();
+  const R = Math.random, L = gibs.list;
+  L.length = 0; gibs.hint = hint;
+  for (let i = 0; i < n; i++) {
+    const a = R() * Math.PI * 2, el = 0.15 + R() * 1.1, sp = 5 + R() * 9, h = Math.cos(el), long = i % 6 === 0, sz = long ? 0.1 + R() * 0.07 : 0.08 + R() * 0.15;
+    L.push({ p: pos.clone().add(new THREE.Vector3((R() - 0.5) * 0.4, (R() - 0.2) * 0.5, (R() - 0.5) * 0.4)),
+      v: new THREE.Vector3(Math.cos(a) * h * sp + vel.x * 0.3, Math.sin(el) * sp + 2, Math.sin(a) * h * sp + vel.z * 0.3),
+      av: new THREE.Vector3((R() - 0.5) * 24, (R() - 0.5) * 24, (R() - 0.5) * 24), q: new THREE.Quaternion(R() - 0.5, R() - 0.5, R() - 0.5, R() - 0.5).normalize(),
+      s: new THREE.Vector3(sz * (long ? 2.4 : 1) * (0.7 + R() * 0.6), sz * (0.7 + R() * 0.6), sz * (0.7 + R() * 0.6)), t: 0, rest: false, bounces: 0, trail: 0 });
+    gibs.mesh.setColorAt(i, gibCols[(R() * gibCols.length) | 0]);
+  }
+  gibs.mesh.instanceColor.needsUpdate = true;
+  gibs.mesh.count = n;
+}
+function updateGibs(dt) {
+  const L = gibs.list;
+  if (!L.length) return;
+  let landed = 0;
+  for (let i = 0; i < L.length; i++) {
+    const g = L[i];
+    g.t += dt;
+    if (!g.rest) {
+      g.v.y -= GIB_G * dt; g.p.addScaledVector(g.v, dt);
+      gV.copy(g.av).multiplyScalar(dt);
+      const ang = gV.length();
+      if (ang > 1e-5) g.q.premultiply(gQ.setFromAxisAngle(gV.normalize(), ang));
+      const gy = roadAt(g.p.x, g.p.z, gibs.hint) + g.s.y * 0.6;
+      if (g.p.y < gy && g.v.y < 0) {
+        g.p.y = gy; g.bounces++;
+        if (g.bounces === 1) { goreDot(g.p.x, g.p.z, g.v.x, g.v.z, g.s.y * 2.2); landed++; } // the first impact leaves a splat
+        g.v.y *= -0.32; g.v.x *= 0.55; g.v.z *= 0.55; g.av.multiplyScalar(0.55);
+        if (g.v.y < 1.2) { g.v.set(0, 0, 0); g.rest = true; }
+      }
+      if (g.t < 1.4) { g.trail += dt * 6; while (g.trail >= 1) { goreBlood(g.p, 1, 1.5, g.v); g.trail -= 1; } } // bleeds while it flies
+    }
+    const f = g.t > GIB_LIFE ? clamp(1 - (g.t - GIB_LIFE) / 0.6, 0, 1) : 1;
+    gM.compose(g.p, g.q, gS.copy(g.s).multiplyScalar(f));
+    gibs.mesh.setMatrixAt(i, gM);
+  }
+  gibs.mesh.instanceMatrix.needsUpdate = true;
+  if (landed && performance.now() - gibs.snd > 70) { gibs.snd = performance.now(); sound.splat(0.3); }
+  if (L[0].t > GIB_LIFE + 0.6) { L.length = 0; gibs.mesh.count = 0; }
+}
+
+const GUT_N = 10, GUT_SEG = 0.075, GUT_W = [0, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+const gutMats = [new THREE.MeshStandardMaterial({ color: 0xc85a62, roughness: 0.3 }), new THREE.MeshStandardMaterial({ color: 0x8a2a30, roughness: 0.35 })];
+const guts = [], gutD = new THREE.Vector3();
+function startGuts(e) {
+  endGuts();
+  goreSkel.updateMatrixWorld(true);
+  goreSkel.userData.gutAnchors.forEach((a, gi) => {
+    const A = a.getWorldPosition(new THREE.Vector3()), c = { a, P: [], O: [], V: [], r: gi === 2 ? 0.035 : 0.028, mat: gutMats[gi % 2], tube: null };
+    for (let i = 0; i < GUT_N; i++) {
+      c.P.push(A.clone().add(new THREE.Vector3(0, -i * 0.01, 0))); c.O.push(A.clone());
+      c.V.push(new THREE.Vector3((Math.random() - 0.5) * 8, 1 + Math.random() * 4, (Math.random() - 0.5) * 8).add(e.vel));
+    }
+    c.tip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), c.mat);
+    scene.add(c.tip); guts.push(c);
+  });
+}
+function endGuts() {
+  for (const c of guts) { c.tip.removeFromParent(); if (c.tube) { c.tube.removeFromParent(); c.tube.geometry.dispose(); } }
+  guts.length = 0;
+}
+function updateGuts(dt) {
+  if (!guts.length || !(dt > 1e-4)) return;
+  for (const c of guts) {
+    const P = c.P, O = c.O, V = c.V;
+    c.a.getWorldPosition(P[0]); V[0].set(0, 0, 0);
+    for (let i = 1; i < GUT_N; i++) { O[i].copy(P[i]); V[i].y -= 24 * dt; V[i].multiplyScalar(Math.pow(0.4, dt)); P[i].addScaledVector(V[i], dt); }
+    for (let it = 0; it < 5; it++) for (let i = 0; i < GUT_N - 1; i++) {
+      const a = P[i], b = P[i + 1];
+      gutD.copy(b).sub(a); const d = gutD.length() || 1e-5, diff = (d - GUT_SEG) / d, wa = GUT_W[i], wb = GUT_W[i + 1], sum = wa + wb;
+      a.addScaledVector(gutD, diff * wa / sum); b.addScaledVector(gutD, -diff * wb / sum);
+    }
+    for (let i = 1; i < GUT_N; i++) { if (P[i].y < blood.ground + 0.05) P[i].y = blood.ground + 0.05; V[i].copy(P[i]).sub(O[i]).divideScalar(dt); }
+    c.tip.position.copy(P[GUT_N - 1]);
+    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(P.map((q) => q.clone())), 14, c.r, 6, false);
+    if (c.tube) { c.tube.geometry.dispose(); c.tube.geometry = geo; }
+    else { c.tube = new THREE.Mesh(geo, c.mat); c.tube.frustumCulled = false; scene.add(c.tube); }
+  }
+}
+/** Objects the first hit would otherwise compile shaders for mid-race: boot adds them for one compile pass (warmUpShaders). */
+function goreWarmObjects() {
+  goreSkel ??= buildSkeleton(CFG.kart.chassisYOffset - CFG.kart.look.seatDrop);
+  initGibs();
+  eye1.mesh ??= makeEyeball(0.1); eye2.mesh ??= makeEyeball(0.14);
+  lens.smear ??= lensSmear();
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), gutMats[0]);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(), new THREE.Vector3(0, 0.1, 0), new THREE.Vector3(0, 0.2, 0)]), 6, 0.03, 6, false), gutMats[1]);
+  return [goreSkel, eye1.mesh, eye2.mesh, lens.smear, tip, tube];
+}
+
+/** A black scorch mark on the road where a bomb went off (stays ~20 s). */
+function scorchMark(pos, idx) {
+  const y = roadAt(pos.x, pos.z, idx, true), grp = new THREE.Group();
+  grp.position.set(pos.x, y + 0.035, pos.z);
+  grp.quaternion.setFromUnitVectors(bY, roadUp);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x0c0a09, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const add = (x, z, r) => { const m = new THREE.Mesh(new THREE.CircleGeometry(1, 24), mat); m.rotation.x = -Math.PI / 2; m.position.set(x, 0, z); m.scale.set(r, r, 1); grp.add(m); };
+  add(0, 0, 2.6);
+  for (let i = 0; i < 5; i++) { const a = Math.random() * 6.28, d = 2 + Math.random() * 1.5; add(Math.cos(a) * d, Math.sin(a) * d, 0.5 + Math.random() * 0.8); }
+  scene.add(grp);
+  goreSplats.push({ grp, age: 0 });
+}
+
+function startGoreSkeleton(k) {
+  const R = k.rider?.mesh;
+  if (!R || !k.eject) return;
+  goreSkel ??= buildSkeleton(CFG.kart.chassisYOffset - CFG.kart.look.seatDrop);
+  scene.add(goreSkel);
+  goreSkel.position.copy(R.position); goreSkel.quaternion.copy(R.quaternion); goreSkel.scale.copy(R.scale);
+  for (const j of goreSkel.userData.joints) { // the blast flings every limb
+    j.th.set(0, 0, 0); j.w.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30); j.n.rotation.set(0, 0, 0);
+  }
+  const acc = goreSkel.userData.acc; acc.clear(); acc.add(charAccessory(k.rider.name)); // the charred signature item
+  goreSkel.visible = false; // the rider stays for the first GORE_SWAP s (gibs + a blood mist burst out of it), then the skeleton takes its place (updateEject)
+  k.eject.skel = true;
+  goreGround(k);
+  startGoreEyes(k, k.eject);
+  startGuts(k.eject);
+  eyeV.copy(R.position); eyeV.y += 0.6;
+  goreBlood(eyeV, 110, 15); // the blast's blood
+  spawnGibs(eyeV, k.eject.vel, 30, k.trackIdx);
+  for (let i = 0; i < 46; i++) { // a red mist round the body hides the swap
+    emitP.set(eyeV.x + (Math.random() - 0.5) * 0.6, eyeV.y + (Math.random() - 0.5) * 0.6, eyeV.z + (Math.random() - 0.5) * 0.6);
+    const a = Math.random() * 6.28, e = (Math.random() - 0.3) * 1.3, sp = 3 + Math.random() * 5;
+    emitV.set(Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 1, Math.sin(a) * Math.cos(e) * sp);
+    fx.emit(emitP, emitV, Math.random() < 0.7 ? [0.72, 0.08, 0.08] : [0.92, 0.38, 0.4], { life: 0.7 + Math.random() * 0.5, size: 1.1, grow: 2, alpha: 0.5 });
+  }
+  sound.gibs();
+}
+
+/** The track sample nearest (x, z), searched around `hint`. */
+function nearIdx(x, z, hint) {
+  const { N, samples } = track;
+  let best = hint, bd = Infinity;
+  for (let k = -30; k <= 30; k++) {
+    const i = (((hint + k) % N) + N) % N, d = (samples[i].x - x) ** 2 + (samples[i].z - z) ** 2;
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
 /** Per frame: the ejected drivers (arc, bounce, return to the seat). */
 function updateEject(dt) {
   for (const k of karts) {
@@ -4352,17 +5254,29 @@ function updateEject(dt) {
     const R = k.rider.mesh;
     if (!k.launch || k.launch.what !== 'bomb' || e.t >= e.dur) { endEject(k); continue; }
     e.t += dt;
+    let acc = null; // the body's real acceleration this frame (skeleton joints)
     if (e.t < e.ret) {
+      ejPrevV.copy(e.vel);
       e.vel.y -= EJECT_G * dt;
       e.pos.addScaledVector(e.vel, dt);
+      e.idx = nearIdx(e.pos.x, e.pos.z, e.idx);
+      const lat = lateral(e.idx, e.pos), lim = (lat > 0 ? track.wL[e.idx] : track.wR[e.idx]) - 0.8, nn = track.normals[e.idx];
+      if (Math.abs(lat) > lim) { // inside the rails
+        const d = Math.abs(lat) - lim, sg = Math.sign(lat), vn = e.vel.x * nn.x + e.vel.z * nn.z;
+        e.pos.x -= nn.x * d * sg; e.pos.z -= nn.z * d * sg;
+        if (vn * sg > 0) { e.vel.x -= nn.x * vn * 1.4; e.vel.z -= nn.z * vn * 1.4; }
+      }
+      e.ground = surfaceY(e.idx, clamp(lat, -lim, lim)) + e.seatH;
       if (e.pos.y < e.ground && e.vel.y < 0) { // a bounce, losing energy
         e.pos.y = e.ground; e.vel.y *= -0.5; e.vel.x *= 0.6; e.vel.z *= 0.6; e.av.multiplyScalar(0.6); e.bounces++;
         if (e.vel.y < 2) e.vel.y = 0;
+        if (e.skel && k.isPlayer) { if (e.bounces === 1) goreLanding(k, e); else { goreSplat(k, e.pos, 0.6, 6); sound.bones(0.7, 5); } }
       }
       ejV.copy(e.av).multiplyScalar(dt);
       const ang = ejV.length();
       if (ang > 1e-5) e.q.premultiply(ejQ.setFromAxisAngle(ejV.normalize(), ang));
       R.position.copy(e.pos); R.quaternion.copy(e.q);
+      if (dt > 1e-4) acc = ejAcc.copy(e.vel).sub(ejPrevV).divideScalar(dt);
     } else { // flying back into the seat
       if (!e.back) e.back = { p: e.pos.clone(), q: e.q.clone() };
       const u = clamp((e.t - e.ret) / (e.dur - e.ret), 0, 1), m = u * u * (3 - 2 * u);
@@ -4373,8 +5287,17 @@ function updateEject(dt) {
       e.q.copy(e.back.q).slerp(ejSeatQ, m);
       R.position.copy(e.pos); R.quaternion.copy(e.q);
     }
+    if (e.skel && dt > 1e-4) stepSkeleton(dt, acc, e.t < e.ret ? e.av : ejV.set(0, 0, 0), e.q);
+    if (e.skel) {
+      goreSkel.position.copy(R.position); goreSkel.quaternion.copy(R.quaternion); goreSkel.scale.copy(R.scale);
+      e.skelShown = goreFx.t < 0 || goreFx.t >= GORE_SWAP; goreSkel.visible = e.skelShown; R.visible = !e.skelShown;
+      if (e.skelShown && e.t < e.ret && dt > 1e-4) { // bleeds all the way through the throw
+        e.bleed = (e.bleed ?? 0) + dt * 28;
+        while (e.bleed >= 1) { goreBlood(e.pos, 1, 2.5, e.vel.clone().multiplyScalar(0.3)); e.bleed -= 1; }
+      }
+    }
     if (k.isPlayer) { // the camera follows the driver
-      camFocus.lerp(e.pos, 1 - Math.exp(-dt * 30)); // nearly rigid: the driver moves fast
+      camFocus.lerp(e.pos, 1 - Math.exp(-dt * 12)); // the camera aims at the driver (chaseCamera)
     }
   }
 }
@@ -4382,10 +5305,14 @@ function updateEject(dt) {
 /** Burning karts (bomb): flames and black smoke for `k.burn` seconds, whatever else the kart is doing. */
 function updateBurn(dt) {
   for (const k of karts) {
+    if (k.charT > 0) { // scorched: the body stays dark for ~8 s, then fades back
+      k.charT = Math.max(0, k.charT - dt / 12);
+      k.bodyMesh.material.color.setScalar(1 - 0.7 * clamp(k.charT * 3, 0, 1));
+    }
     if (!(k.burn > 0)) continue;
     k.burn -= dt;
     if (k.burn <= 0) { k.burn = 0; teleEvent('burnend', k); continue; }
-    if (!near(k, 70)) continue;
+    if (!near(k, 70) || (k.isPlayer && goreOn())) continue; // (gore: the player's view stays clear)
     const p = k.group.position;
     for (let i = 0; i < 2; i++) {
       emitP.set(p.x + (Math.random() - 0.5) * 0.9, p.y + 0.3 + Math.random() * 0.5, p.z + (Math.random() - 0.5) * 0.9);
@@ -4619,9 +5546,10 @@ function updateItems(dt, racing) {
       if (along > pad.len) continue;
       const s = samples[k.trackIdx], n = normals[k.trackIdx];
       const lat = (k.body.position.x - s.x) * n.x + (k.body.position.z - s.z) * n.z;
-      if (Math.abs(lat - pad.lane) > I.padWidth / 2 + 0.3) continue;
+      if (Math.abs(lat - pad.lane) > pad.half + 0.3) continue;
       if (k.padT <= 0 && k.isPlayer) sound.boost();
-      k.boost = Math.max(k.boost, CFG.kart.boostDuration);
+      if (pad.red) { k.boost = Math.max(k.boost, CFG.kart.boostDuration * I.redPadTime); k.redT = k.boost; }
+      else k.boost = Math.max(k.boost, CFG.kart.boostDuration);
       k.padT = 0.5;
     }
   }
@@ -4820,8 +5748,13 @@ const tmpFwd = new CANNON.Vec3();
 
 function stepPhysics(dt) {
   const canDrive = state.phase === 'race' || state.phase === 'finished';
+  const selfWant = DEBUG && dbg.on && dbg.self;
   for (const k of karts) {
-    if (k.ai && DEBUG && dbg.on && dbg.parked) {
+    if (k.isPlayer) { // DEBUG self drive (70.22): the player's kart gets an AI brain, and loses it when switched off
+      if (selfWant && !k.ai) { k.ai = newAI(0); k.selfAI = true; }
+      else if (!selfWant && k.selfAI) { k.ai = null; k.selfAI = false; }
+    }
+    if (k.ai && DEBUG && dbg.on && dbg.parked && !k.isPlayer) {
       Object.assign(k.ctl, { steer: 0, gas: false, brake: true }); // parked rival (debug panel)
     } else if (k.ai) {
       updateAI(k, dt, canDrive);
@@ -4888,6 +5821,7 @@ function driveKart(k, dt, canDrive) {
   }
   k.drifting = drifting;
   k.boost = Math.max(0, k.boost - dt);
+  k.redT = k.boost > 0 ? Math.max(0, (k.redT || 0) - dt) : 0;
   k.rocketT = Math.max(0, (k.rocketT || 0) - dt);
   const boosting = k.boost > 0;
 
@@ -4903,11 +5837,12 @@ function driveKart(k, dt, canDrive) {
   } else if (k.spin > 0) {
     // Spun out by a banana / shell: no power, scrub off speed, wheels straight
     k.spin = Math.max(0, k.spin - dt);
-    if (k.spin === 0 && state.phase === 'race' && !k.finished) { // recovered: ghost for a few seconds so hits can't chain (the respawn ghost)
+    if (k.spin === 0 && state.phase === 'race' && !k.finished && !k.noGrace) { // build 70.5: a banana slip gives no ghost (user) // recovered: ghost for a few seconds so hits can't chain (the respawn ghost)
       k.ghost = Math.max(k.ghost, DIFF[effectiveDiff()][k.isPlayer ? 'grace' : 'graceAI']);
       setGhost(k, true);
       teleEvent('grace', k, { s: k.ghost });
     }
+    if (k.spin === 0) k.noGrace = false;
     if (k.launch) {
       stepLaunch(k, dt);
       if (k.spin === 0) { // recovered: where and how fast it is back on the road
@@ -4925,7 +5860,7 @@ function driveKart(k, dt, canDrive) {
     brake = K.wheelBrake;
   } else if (canDrive) {
     // the star's extra speed: AIs get it through their pace (updateAI), so corner braking still works
-    const top = K.maxSpeed * k.topMult + Math.max(boosting ? K.boostSpeed : 0, k.star > 0 && !k.ai ? CFG.items.starSpeed : 0);
+    const top = K.maxSpeed * k.topMult + Math.max(boosting ? K.boostSpeed + (k.redT > 0 ? CFG.items.redPadSpeed : 0) : 0, k.star > 0 && !k.ai ? CFG.items.starSpeed : 0);
     if (ctl.brake) {
       k.boost = 0; // braking cancels a boost
       if (speed > 1) { brake = K.wheelBrake; k.braking = true; }
@@ -5069,7 +6004,7 @@ function applyStabilityAssist(k) {
   // Boost: extra push through the centre of mass. Doing it with more wheel torque popped wheelies
   // and flipped karts that hit a boost pad at low speed.
   // (the star pushes the same way, up to its own higher top speed)
-  const boostPush = k.boost > 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed ? (k.rocketT > 0 ? K.rocketAccel : K.boostAccel) : 0;
+  const boostPush = k.boost > 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed + (k.redT > 0 ? CFG.items.redPadSpeed : 0) ? (k.rocketT > 0 ? K.rocketAccel : K.boostAccel) : 0;
   const starPush = k.star > 0 && speed < K.maxSpeed * k.topMult + CFG.items.starSpeed ? CFG.items.starAccel : 0;
   // Player catch-up (Difficulty): far behind the leader and not turning, a gentle push to a little over the normal top speed
   let catchPush = 0;
@@ -5130,7 +6065,47 @@ function bulletGuide(k) {
 /* ==========================================================================
  * 5. RENDERING LOOP (sync meshes <- bodies, camera, effects, HUD)
  * ========================================================================== */
-const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), snap: true, bank: 0 };
+const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), snap: true, bank: 0, ej: 0, // ej: how much of the bomb-hit camera is blended in, 0..1
+  cine: new THREE.Vector3(), cineLook: new THREE.Vector3(), cineOn: false, cineT: 0, landT: -1, side: 1, cineRoll: 0 };
+const finalPos = new THREE.Vector3(), finalLook = new THREE.Vector3(), cineP = new THREE.Vector3(), cineL = new THREE.Vector3(), cineA = new THREE.Vector3();
+const CINE_FOV = 74; // the bomb-hit camera's FOV (the portrait view is narrow, so not tighter)
+/**
+ * Bomb-hit camera (build 70.43), blended into finalPos / finalLook by `ej`. It runs on REAL time (the world is in slow motion, the camera is not: bullet time).
+ * The throw: it trails the skeleton from behind (a lagging follow, so the skeleton climbs and falls in the frame) while swinging round to one side.
+ * The landing: it drops low and close to the body, circles it and slowly pushes in. Then `ej` fades out and it glides back to the chase view.
+ */
+function cineCamera(ej, bp) {
+  const cs = camState, e = kart.eject, rdt = realDt;
+  if (!cs.cineOn) { cs.cineOn = true; cs.cineT = 0; cs.landT = -1; cs.side = Math.random() < 0.5 ? -1 : 1; cs.cine.copy(cs.pos); cs.cineLook.copy(cs.look); cs.cineRoll = 0; }
+  cs.cineT += rdt;
+  if (e) {
+    const F = camFocus, yaw = cs.yaw, ground = e.ground - e.seatH; // ground: the road under the skeleton
+    if (e.bounces >= 1 && cs.landT < 0) cs.landT = 0;
+    if (cs.landT >= 0) cs.landT += rdt;
+    let rate, roll;
+    if (cs.landT < 0) {
+      const u = clamp(cs.cineT / 2.4, 0, 1), m = u * u * (3 - 2 * u), psi = cs.side * 0.9 * m, R = 7.2 - 1.6 * m;
+      cineA.set(F.x, bp.y + (F.y - bp.y) * 0.5 + 0.8, F.z);
+      cineP.set(cineA.x - Math.sin(yaw + psi) * R, cineA.y + 0.3, cineA.z - Math.cos(yaw + psi) * R);
+      cineL.set(bp.x, bp.y + 1.2, bp.z).lerp(F, 0.9);
+      rate = 4.5; roll = cs.side * 0.05;
+    } else {
+      const u = clamp(cs.landT / 1.8, 0, 1), psi = cs.side * (0.9 + 0.7 * u), R = 4.4 - 1.1 * u;
+      cineP.set(F.x - Math.sin(yaw + psi) * R, ground + 0.9 - 0.3 * u, F.z - Math.cos(yaw + psi) * R);
+      cineL.copy(F); cineL.y = Math.max(cineL.y, ground + 0.45);
+      rate = 5; roll = cs.side * 0.12;
+      if (e.back) { // the driver flies back to the seat: follow it, gliding to the chase view
+        const u = clamp(1.5 * (e.t - e.ret) / (e.dur - e.ret), 0, 1), w = u * u * (3 - 2 * u); // behind the kart by 2/3 of the way: the skeleton then comes back at the lens along the road
+        cineP.lerp(cs.pos, w); cineL.lerp(cs.look, w * w * 0.7); roll *= 1 - w; rate = 10;
+      }
+    }
+    cineP.y = Math.max(cineP.y, ground + 0.55);
+    cs.cine.lerp(cineP, 1 - Math.exp(-rdt * rate));
+    cs.cineLook.lerp(cineL, 1 - Math.exp(-rdt * 10));
+    cs.cineRoll += (roll - cs.cineRoll) * (1 - Math.exp(-rdt * 3));
+  }
+  finalPos.lerp(cs.cine, ej); finalLook.lerp(cs.cineLook, ej);
+}
 const desiredCam = new THREE.Vector3();
 
 const spinQ = new THREE.Quaternion(), flipQ = new THREE.Quaternion();
@@ -5316,9 +6291,11 @@ function updateCamera(dt) {
   const b = kart.body;
   const fwd = b.interpolatedQuaternion.vmult(LOCAL_FWD, tmpVec);
   const yaw = Math.atan2(fwd.x, fwd.z);
-  let bp = b.interpolatedPosition; // match the drawn kart (see syncMeshes)
-  if (kart.eject) bp = camFocus; // bomb hit: follow the flying driver
-  else camFocus.copy(bp);
+  const bp = b.interpolatedPosition; // match the drawn kart (see syncMeshes)
+  if (!kart.eject) camFocus.copy(bp); // (bomb hit: camFocus follows the flying driver, chaseCamera aims at it)
+  const ejOn = !!kart.eject; // the bomb-hit camera stays until the driver is back in the seat (it glides to the chase view during the flight back)
+  camState.ej += ((ejOn ? 1 : 0) - camState.ej) * (1 - Math.exp(-realDt * (ejOn ? 5 : 2.2)));
+  if (camState.ej < 0.002 && !kart.eject) { camState.ej = 0; camState.cineOn = false; }
   const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
 
   if (state.phase === 'menu') { camera.up.set(0, 1, 0); camState.bank = 0; lobbyCamera(dt, bp, yaw); }
@@ -5426,6 +6403,7 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
     camState.yaw += wrapAngle(yaw - camState.yaw) * (1 - Math.exp(-dt * C.yawLag));
   }
 
+  const ej = camState.ej;
   const dist = C.distance + speedRatio * C.speedPull;
   desiredCam.set(
     bp.x - Math.sin(camState.yaw) * dist,
@@ -5437,25 +6415,28 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
     camState.pos.copy(desiredCam);
     camState.snap = false;
   } else {
-    camState.pos.lerp(desiredCam, 1 - Math.exp(-dt * (kart.eject ? 16 : C.posLag)));
+    camState.pos.lerp(desiredCam, 1 - Math.exp(-dt * C.posLag));
     // a smooth follow, but never trailing far behind at speed (the old lag added ~4.5 m at top speed)
     const lag = camState.pos.distanceTo(desiredCam);
-    const maxLag = kart.eject ? 0.12 : C.maxLag;
+    const maxLag = C.maxLag;
     if (lag > maxLag) camState.pos.lerp(desiredCam, 1 - maxLag / lag);
   }
   camState.pos.y = Math.max(camState.pos.y, track.samples[kart.trackIdx].y + 1.0);
-  camera.position.copy(camState.pos);
 
   camState.look.set(
     bp.x + Math.sin(camState.yaw) * C.lookAhead,
     bp.y + C.lookHeight,
     bp.z + Math.cos(camState.yaw) * C.lookAhead,
   );
+  finalPos.copy(camState.pos); finalLook.copy(camState.look);
+  if (ej > 0.002) cineCamera(ej, bp); // bomb hit: blend into the cinematic camera
+  camera.position.copy(finalPos);
   // Roll with the road: up = the road surface's normal (smoothed), so a banked bend tilts the view with the kart
   const n = track.normals[kart.trackIdx];
-  camState.bank += ((kart.eject || kart.bullet > 0 ? 0 : track.bank[kart.trackIdx]) - camState.bank) * (1 - Math.exp(-dt * 5));
+  camState.bank += ((ej > 0.5 || kart.bullet > 0 ? 0 : track.bank[kart.trackIdx]) - camState.bank) * (1 - Math.exp(-dt * 5));
   camera.up.set(-camState.bank * n.x, 1, -camState.bank * n.z).normalize();
-  camera.lookAt(camState.look);
+  camera.lookAt(finalLook);
+  if (ej > 0.002) camera.rotateZ(camState.cineRoll * ej); // a slow dutch tilt
 
   // Radial blur strength: full on a boost or the cannon, lighter with the star; fades in fast, out slower
   // Cannon = full. Boosts / star / rocket start scale with how fast the kart really is (a pad at low speed barely blurs).
@@ -5464,11 +6445,13 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
   speedFx.v += (fxTo - speedFx.v) * (1 - Math.exp(-dt * (fxTo > speedFx.v ? 12 : 4)));
 
   // Speed-based FOV kick
+  if (goreFx.fov) { camera.fov -= goreFx.fov; goreFx.fov = 0; camera.updateProjectionMatrix(); } // drop the punch-in; goreCamera() re-applies it below
   const targetFov = viewFov + Math.min(C.fovMax, speedRatio * C.fovSpeed + (kart.boost > 0 ? C.fovBoost : 0));
   if (Math.abs(camera.fov - targetFov) > 0.05) {
     camera.fov = lerp(camera.fov, targetFov, 1 - Math.exp(-dt * 4));
     camera.updateProjectionMatrix();
   }
+  goreCamera();
 }
 
 const SMOKE = [0.86, 0.86, 0.9], DUST = [0.6, 0.5, 0.32];
@@ -5502,7 +6485,7 @@ function updateEffects(dt) {
       }
     }
     k.hull.visible = k.bullet > 0;
-    k.bodyMesh.visible = k.rider.mesh.visible = !k.hull.visible;
+    k.bodyMesh.visible = !k.hull.visible; k.rider.mesh.visible = !k.hull.visible && !k.eject?.skelShown; // (skel: the gore skeleton stands in for the rider)
     animateRider(k, dt);
     const em = k.bodyMesh.material.emissive;
     if (k.star > 0 && (k.star > 1 || Math.floor(k.star * 10) % 2 === 0)) {
@@ -5643,11 +6626,17 @@ function updateSound(dt) {
 
 function render(dt) {
   dbgTick();
+  if (performance.now() > dbgDuckUntil) sound.setDuck(kart.eject && goreOn() ? 1 : 0); // the music drops out and muffles while the skeleton flies
   syncMeshes();
   updateCamera(dt);
   updateEffects(dt);
   updateBurn(dt);
   updateEject(dt);
+  updateGoreSplats(dt);
+  updateGoreBlood(dt);
+  updateGibs(dt);
+  updateGuts(dt);
+  updateGoreEyes(dt, realDt);
   fx.update(dt);
   updateItemVisuals(dt);
   theme.update(dt);
@@ -5697,6 +6686,7 @@ function updatePerf(ms) {
   }
 }
 
+let realDt = 0; // this frame's unscaled seconds (the gore eyeball runs on it while the world is in slow motion)
 function loop(now) {
   requestAnimationFrame(loop);
   updatePerf(now - lastTime);
@@ -5705,7 +6695,15 @@ function loop(now) {
     teleEvent('slow', kart, { ms: Math.round(now - lastTime), star: +kart.star.toFixed(1), ghost: !!kart.ghosted, shield: kart.shield > 0,
       boost: kart.boost > 0, bullet: kart.bullet > 0, spin: kart.spin > 0, calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
   }
-  const dt = Math.min((now - lastTime) / 1000, 0.1);
+  const rawDt = Math.min((now - lastTime) / 1000, 0.1);
+  let dt = rawDt;
+  realDt = state.paused ? 0 : rawDt;
+  if (goreFx.t >= 0 || goreFx.l >= 0) {
+    let sc = 1;
+    if (goreFx.t >= 0) { goreFx.t += rawDt; sc = goreTimeScale(goreFx.t); if (goreFx.t > GORE_FX_END) goreFx.t = -1; }
+    if (goreFx.l >= 0) { goreFx.l += rawDt; sc = Math.min(sc, goreLandScale(goreFx.l)); if (goreFx.l > GORE_LAND_END) goreFx.l = -1; }
+    dt *= sc;
+  }
   lastTime = now;
 
   if (state.paused) return; // the canvas keeps showing the last frame
@@ -5726,7 +6724,7 @@ document.addEventListener('visibilitychange', () => {
  * Draw one throwaway frame with all of them in view, behind the title screen.
  */
 function warmUpShaders() {
-  const extras = Object.keys(itemVis.models).map((kind) => spawnModel(kind, kart.body.position));
+  const extras = [...Object.keys(itemVis.models).map((kind) => spawnModel(kind, kart.body.position)), ...goreWarmObjects().map((o) => scene.add(o) && o)];
   const shown = [...kart.sparks, ...kart.flames, kart.stars, kart.bubble, kart.hull];
   shown.forEach((o) => { o.visible = true; });
   syncMeshes();
@@ -5789,6 +6787,7 @@ loadTrack(savedTrack());
 castDrivers();
 onResize();
 showMenu();
+initBlood();
 warmUpShaders();
 
 // PWA: offline cache (service workers need a secure context: https or localhost)

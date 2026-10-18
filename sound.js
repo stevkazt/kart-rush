@@ -12,7 +12,8 @@ const MUTE_KEY = 'kart-rush-muted';
 const VOL = { master: 0.8, engine: 0.16, rivals: 0.09, drift: 0.07, sfx: 0.5, music: 0.11 };
 
 let ctx = null;
-let out, sfxBus, musicBus, engineBus, noiseBuf;
+let out, sfxBus, musicBus, musicLP, engineBus, noiseBuf;
+let duckAmt = 0; // 0..1: how far the music is pushed down and muffled (gore sequence)
 let player, rivals = [], drift;
 let muted = readMuted();
 const level = { music: 1, sfx: 1 };
@@ -33,7 +34,8 @@ function unlock() {
     const comp = ctx.createDynamicsCompressor();
     comp.connect(out);
     sfxBus = gainNode(VOL.sfx * level.sfx, comp);
-    musicBus = gainNode(VOL.music * level.music, comp);
+    musicLP = ctx.createBiquadFilter(); musicLP.type = 'lowpass'; musicLP.frequency.value = 20000; musicLP.connect(comp);
+    musicBus = gainNode(VOL.music * level.music * (1 - 0.9 * duckAmt), musicLP);
     engineBus = gainNode(1, comp);
     noiseBuf = makeNoise();
     player = makeEngine(VOL.engine, 0);
@@ -210,6 +212,32 @@ function noiseHit(start, dur, { freq = 800, type = 'lowpass', vol = 0.4, sweepTo
   src.stop(start + dur + 0.02);
 }
 
+/** Band-passed noise that swells (a rush building up): f0 -> f1 over `dur`, loudest at the end. */
+function noiseRise(start, dur, { f0 = 300, f1 = 2400, vol = 0.3, q = 2 } = {}) {
+  const src = noiseSource(), f = ctx.createBiquadFilter();
+  f.type = 'bandpass'; f.Q.value = q;
+  f.frequency.setValueAtTime(f0, start); f.frequency.exponentialRampToValueAtTime(f1, start + dur);
+  const g = gainNode(0.001, sfxBus);
+  g.gain.setValueAtTime(0.001, start); g.gain.exponentialRampToValueAtTime(vol, start + dur); g.gain.linearRampToValueAtTime(0, start + dur + 0.04);
+  src.connect(f).connect(g);
+  src.start(start, Math.random() * 0.5); src.stop(start + dur + 0.06);
+}
+
+/** A wet splat at `t`: a slap, a low thud and a handful of rising bubbles. v 0..1.4 */
+function splatAt(t, v = 1) {
+  noiseHit(t, 0.16, { freq: 1800, sweepTo: 260, type: 'bandpass', q: 1.1, vol: 0.7 * v });
+  noiseHit(t, 0.07, { freq: 3500, type: 'highpass', vol: 0.25 * v });
+  tone(150, t, 0.2, { type: 'sine', vol: 0.55 * v, slide: 0.35 });
+  const n = 4 + Math.round(4 * v);
+  for (let i = 0; i < n; i++) tone(220 + Math.random() * 520, t + 0.06 + i * 0.045 + Math.random() * 0.05, 0.07 + Math.random() * 0.08, { type: 'sine', vol: 0.13 * v, slide: 1.8 + Math.random() });
+}
+
+/** Bone: a burst of tiny dry clicks (cracks) over a dull knock. `n` clicks within ~`span` s. */
+function bonesAt(t, v = 1, n = 6, span = 0.18) {
+  tone(140, t, 0.12, { type: 'sine', vol: 0.35 * v, slide: 0.5 });
+  for (let i = 0; i < n; i++) noiseHit(t + Math.random() * span, 0.016, { freq: 1800 + Math.random() * 3200, type: 'highpass', vol: 0.4 * v * (1 - (i / n) * 0.5) });
+}
+
 const ready = () => ctx && ctx.state === 'running';
 const now = () => ctx.currentTime + 0.01;
 const notes = (list, step, opts) => { const t = now(); list.forEach((f, i) => f && tone(f, t + i * step, step * 1.6, opts)); };
@@ -289,7 +317,9 @@ const sfx = {
       tone(110, t, 0.35, { type: 'sine', vol: 0.55 * v, slide: 0.3 });
       noiseHit(t, 0.4, { freq: 2200, sweepTo: 250, type: 'lowpass', vol: 0.55 * v });
       tone(520, t + 0.1, 0.5, { type: 'square', vol: 0.1 * v, slide: 0.3 });
-    } else if (what === 'blue' || what === 'bomb') {
+    } else if (what === 'bomb') { // the blast itself is sound.explosion: only a dull slap here
+      noiseHit(t, 0.15, { freq: 800, vol: 0.2 * v });
+    } else if (what === 'blue') {
       tone(70, t, 0.8, { type: 'sine', vol: 0.6 * v, slide: 0.4 });
       noiseHit(t, 0.7, { freq: 1500, sweepTo: 120, type: 'lowpass', vol: 0.6 * v });
     } else if (what === 'star' || what === 'bullet') {
@@ -372,10 +402,80 @@ const sfx = {
     noiseHit(now(), 0.8, { freq: 3000, sweepTo: 500, type: 'bandpass', q: 3, vol: 0.35 });
     notes([1760, 0, 1760, 0, 1760], 0.06, { type: 'sine', vol: 0.1 });
   },
-  explosion(strength = 1) {
+  /** A bomb going off: chest thump + sub, a sharp crack, a roaring body, a rumbling tail and debris falling after. `ring`: the player's own hit (ears ringing). */
+  explosion(strength = 1, ring = false) {
     if (!ready()) return;
-    noiseHit(now(), 1.1, { freq: 1500, sweepTo: 80, vol: 0.8 * strength });
-    tone(70, now(), 0.8, { type: 'sine', vol: 0.5 * strength, slide: 0.4 });
+    const t = now(), s = strength;
+    tone(95, t, 0.9, { type: 'sine', vol: 0.8 * s, slide: 0.3 });
+    tone(48, t + 0.02, 1.4, { type: 'sine', vol: 0.6 * s, slide: 0.6 });
+    noiseHit(t, 0.05, { freq: 5000, type: 'highpass', vol: 0.6 * s });
+    noiseHit(t, 1.6, { freq: 2600, sweepTo: 70, vol: 0.7 * s, q: 0.7 });
+    noiseHit(t + 0.1, 2.6, { freq: 380, sweepTo: 50, vol: 0.45 * s });
+    for (let i = 0; i < 9; i++) noiseHit(t + 0.5 + Math.random() * 1.6, 0.05, { freq: 1400 + Math.random() * 2200, type: 'bandpass', q: 2, vol: 0.18 * s });
+    if (ring) tone(3150, t + 0.05, 2.4, { type: 'sine', vol: 0.05, slide: 0.97 });
+  },
+  /** The rider torn apart: a ripping wet burst and a handful of staggered splats as the chunks fly. */
+  gibs() {
+    if (!ready()) return;
+    const t = now();
+    noiseHit(t, 0.5, { freq: 900, sweepTo: 300, type: 'bandpass', q: 0.8, vol: 0.35 });
+    for (let i = 0; i < 7; i++) splatAt(t + 0.05 + i * 0.07 + Math.random() * 0.06, 0.45 + Math.random() * 0.3);
+  },
+  /** Wet splat (blood / flesh hitting something). */
+  splat(v = 1) { if (ready()) splatAt(now(), v); },
+  /** Bones cracking / rattling: `n` clicks over `span` s. */
+  bones(v = 1, n = 6, span = 0.18) { if (ready()) bonesAt(now(), v, n, span); },
+  /** The eyeball tearing out of the skull: a plop and a wet rising squelch. */
+  eyePop() {
+    if (!ready()) return;
+    const t = now();
+    tone(600, t, 0.11, { type: 'sine', vol: 0.55, slide: 0.2 });
+    noiseHit(t, 0.012, { freq: 3000, type: 'highpass', vol: 0.4 });
+    noiseHit(t + 0.02, 0.3, { freq: 300, sweepTo: 1400, type: 'bandpass', q: 4, vol: 0.3 });
+    for (let i = 0; i < 3; i++) tone(300 + Math.random() * 300, t + 0.08 + i * 0.06, 0.08, { type: 'sine', vol: 0.12, slide: 2 });
+  },
+  /** A rush that builds for `dur` s: something flying at you. */
+  whoosh(dur = 1) { if (ready()) noiseRise(now(), dur, { f0: 250, f1: 2600, vol: 0.32 }); },
+  /** The eyeball hitting the lens: a big wet splat, a thud, a slow smear, then drips. */
+  eyeSplat() {
+    if (!ready()) return;
+    const t = now();
+    splatAt(t, 1.35);
+    tone(65, t, 0.5, { type: 'sine', vol: 0.6, slide: 0.5 });
+    noiseHit(t + 0.1, 1.2, { freq: 700, sweepTo: 180, type: 'bandpass', q: 1.5, vol: 0.14 });
+    for (let i = 0; i < 5; i++) tone(350 + Math.random() * 300, t + 0.5 + i * 0.28 + Math.random() * 0.15, 0.06, { type: 'sine', vol: 0.1, slide: 0.5 });
+  },
+  /** The skeleton hitting the road: a heavy thud, a splat, bones cracking, then a rattle. */
+  landing() {
+    if (!ready()) return;
+    const t = now();
+    tone(80, t, 0.45, { type: 'sine', vol: 0.85, slide: 0.35 });
+    noiseHit(t, 0.3, { freq: 420, type: 'lowpass', vol: 0.5 });
+    splatAt(t + 0.02, 0.95);
+    bonesAt(t + 0.03, 1.1, 10, 0.25);
+    for (let i = 0; i < 8; i++) bonesAt(t + 0.35 + i * 0.09 + Math.random() * 0.08, 0.3 * (1 - i / 10), 2, 0.04);
+  },
+  /** The rider dropping back into the seat. */
+  pop() {
+    if (!ready()) return;
+    const t = now();
+    tone(380, t, 0.08, { type: 'sine', vol: 0.3, slide: 0.4 });
+    noiseHit(t, 0.15, { freq: 1200, sweepTo: 300, vol: 0.2 });
+  },
+  /** Blood drops hitting the road: `n` tiny wet ticks within ~80 ms. */
+  patter(n = 1) {
+    if (!ready()) return;
+    const t = now();
+    for (let i = 0; i < Math.min(n, 5); i++) noiseHit(t + Math.random() * 0.08, 0.02, { freq: 1200 + Math.random() * 1500, type: 'bandpass', q: 3, vol: 0.07 });
+  },
+  /** 0..1: push the music down and muffle it (the gore sequence); smooth both ways. */
+  setDuck(d) {
+    if (d === duckAmt) return;
+    duckAmt = d;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    musicBus.gain.setTargetAtTime(VOL.music * level.music * (1 - 0.9 * d), t, d ? 0.05 : 0.5);
+    musicLP.frequency.setTargetAtTime(d ? 450 : 20000, t, d ? 0.08 : 0.4);
   },
 };
 
@@ -443,7 +543,7 @@ function scheduleMusic() {
 function setVolume(bus, v) {
   level[bus] = v;
   if (!ctx) return;
-  if (bus === 'music') musicBus.gain.setTargetAtTime(VOL.music * v, ctx.currentTime, 0.03);
+  if (bus === 'music') musicBus.gain.setTargetAtTime(VOL.music * v * (1 - 0.9 * duckAmt), ctx.currentTime, 0.03);
   else sfxBus.gain.setTargetAtTime(VOL.sfx * v, ctx.currentTime, 0.03); // engines: update() reads level.sfx
 }
 

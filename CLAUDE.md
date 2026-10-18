@@ -110,6 +110,8 @@ dev/test.sh eval '<js expr>'    # print a page expression ~1 s after GO, e.g. '_
 dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log (test.sh waits for Chrome's port: it once took > 2 s)
 dev/test.sh shots 300,860:3     # screenshots with the player parked at sample idx[:lane]
 dev/test.sh profile 8           # CPU profile, drawing off
+OUT_DIR=x dev/test.sh film 600  # bomb hit on the player, gore on, vertical 390x844: fake clock, 1 PNG + 1 film.jsonl row per 1/30 s (camera, slow-mo, eject, eyes, lens, blood)
+python3 dev/film-report.py <dir> # fixed checks on that film (eye/skeleton on screen, phase times, landing spot, camera) + contact sheets <dir>/sheets
 TRACK=canyon dev/test.sh ...    # any mode on another track
 ```
 Headless Chrome draws in software (5-10 fps), so the game runs in slow motion; for physics runs put
@@ -138,6 +140,7 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
+- **State 2026-10-18 (builds 70.1-70.20, HEAD 583ce94, UNCOMMITTED, nothing pushed since 70):** green-shell self-hit fix (bots aim like the player + a wall check, 70.4), no post-hit ghost after a banana (70.5), debug shape tracks incl. **Spiral Run** with road gaps, red pads, bank runs and a centre piece (70.2-70.20; see docs/tracks.md 'Debug shape-test tracks and track features' and history.md). The star-at-start question was answered (luck + grid bots take row 1): keep as is. Difficulty work paused (next: stronger player catch-up; leading-player blue-shell protection needs the user's OK).
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
 - **Hit motions all approved (2026-10-17, build 65.5, uncommitted):** bomb ejects the driver, `bombFire` explosion; see history.md. Bones/burn/skeleton gore and the age banner still owed.
 - **State 2026-10-17 (build 65, VERSION v65):** vertical is the default view; vertical menus, track preview, green-shell aim done (history.md 'Builds 64.40-65'); committed and pushed. Menus need phone feedback.
