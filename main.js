@@ -68,7 +68,7 @@ const CFG = {
       ],
       bumps: [[440, 14, 0.7], [457, 14, 0.7], [700, 26, 1.9]],
       jumps: [[1074, 9, 1.1]],
-      banks: [[110, 45, 12], [1140, 30, 8]],
+      banks: [[110, 60, 7], [1140, 45, 5]], // build 69.4: was 12 deg / 8 deg over 45 / 30 m half-lengths (uncomfortable); the chase camera now rolls with the road
       boxRows: [230, 405, 760, 1010, 1185], // 5 rows: the longest track (405, 1185 added in build 36)
       pads: [[40, 0], [480, -2], [985, 0]],
     },
@@ -370,7 +370,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '69'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '70'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -3359,7 +3359,17 @@ function setSteering(mode, save = true) {
 }
 // Difficulty (Settings -> DIFFICULTY, saved in kartrush.diff): Hard = the game before build 45 (AIs at their own pace,
 // no rubber band), Medium = AIs far ahead of the player ease off up to 4%, Easy = up to 9% and every AI 4% slower.
-const DIFF = { easy: { ease: 0.09, pace: -0.04 }, medium: { ease: 0.04, pace: 0 }, hard: { ease: 0, pace: 0 } };
+// Build 69.1 (integral): grace = seconds of ghost (see-through, can't be hit) after every hit recovers; weapons = share of the AIs' weapon odds kept (the rest goes to mushroom / shield / star / triple).
+// Build 69.2 (after 3 easy races: AIs ran at the player's top speed, a hit in the pack cost 4 places, the leader got every blue):
+// cap = AI top pace (x the player's max speed); from = metres ahead where the AI rubber band starts; catchUp = the player's push up to +x of top
+// speed while far behind (full at CFG.ai.easeFull); calm = seconds at the start with no AI weapons; leadCool = min seconds between AI forward shells
+// at a player who leads; blue = share of blue-shell odds kept; blueShield = a blue shell aimed at the player first gives them a shield.
+const DIFF = {
+  easy: { ease: 0.09, pace: -0.04, grace: 4, graceAI: 1.5, weapons: 1, cap: 0.95, from: 15, catchUp: 0.05, calm: 10, leadCool: 25, blue: 0.5, blueShield: true },
+  medium: { ease: 0.04, pace: 0, grace: 2.5, graceAI: 1.5, weapons: 1, cap: 0.99, from: 30, catchUp: 0.02, calm: 4, leadCool: 0, blue: 1, blueShield: false },
+  hard: { ease: 0, pace: 0, grace: 1.5, graceAI: 1, weapons: 1, cap: 9, from: 30, catchUp: 0, calm: 0, leadCool: 0, blue: 1, blueShield: false },
+};
+let leadShellT = -1e9; // race time of the last AI red / green fired at the player while leading
 const DIFF_KEY = 'kartrush.diff';
 let difficulty = 'medium';
 try { const d = localStorage.getItem(DIFF_KEY); if (DIFF[d]) difficulty = d; } catch { /* storage blocked */ }
@@ -3856,8 +3866,8 @@ function updateAI(k, dt, canDrive) {
   // Gentle rubber band (build 45, a friend: the game is hard, nobody should be left far behind): an AI more than
   // easeFrom metres ahead of the player loses up to easeMax of top speed, full at easeFull. Never speeds anyone up.
   const gapAhead = (k.progress - kart.progress) * track.spacing;
-  const catchUp = DIFF[effectiveDiff()].pace - DIFF[effectiveDiff()].ease * clamp((gapAhead - CFG.ai.easeFrom) / (CFG.ai.easeFull - CFG.ai.easeFrom), 0, 1);
-  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : ai.skill + ai.tow + catchUp);
+  const D = DIFF[effectiveDiff()], catchUp = D.pace - D.ease * clamp((gapAhead - D.from) / (CFG.ai.easeFull - D.from), 0, 1);
+  const pace = k.star > 0 ? K.maxSpeed + CFG.items.starSpeed : K.maxSpeed * (k.finished ? A.finishedPace : Math.min(ai.skill + ai.tow + catchUp, D.cap));
   let corner = Infinity; // fastest speed that still makes every corner in the next 45 m
   const brakeDecel = 10;
   for (let s = 2; s * spacing < 45; s += 2) {
@@ -3944,6 +3954,7 @@ function rollItem(place, k) {
   if (k?.ai && dbg.on && dbg.items.length) return dbg.items[Math.floor(Math.random() * dbg.items.length)]; // DEBUG: the bots' boxes only give the ticked items
   const odds = CFG.items.odds[clamp(place, 1, CFG.items.odds.length) - 1].slice();
   if (k?.ai && dbg.on && dbg.aggro) for (const t of ['mushroom', 'shield', 'triple']) odds[ITEM_TYPES.indexOf(t)] = 0; // DEBUG aggressive bots: weapons only
+  if (k?.ai) { const w = DIFF[effectiveDiff()].weapons; for (const t of ['banana', 'green', 'red', 'blue', 'bullet', 'bomb']) odds[ITEM_TYPES.indexOf(t)] *= w; odds[ITEM_TYPES.indexOf('blue')] *= DIFF[effectiveDiff()].blue; }
   const tilt = k?.ai?.style.itemOdds; // a personality's item luck (the bully: weapons)
   if (tilt) tilt.forEach((m, i) => { odds[i] *= m; });
   // one blue shell at a time (flying or held)
@@ -4010,6 +4021,7 @@ function useItem(k, flip = false) { // flip = the opposite throw: green shell ba
     // forward to the leader; backwards when it's thrown from the front (the 2nd-placed kart is behind)
     const blue = shells[shells.length - 1];
     if (blue.target && blue.target.progress < k.progress) blue.dir = -1;
+    if (blue.target?.isPlayer && k !== blue.target && DIFF[effectiveDiff()].blueShield && !blue.target.shield) blue.target.shield = I.shieldTime; // easy: the leader gets a bubble for it
     showMessage(k.isPlayer ? 'BLUE SHELL!' : `BLUE SHELL FROM ${k.name.toUpperCase()}!`);
     sound.blueLaunch();
   } else if (item === 'banana' || item === 'bomb') {
@@ -4057,13 +4069,11 @@ function useItem(k, flip = false) { // flip = the opposite throw: green shell ba
   }
 }
 
-/** The kart in front; AIs go for the player instead whenever the player is ahead and within range. */
+/** The closest kart ahead along the track, whoever it is (build 69.4: AIs used to prefer the player within a range, so in a pack you drew every shell). */
 function redShellTarget(k) {
-  if (k.ai && !kart.finished) {
-    const gap = (kart.progress - k.progress) * track.spacing;
-    if (gap > 0 && gap < CFG.items.aiTargetPlayer) return kart;
-  }
-  return karts.find((o) => o.place === k.place - 1 && !o.finished) || null;
+  let best = null;
+  for (const o of karts) if (o !== k && !o.finished && o.progress > k.progress && (!best || o.progress < best.progress)) best = o;
+  return best;
 }
 
 /** The blue shell goes for whoever leads the race (not its owner), and fizzles if they finish. */
@@ -4149,7 +4159,10 @@ function shellExplosion(pos) {
 function spinOut(k, by, what, time = CFG.items.spinTime, ctx = {}) {
   // finished karts are out of it (build 36: a red shell hit Luna 11 s after she had crossed the line)
   if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted || k.finished) {
-    if (k.isPlayer) teleEvent('hitskip', k, { by: by ? karts.indexOf(by) : -1, what, why: k.spin > 0 ? 'spin' : k.star > 0 ? 'star' : k.bullet > 0 ? 'bullet' : k.ghosted ? 'ghost' : 'finished' });
+    if ((k.isPlayer || (k.ghosted && k.ghost > 0)) && !(state.raceTime < (k.skipT || 0))) { // the player's skips, and AI skips while they are in their post-hit ghost (throttled: a shell can touch every frame)
+      k.skipT = state.raceTime + 0.5;
+      teleEvent('hitskip', k, { by: by ? karts.indexOf(by) : -1, what, why: k.spin > 0 ? 'spin' : k.star > 0 ? 'star' : k.bullet > 0 ? 'bullet' : k.ghosted ? 'ghost' : 'finished' });
+    }
     return false;
   }
   if (k.shield > 0) {
@@ -4761,6 +4774,12 @@ function updateAIItem(k, dt) {
     }
   }
   if (!use) return;
+  const D = DIFF[effectiveDiff()], weapon = ['banana', 'green', 'red', 'blue', 'bullet', 'bomb'].includes(k.item);
+  if (weapon && state.raceTime < D.calm) return; // no weapons in the first seconds
+  if (D.leadCool && kart.place === 1 && k.place === 2 && (k.item === 'red' || k.item === 'green')) { // the leader isn't shelled again at once
+    if (state.raceTime >= leadShellT && state.raceTime - leadShellT < D.leadCool) return;
+    leadShellT = state.raceTime;
+  }
   const triple = k.item === 'triple';
   useItem(k);
   if (triple && k.item) ai.itemT = rand(0.6, 1.6); // the next mushroom a moment later
@@ -4884,6 +4903,11 @@ function driveKart(k, dt, canDrive) {
   } else if (k.spin > 0) {
     // Spun out by a banana / shell: no power, scrub off speed, wheels straight
     k.spin = Math.max(0, k.spin - dt);
+    if (k.spin === 0 && state.phase === 'race' && !k.finished) { // recovered: ghost for a few seconds so hits can't chain (the respawn ghost)
+      k.ghost = Math.max(k.ghost, DIFF[effectiveDiff()][k.isPlayer ? 'grace' : 'graceAI']);
+      setGhost(k, true);
+      teleEvent('grace', k, { s: k.ghost });
+    }
     if (k.launch) {
       stepLaunch(k, dt);
       if (k.spin === 0) { // recovered: where and how fast it is back on the road
@@ -5047,8 +5071,17 @@ function applyStabilityAssist(k) {
   // (the star pushes the same way, up to its own higher top speed)
   const boostPush = k.boost > 0 && speed < K.maxSpeed * k.topMult + K.boostSpeed ? (k.rocketT > 0 ? K.rocketAccel : K.boostAccel) : 0;
   const starPush = k.star > 0 && speed < K.maxSpeed * k.topMult + CFG.items.starSpeed ? CFG.items.starAccel : 0;
-  if ((boostPush || starPush) && k.spin <= 0 && onGround) {
-    const dv = Math.max(boostPush, starPush) * CFG.physicsStep;
+  // Player catch-up (Difficulty): far behind the leader and not turning, a gentle push to a little over the normal top speed
+  let catchPush = 0;
+  const DC = k.isPlayer && state.phase === 'race' ? DIFF[effectiveDiff()] : null;
+  if (DC?.catchUp && Math.abs(k.steerSmooth) < 0.3) {
+    let lead = k.progress;
+    for (const o of karts) if (o.progress > lead) lead = o.progress;
+    const f = clamp(((lead - k.progress) * track.spacing - CFG.ai.easeFrom) / (CFG.ai.easeFull - CFG.ai.easeFrom), 0, 1);
+    if (f > 0 && speed < K.maxSpeed * (1 + DC.catchUp * f)) catchPush = 14;
+  }
+  if ((boostPush || starPush || catchPush) && k.spin <= 0 && onGround) {
+    const dv = Math.max(boostPush, starPush, catchPush) * CFG.physicsStep;
     body.velocity.x += fwd.x * dv;
     body.velocity.z += fwd.z * dv;
   }
@@ -5097,7 +5130,7 @@ function bulletGuide(k) {
 /* ==========================================================================
  * 5. RENDERING LOOP (sync meshes <- bodies, camera, effects, HUD)
  * ========================================================================== */
-const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), snap: true };
+const camState = { yaw: 0, pos: new THREE.Vector3(), look: new THREE.Vector3(), snap: true, bank: 0 };
 const desiredCam = new THREE.Vector3();
 
 const spinQ = new THREE.Quaternion(), flipQ = new THREE.Quaternion();
@@ -5288,7 +5321,7 @@ function updateCamera(dt) {
   else camFocus.copy(bp);
   const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
 
-  if (state.phase === 'menu') lobbyCamera(dt, bp, yaw);
+  if (state.phase === 'menu') { camera.up.set(0, 1, 0); camState.bank = 0; lobbyCamera(dt, bp, yaw); }
   else chaseCamera(dt, bp, yaw, speedRatio);
 
   // Shadow camera follows the kart
@@ -5418,6 +5451,10 @@ function chaseCamera(dt, bp, yaw, speedRatio) {
     bp.y + C.lookHeight,
     bp.z + Math.cos(camState.yaw) * C.lookAhead,
   );
+  // Roll with the road: up = the road surface's normal (smoothed), so a banked bend tilts the view with the kart
+  const n = track.normals[kart.trackIdx];
+  camState.bank += ((kart.eject || kart.bullet > 0 ? 0 : track.bank[kart.trackIdx]) - camState.bank) * (1 - Math.exp(-dt * 5));
+  camera.up.set(-camState.bank * n.x, 1, -camState.bank * n.z).normalize();
   camera.lookAt(camState.look);
 
   // Radial blur strength: full on a boost or the cannon, lighter with the star; fades in fast, out slower
