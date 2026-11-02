@@ -40,6 +40,7 @@ const CFG = {
   tracks: {
     meadow: {
       name: 'Green Valley', icon: 'pine', theme: 'meadow', farm: true,
+      intro: [[205, 262, 13], [600, 680, 8, 6], [860, 905, 5]], // the opening shots: [from idx, to idx, height, lateral]: the bridge, the run-off and its windmill, the avenue
       // ~850 m: main straight, fast right, boost straight, a 12-13 m hairpin (several points along it: a
       // single apex point makes a cusp), flowing chicane, middle S-bends, fast sweeper, a 16 m kink on
       // the left, back to the line. >= 26 m between different parts of the loop.
@@ -67,6 +68,7 @@ const CFG = {
     },
     canyon: {
       name: 'Canyon Run', icon: 'cactus', theme: 'desert',
+      intro: [[520, 640, 12], [758, 800, 5], [1180, 1222, 6]], // the Carousel round the butte, under the arch, down main street
       // ~1150 m figure-8. Start straight (y 0), banked right-hander, under the bridge through a slot canyon, climb with whoops, the Carousel, crest on the mesa (y 9),
       // over the bridge (9 m above the lower road), jump on the way down, banked downhill sweeper to the line.
       // 72.3 (user: the tight curve was "basically a copy" of Green Valley's hairpin): the Carousel, a long climbing bend round a butte that keeps tightening (R 30 -> 23, idx 513-681, banked).
@@ -96,6 +98,7 @@ const CFG = {
     },
     frost: {
       name: 'Frost Peak', icon: 'snowflake', theme: 'snow',
+      intro: [[575, 640, 3.6], [800, 880, 6], [1040, 1078, 7]], // through the gallery, across the lake, down the village street
       // ~1010 m, a ski resort. Start along the village street (y 0), banked left sweeper, climbing S-bends through the pines, the Summit: two separate 90 degree bends with a short
       // straight between (72.4, it was a 13 m hairpin, one more copy of Green Valley's; R 21 and 26, idx 355-450, round the lift's top station), back along the ridge, through the
       // snow gallery, a fast downhill with a crest, then across the lake on ice: a gentle S (tightest ~32 m) on two thirds of the grip, back to the line.
@@ -144,6 +147,7 @@ const CFG = {
     // into the old town (y 4.5, cobbles, houses both sides), down to the fish market and back along the west quay.
     tech: {
       name: 'Harbour Run', icon: 'anchor', theme: 'harbour', halfWidth: 7.5,
+      intro: [[82, 124, 5], [300, 395, 11], [590, 690, 6]], // over the bridge, along the yard, up the old town
       points: [
         [-60, -110, 0], [0, -110, 0], [60, -110, 0], [106, -108, 0], [126, -92, 0], [130, -64, 0], [120, -40, 0], [94, -30, 0], [74, -14, 0], [72, 12, 0],
         [86, 30, 0], [112, 38, 0], [128, 56, 0], [130, 88, 0.5], [112, 116, 1.5], [78, 126, 2.8], [40, 124, 4], [4, 126, 4.5], [-34, 122, 4], [-70, 124, 2.8],
@@ -161,32 +165,13 @@ const CFG = {
       },
       palette: { road: [0x64686c, 0x606468], dash: 0xf2c12e, shoulder: [0xa9aba6, 0x9fa19c], wear: 0x55585c, stone: [0xd9cdb6, 0xcbbfa8, 0xe3d8c2], wood: [0x7a5230, 0x6b4a2f] },
     },
-    // Big Flow: 1485 m, 17 control points, wide flowing bends (tightest R21), long straights; fits the 700 m ground.
-    flow: {
-      name: 'Big Flow', icon: 'gear', theme: 'meadow', debug: true, plain: true,
-      points: [
-        [-176, -176], [-88, -189], [18, -176], [123, -185], [207, -141], [229, -62], [189, 9], [123, 44],
-        [97, 101], [123, 167], [70, 224], [-18, 229], [-97, 189], [-132, 123], [-202, 97], [-238, 18], [-220, -88],
-      ],
-      boxRows: [100, 350, 600, 850, 1100, 1350],
-      pads: [[30, 0], [500, 0], [1000, 0], [1400, 0]],
-    },
-    // Long Flow: Big Flow x1.2 = 1782 m (user: test 1800 m to see if it is too long), tightest R25, ~63 s laps. Extents +-290 m.
-    long: {
-      name: 'Long Flow', icon: 'gear', theme: 'meadow', debug: true, plain: true,
-      points: [
-        [-211, -211], [-106, -227], [22, -211], [148, -222], [248, -169], [275, -74], [227, 11], [148, 53],
-        [116, 121], [148, 200], [84, 269], [-22, 275], [-116, 227], [-158, 148], [-242, 116], [-286, 22], [-264, -106],
-      ],
-      boxRows: [120, 420, 720, 1020, 1320, 1620],
-      pads: [[30, 0], [600, 0], [1200, 0], [1700, 0]],
-    },
     // Spiral Run, the volcano (72.7; same id as the debug shape test, so its records stay). ~1540 m (trimmed from 1823: the outer ring and the final descent). Short ring, then 2.5 turns up the cone (R 40 -> 30,
     // three levels 10 m apart, climbing in steps: 2 plateaus + 2 ramps per turn, +5 m per ramp) to y 25, one long bank run, a wide turn on the ridge, a 70 m straight ending in 3 RED full-width pads, then the road is
     // CUT (`gaps`: control point 43 = the lip, idx ~1173, to the foot at ~1209): a 32 m hole over the lava, 10 m down to the receiving edge (y 15), a ~15% landing ramp to y 11 (a flat landing killed ~130 km/h),
     // a landing run and one gentle descent, over a lava river. A kart arriving at >= 32 m/s (boosted) clears the edge; an unboosted one (26) does not, and everyone can reach a pad.
     spiral: {
       name: 'Spiral Run', icon: 'volcano', theme: 'volcano', gaps: [43],
+      intro: [[700, 800, 7], [1148, 1222, 7], [1625, 1652, 6]], // up the cone, over the lava, into the station
       bankRuns: [[294, 930, 9.5, 150, 75]], // helix start .. end + exit
       points: [
         [-10, -62, 0], [45, -62, 0], [92, -50, 0], [108, -14, 0], [88, 18, 0], [45, 30, 0],
@@ -470,10 +455,10 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- 1a. Renderer, scene, camera, lights ----------
 const app = $('app');
-// Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
-// Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
-const DEBUG = true;
-const VERSION_N = '72.7'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+// Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
+const DEBUG_KEY = 'kartrush.debug';
+const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
+const VERSION_N = '72.8'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -3954,6 +3939,10 @@ function initControls() {
   buildKeyboard();
   onTap($('hello-edit'), () => { sound.click(); showHello(); });
   onTap($('btn-start'), () => { dbgClear(); startRace(); }); // the normal start is never a debug race
+  app.addEventListener('pointerdown', () => { // a tap skips the opening shots and the podium
+    if (state.intro > 0) beginCountdown();
+    else if (state.podium > 0) endPodium();
+  });
   onTap($('btn-again'), startRace);
   onTap($('btn-menu'), () => { sound.click(); showMenu(); });
   $('btn-pause').addEventListener('pointerdown', (e) => { e.preventDefault(); pauseGame(); });
@@ -4116,7 +4105,7 @@ function startRace() {
 
   Object.assign(state, {
     phase: 'countdown', countdown: 3, raceTime: 0, lapStart: 0, finishedCount: 0, resultsShown: false,
-    paused: false, wrongT: 0, gasFrom: null,
+    paused: false, wrongT: 0, gasFrom: null, intro: 0, podium: 0,
   });
   clearItems();
   fx.reset();
@@ -4127,9 +4116,114 @@ function startRace() {
   dbgApplyStart();
   teleStart();
   camState.snap = true;
+  const shots = !dbg.on && !introSeen.has(track.id) && track.def.intro;
+  if (shots) { // the first race on a track in this session: a look round it first (tap to skip)
+    introSeen.add(track.id);
+    state.intro = shots.length * INTRO_SHOT;
+    app.classList.add('cine');
+    $('cine-title').textContent = track.def.name;
+    sound.music('race', track.id);
+  } else beginCountdown();
+}
+
+function beginCountdown() {
+  state.intro = 0;
+  app.classList.remove('cine');
+  sound.music(false);
+  camState.snap = true;
   showCountdown('3');
   sound.beep();
   if (!app.classList.contains('vertical')) showTip('Press GAS on "1" for a rocket start'); // no rocket start in the vertical view (auto-gas)
+}
+
+// ---------- The opening shots and the podium (72.8): the camera and the HUD's job, the race itself doesn't know ----------
+const INTRO_SHOT = 1.6; // seconds per shot
+const introSeen = new Set();
+const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3();
+/** Flies down the road: each shot of `def.intro` is [from idx, to idx, height over the road, metres left of the centre]. */
+function introCamera() {
+  const shots = track.def.intro, t = shots.length * INTRO_SHOT - state.intro;
+  const n = Math.min(shots.length - 1, Math.floor(t / INTRO_SHOT)), [a, c, h, lat = 0] = shots[n];
+  const u = smoothstep(0, 1, clamp(t / INTRO_SHOT - n, 0, 1)) * 0.35 + clamp(t / INTRO_SHOT - n, 0, 1) * 0.65, f = lerp(a, c, u), N = track.N;
+  const i = Math.floor(f) % N, j = (i + 1) % N;
+  roadPoint(i, lat, h, _p1); roadPoint(j, lat, h, _p2);
+  camera.up.set(0, 1, 0);
+  camera.position.lerpVectors(_p1, _p2, f - Math.floor(f));
+  roadPoint((i + 26) % N, 0, h * 0.35, camState.look);
+  camera.lookAt(camState.look);
+}
+
+const PODIUM = { time: 5.5, top: [], mesh: null, of: null, q: new THREE.Quaternion(), rel: new THREE.Quaternion(), inv: new THREE.Quaternion(), pos: new THREE.Vector3(), steps: [[0, 2.1], [1, 1.5], [-1, 1]] };
+/** Three steps on the road just past the line, facing back at it (nobody else is drawn meanwhile, so nothing passes through them). */
+function buildPodium() {
+  const g = new THREE.Group(), T = (n) => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#ffffff'; x.font = 'bold 96px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(n, 64, 70);
+    return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
+  };
+  [[0xffc93a, 2.1, 0], [0xc6ced6, 1.5, 3.4], [0xc9803f, 1, -3.4]].forEach(([c, h, x], i) => {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(3.4, h, 3.4), new THREE.MeshLambertMaterial({ color: c }));
+    step.position.set(x, h / 2, 0);
+    step.castShadow = step.receiveShadow = true;
+    const num = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), T(String(i + 1)));
+    num.position.set(x, Math.max(0.6, h / 2), 1.71);
+    g.add(step, num);
+  });
+  trackRoot.add(g);
+  return g;
+}
+function startPodium() {
+  if (kart.eject || !kart.finished) return showResults();
+  const i = 14 % track.N, t = track.tangents[i];
+  if (PODIUM.of !== track) { PODIUM.mesh = buildPodium(); PODIUM.of = track; } // (trackRoot went with the last track)
+  roadPoint(i, 0, 0, PODIUM.pos);
+  PODIUM.mesh.position.copy(PODIUM.pos);
+  PODIUM.mesh.rotation.y = Math.atan2(-t.x, -t.z);
+  PODIUM.mesh.visible = true;
+  PODIUM.q.setFromEuler(new THREE.Euler(0, Math.atan2(-t.x, -t.z), 0));
+  PODIUM.top = [...karts].sort((a, c) => a.place - c.place).slice(0, 3);
+  state.podium = PODIUM.time;
+  app.classList.add('cine');
+  const w = PODIUM.top[0];
+  $('cine-title').textContent = `${w.isPlayer ? 'YOU WIN' : `${w.name} WINS`}`;
+  sound.music('menu');
+}
+function endPodium() {
+  state.podium = 0;
+  PODIUM.mesh.visible = false;
+  app.classList.remove('cine');
+  for (const k of karts) { k.group.visible = true; for (const w of k.wheelMeshes) w.visible = true; }
+  camState.snap = true;
+  showResults();
+}
+/** After syncMeshes: the top three stand on the steps, the others aren't drawn. */
+function poseOnPodium() {
+  const n = track.normals[14 % track.N], time = PODIUM.time - state.podium;
+  for (const k of karts) {
+    const at = PODIUM.top.indexOf(k);
+    k.group.visible = at >= 0;
+    for (const w of k.wheelMeshes) w.visible = at >= 0;
+    if (at < 0) continue;
+    const [side, h] = PODIUM.steps[at], gx = k.group.position.x, gy = k.group.position.y, gz = k.group.position.z;
+    PODIUM.inv.copy(k.group.quaternion).invert();
+    PODIUM.rel.copy(PODIUM.q).multiply(PODIUM.inv);
+    k.group.quaternion.copy(PODIUM.q);
+    const hop = at === 0 ? Math.abs(Math.sin(time * 4)) * 0.35 : 0;
+    k.group.position.set(PODIUM.pos.x + n.x * side * 3.4, PODIUM.pos.y + h + 0.62 + hop, PODIUM.pos.z + n.z * side * 3.4);
+    for (const w of k.wheelMeshes) { // (wheels are drawn in world space)
+      w.position.x -= gx; w.position.y -= gy; w.position.z -= gz;
+      w.position.applyQuaternion(PODIUM.rel).add(k.group.position);
+      w.quaternion.premultiply(PODIUM.rel);
+    }
+  }
+}
+function podiumCamera() {
+  const t = track.tangents[14 % track.N], n = track.normals[14 % track.N], time = PODIUM.time - state.podium, d = 15 - time * 0.9, sway = Math.sin(time * 0.5) * 4;
+  camera.up.set(0, 1, 0);
+  camera.position.set(PODIUM.pos.x - t.x * d + n.x * sway, PODIUM.pos.y + 3.4, PODIUM.pos.z - t.z * d + n.z * sway);
+  camState.look.set(PODIUM.pos.x, PODIUM.pos.y + 2.2, PODIUM.pos.z);
+  camera.lookAt(camState.look);
 }
 
 /** Staggered two-column grid behind the start line. The AIs line up in front; the player starts last. */
@@ -4175,6 +4269,8 @@ function resetKart(k, idx, lane = 0) {
 const resetP = new THREE.Vector3(), resetQ = new THREE.Quaternion(), resetM = new THREE.Matrix4();
 
 function updateGameFlow(dt) {
+  if (state.intro > 0) { state.intro -= dt; if (state.intro <= 0) beginCountdown(); return; }
+  if (state.podium > 0) { state.podium -= dt; if (state.podium <= 0) endPodium(); }
   updateWrongWay(dt);
   if (state.phase === 'countdown') {
     const prev = Math.ceil(state.countdown);
@@ -4297,7 +4393,7 @@ function finishKart(k) {
     showMessage(k.place === 1 ? 'YOU WIN!' : `FINISH! ${ordinal(k.place)}`);
     sound.music(false);
     sound.finish(k.place === 1);
-    setTimeout(showResults, 1800);
+    setTimeout(() => { if (state.phase === 'finished' && !state.resultsShown && !state.paused) startPodium(); else if (state.phase === 'finished' && !state.resultsShown) showResults(); }, 1800);
   } else if (state.resultsShown) {
     showResults(); // refresh the table as the AIs come home
   }
@@ -7528,11 +7624,13 @@ function updateCamera(dt) {
   const speedRatio = clamp(Math.abs(kart.speed) / CFG.kart.maxSpeed, 0, 1);
 
   if (state.phase === 'menu') { camera.up.set(0, 1, 0); camState.bank = 0; lobbyCamera(dt, bp, yaw); }
+  else if (state.intro > 0) introCamera();
+  else if (state.podium > 0) podiumCamera();
   else chaseCamera(dt, bp, yaw, speedRatio);
 
   // Shadow camera follows the kart
   // ...snapped to whole shadow-map texels in the light's view, or shadow edges crawl as the kart moves
-  shadowSnap.copy(bp).applyQuaternion(lightQInv);
+  shadowSnap.copy(state.intro > 0 || state.podium > 0 ? camState.look : bp).applyQuaternion(lightQInv);
   const texel = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
   shadowSnap.x = Math.round(shadowSnap.x / texel) * texel;
   shadowSnap.y = Math.round(shadowSnap.y / texel) * texel;
@@ -7863,6 +7961,7 @@ function render(dt) {
   dbgTick();
   if (performance.now() > dbgDuckUntil) sound.setDuck(kart.eject && goreOn() ? 1 : 0); // the music drops out and muffles while the skeleton flies
   syncMeshes();
+  if (state.podium > 0) poseOnPodium();
   updateCamera(dt);
   updateEffects(dt);
   updateBurn(dt);
@@ -7886,7 +7985,7 @@ function render(dt) {
   } else {
     renderer.render(scene, camera);
   }
-  const mirrorOn = state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown';
+  const mirrorOn = (state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown') && !(state.intro > 0) && !(state.podium > 0);
   document.getElementById('mirror-frame').style.display = mirrorOn ? 'block' : 'none';
   if (mirrorOn) {
     const b = kart.body, f = b.interpolatedQuaternion.vmult(LOCAL_FWD, tmpVec);
@@ -7902,7 +8001,12 @@ let lastTime = performance.now();
 // worst frame since the race started. Toggled by tapping the build label; remembered per device.
 const perf = { on: false, frames: 0, acc: 0, slow: 0, worst: 0 };
 try { perf.on = localStorage.getItem('kartrush.perf') === '1'; } catch { /* storage blocked */ }
+let buildTaps = 0, buildTapT = 0;
 $('build').addEventListener('click', () => {
+  const t = performance.now();
+  buildTaps = t - buildTapT < 500 ? buildTaps + 1 : 1;
+  buildTapT = t;
+  if (buildTaps >= 5 && !DEBUG) { try { localStorage.setItem(DEBUG_KEY, '1'); } catch { /* storage blocked */ } location.reload(); }
   perf.on = !perf.on;
   try { localStorage.setItem('kartrush.perf', perf.on ? '1' : '0'); } catch { /* storage blocked */ }
   $('build').textContent = $('build').textContent.replace(/ · meter.*$/, '') + (perf.on ? ' · meter on' : '');

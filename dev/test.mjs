@@ -112,6 +112,23 @@ if (mode === 'autopilot' || mode === 'trace') {
   }
   log.end();
   console.log('hit at frame', hitAt, 'end at', endAt);
+} else if (mode === 'cine') {
+  const shot = async (name) => { const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}cine-${name}.png`), Buffer.from(s.data, 'base64')); };
+  for (const [n, left] of [['intro1', 3.9], ['intro2', 2.3], ['intro3', 0.8]]) {
+    while (+(await ev('__s.intro')) > left) await sleep(50);
+    await shot(n);
+  }
+  while ((await ev('__s.phase')) !== 'race') await sleep(200);
+  await ev(`__k.place = 2; __finish(__k)`);
+  while (!(+(await ev('__s.podium')) > 0)) await sleep(100);
+  for (const [n, left] of [['podium1', 4.5], ['podium2', 1.5]]) {
+    while (+(await ev('__s.podium')) > left) await sleep(50);
+    await shot(n);
+  }
+  while (!(await ev('__s.resultsShown'))) await sleep(100);
+  await sleep(1500);
+  await shot('results');
+  console.log(await ev(`JSON.stringify({ errors: window.__errs || 0, visible: __karts.map((k) => k.group.visible) })`));
 } else if (mode === 'shots') {
   while ((await ev('__s.phase')) !== 'race') await sleep(200);
   for (const spec of arg.split(',')) {

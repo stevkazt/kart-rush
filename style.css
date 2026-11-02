@@ -1373,3 +1373,9 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #gore-vig, #gore-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 1; }
 #gore-vig { background: radial-gradient(ellipse at center, rgba(120, 0, 0, 0) 40%, rgba(150, 0, 0, 0.75) 100%); }
 #gore-flash { background: #fff; }
+
+/* The opening shots and the podium (72.8): no HUD, the name across the bottom */
+#cine-title { display: none; position: absolute; left: 0; right: 0; bottom: 8%; text-align: center; font-weight: 900; font-style: italic; letter-spacing: 1px;
+  color: #fff; font-size: clamp(26px, calc(var(--app-h) * 0.09), 44px); text-shadow: 0 3px 0 rgba(0,0,0,0.55), 0 0 14px rgba(0,0,0,0.35); pointer-events: none; z-index: 5; }
+.cine #cine-title { display: block; }
+.cine #hud, .cine #controls { opacity: 0; pointer-events: none; }
