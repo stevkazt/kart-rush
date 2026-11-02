@@ -404,3 +404,35 @@ Analysis tools were one-off, in the session scratchpad: an accelerated headless 
 - **71.6 (2026-11-01):** the user liked the hills of 71.4 and asked for scenery that feels less empty and more integrated with the track. See tracks.md. Not phone-tested.
 - **71.7 (2026-11-01):** phone on 71.6: "much better"; 59-60 fps all race, ghosts at 13-15 s with no hitch (first race confirming the 71.5 fix). User asked whether it's still a valley (outer slopes raised) and for the rails removed + a theme for the track itself: themed barriers, country road, 3 more run-offs (tracks.md). Not phone-tested.
 - **71.8 (2026-11-01):** phone on 71.7: "so much better", **scenery left as is for now**. The user's red hit a rival and "reacted as if he had a bubble" with none seen. Log: Nova raised a shield at 40.52, blocked at 40.56 (`use` -> `blocked`, a legal 0.04 s; of 76 AI blocks since build 60, 10 came within 0.5 s, median 2.9 s). The bubble grows over 0.45 s, so it never showed, and a blocked player's shell gave no message. Now the bubble shows whole as it pops (`popT`, `SHIELD_POP` 0.35 s) and the player sees "NAME BLOCKED IT!". AI timing unchanged.
+- **Build 72 committed and pushed (c6dc290), live on Pages.** User: Green Valley done, go on to Canyon Run.
+- **72.1 (2026-11-02), Canyon Run, not phone-tested, uncommitted.** See tracks.md. 12 bot races each (7 vertical + 5 skilled, same harness), AI resets per race: build 72 1.67; hairpin + sweeper widened and a 6th row 2.55 (11 races, mixed); no widening, 6th row 3.0; no widening, no 6th row 2.08 (shipped; single races range 0-6, so the gap to 72 is within noise). Player resets 0.33 vs 0.33. Stalls 8/27 -> 2/31 rail contacts. Laps about the same (player 42.8 -> 43.8 s, AI 42.6 -> 42.8 s). **Lesson:** compare on the same race mix: an earlier 7-race baseline (1.43) from an older build misled, and a first explanation (widening raises AI speed in the hairpin) did not survive the re-test. AI resets concentrate at the hairpin (idx 600s) and the sweeper (idx 1100s) on every build: a known hotspot, not fixed.
+- **First phone race on 72.1 (2026-11-02, canyon, landscape, Medium, 1st place):** user: "does look nice, with some caveats". The session ended before they said which: **ask them first.** Log: **exactly 30 fps from start to end** (worst frame 35-47 ms), at 40-160 draw calls and 185-400k triangles, one 659 ms frame at t=3.3 s. Green Valley held 59-60 fps at up to 274k triangles, so load alone doesn't explain it: a flat 30 whatever the load points to a cap, such as iOS Low Power Mode, but that is a guess. First canyon race with an `fps` log, so no canyon number to compare with. Ask whether Low Power Mode was on; have them race the canyon again and Green Valley right after, same conditions. If the canyon alone stays at 30, look at its terrain (`step` 3.5, Green Valley 4.5) and at `bakeMeshes` for the bridge. 2 rail hits, at idx 610 and 629, both on the left, one with RIGHT held; no player resets, no `inputdrop`.
+
+## Where things stand (2026-11-02): everything not done yet
+**Build state:** build 72 is committed, pushed and live. 72.1 (Canyon Run) and `dev/sim/` are UNCOMMITTED, waiting for the user's OK. To ship: bump `sw.js` VERSION and `VERSION_N`, commit, push (only when asked).
+
+**Five-track plan, in order:**
+1. Canyon Run: get the user's caveats, settle the 30 fps above, then commit.
+2. Frost Peak: same recipe (snowbanks and an icy road surface instead of rails, via `edges` + `palette`); the exit of the hairpin at idx 450 is its rail hotspot; AIs have some `watchdog` / `wrong-way` resets.
+3. Tech Run as a daytime **harbour** (user's pick): the user has barely played it and doesn't know if it's any good: have them play it BEFORE building on it. Bots: 11 corners, 55% flat-out, 0 player resets; the bump at idx 420 causes AI resets. Plan: road half width ~7-8.
+4. Spiral Run as a **volcano** (user's pick), the gap jumped over lava, bright sky (the user dislikes dark scenes), shortened from 1824 m to ~1500 m with 3 laps (user's pick: trim the outer ring and final descent, keep helix + jump). Least stable track: bots fell 3 times in 4 races, resets cluster at the landing (idx ~1300), and the user has never finished a race on it.
+5. Big Flow, Long Flow: drop them (96-100% flat-out).
+
+**Ideas raised, not executed:**
+- **Shortcuts / alternate routes (the user wants tracks that aren't "just a simple track"):** no track has any today. Not designed yet. Open questions: the track is one closed spline (`nearestTrackIndex`, progress, lap counting, WRONG WAY, minimap, AI line all assume it). Cheapest first step: a shortcut that rejoins soon, as a second road section outside the main spline, players only (AIs stay on the line), behind a grass or jump risk, with its own colliders; progress must not break while on it. Run-offs today are only on the outside of bends precisely so they are NOT shortcuts. Ask the user where they'd want the first one.
+- Other design variety: real road forks, obstacles in the road (AIs can't avoid statics today), a cup / championship across the tracks, track specialists and rivalries (older list above).
+- Run-offs on hilly tracks: no ground beside the road there (only a floor 8 m down), so it needs ground colliders first. Canyon has none for this reason.
+
+**Before a wider release (raised in the ship review, 2026-10-25):**
+- `DEBUG = true` shows the DEBUG button and the test tracks to everyone on the public site: hide them (keep Tech Run reachable until the user has judged it).
+- Medium and Hard have few races; play them on the real tracks.
+- Have someone else install from the public URL from scratch (name + age, offline, home-screen icon). The hosted copy sends no telemetry, so other players' races can't be seen.
+- Gore is gated by a self-declared age (13+) and off by default: fine among friends, revisit for a store or a young audience.
+
+**Known small issues, left alone:**
+- AI resets cluster at the canyon's hairpin (idx 600s) and sweeper (idx 1100s) on every build.
+- Steering lost during a boost: two real causes fixed (rail seams, pinned on a rail), but a system-dropped button is unproven: check `inputdrop` and `steer` if the user reports it again.
+- ~275 ms frame at the first START tap (`sound.unlock`, once per launch, before the countdown).
+- The tyre-wear ribbon has a slightly uneven edge in tight corners (`line` isn't smooth there).
+- The user once felt something slow near the end of a race on 71.3: nothing in that log; the `fps` log now exists for it.
+- The Mac's LAN IP changes (.38 -> .25 on 2026-11-01): a new IP means a fresh profile on the phone and a dead home-screen icon.

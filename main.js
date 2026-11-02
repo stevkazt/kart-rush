@@ -57,7 +57,7 @@ const CFG = {
       pads: [[30, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]. 71.2: the first one was at 200 (it shot karts into the hairpin, and the auto-gas lifted right after), then 170 in 71.1 (on a bend: rail at 119 km/h a second later)
       openEdges: [[600, 690, 1, 14], [124, 170, 1, 10], [532, 560, 1, 10], [358, 398, -1, 12]], // grass run-off on the outside of these bends (see CFG.track.openEase)
       // 71.7 (user: remove the rails, give the track itself a theme): what the barrier looks like, per side, [from idx, to idx, kind]; anything else is a fence.
-      // Only the look: the colliders are the rails' as ever. Drawn by buildFarm; `edges` stops buildWalls drawing the rail.
+      // Only the look: the colliders are the rails' as ever. Drawn by buildBarriers; `edges` stops buildWalls drawing the rail.
       edges: {
         1: [[880, 917, 'boards'], [0, 60, 'boards'], [190, 255, 'stone'], [255, 335, 'tyres'], [335, 520, 'hedge'], [745, 835, 'stone']],
         '-1': [[880, 917, 'boards'], [0, 60, 'boards'], [60, 190, 'hedge'], [190, 255, 'stone'], [255, 335, 'tyres'], [400, 470, 'hedge'], [540, 745, 'hedge'], [745, 835, 'stone']],
@@ -72,17 +72,25 @@ const CFG = {
       // above the lower road), jump on the way down, banked downhill sweeper to the line.
       points: [
         [181, 20, 0], [180, -15, 0], [174, -50, 0], [160, -78, 0], [138, -96, 0], [110, -104, 0],
-        [80, -100, 0], [40, -55, 0], [15, -15, 0], [-15, 15, 0.3], [-45, 45, 1.8], [-80, 75, 3.6],
+        // 72.1, 4th value = half width (roadWidths maps it by index share: point p covers samples ~34p): the slot and the bridge narrow to 7 (they were two long
+        // empty straights). The hairpin and the sweeper stay at 9: widening them was tried and showed no gain in the bot races.
+        [80, -100, 0], [40, -55, 0], [15, -15, 0, 7], [-15, 15, 0.3, 7], [-45, 45, 1.8, 7], [-80, 75, 3.6, 7],
         [-112, 96, 5], [-140, 103, 5.8], [-165, 104, 6.4], [-177, 99, 7], [-182, 87, 7.6], [-177, 75, 8.2],
         [-165, 70, 8.6], [-145, 68, 9], [-128, 58, 9], [-122, 38, 9], [-122, 10, 9], [-115, -25, 9],
-        [-95, -48, 9], [-65, -55, 9], [-40, -42, 9], [-15, -15, 9], [15, 15, 9], [45, 45, 8.8],
+        [-95, -48, 9], [-65, -55, 9], [-40, -42, 9, 7.5], [-15, -15, 9, 7.5], [15, 15, 9, 7.5], [45, 45, 8.8],
         [75, 75, 8], [105, 95, 7.2], [140, 100, 4.5], [165, 95, 1.6], [178, 78, 0.3], [181, 50, 0],
       ],
       bumps: [[440, 14, 0.7], [457, 14, 0.7], [700, 26, 1.9]],
       jumps: [[1074, 9, 1.1]],
       banks: [[110, 60, 7], [1140, 45, 5]], // build 69.4: was 12 deg / 8 deg over 45 / 30 m half-lengths (uncomfortable); the chase camera now rolls with the road
       boxRows: [230, 405, 760, 1010, 1185], // 5 rows: the longest track (405, 1185 added in build 36)
-      pads: [[40, 0], [480, -2], [985, 0]],
+      pads: [[40, 0], [316, 0], [480, -2], [985, 0]], // (316, under the bridge: 72.1). A 6th box row on the bridge was tried: more hits and resets in the bot races, so no
+      edgeDefault: 'stone', // what the barrier looks like (see Green Valley's `edges`); buildDesert puts steel on the bridge
+      edges: {
+        1: [[1180, 1218, 'boards'], [0, 50, 'boards'], [535, 655, 'tyres'], [690, 850, 'fence']],
+        '-1': [[1180, 1218, 'boards'], [0, 50, 'boards'], [535, 655, 'tyres'], [690, 850, 'fence']],
+      },
+      palette: { shoulder: [0xcfa679, 0xc69c6f], wear: 0x6d665f, stone: [0xd8c3a0, 0xc9b28e, 0xe0cdaa], wood: [0x8a6a48, 0x7a5c3e] },
     },
     frost: {
       name: 'Frost Peak', icon: 'snowflake', theme: 'snow',
@@ -451,7 +459,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '72'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.1'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -737,7 +745,7 @@ function buildTrack(def, th) {
     }
   }
   oL[N] = oL[0]; oR[N] = oR[0];
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, oL, oR, bank, wallH, hilly, ice, gap, levelColors: def.levelColors, edges: def.edges };
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, oL, oR, bank, wallH, hilly, ice, gap, levelColors: def.levelColors, edges: def.edges, edgeDefault: def.edgeDefault, palette: { ...th.palette, ...def.palette } };
   track = data; // the road helpers below (surfaceY, roadPoint...) read the global
 
   if (hilly) {
@@ -773,8 +781,10 @@ function buildTrack(def, th) {
   if (P.shoulder) {
     // ...a worn, uneven dirt edge past the curb, and darker tarmac where the karts' line runs through the corners
     const worn = (i) => 0.7 + 0.5 * Math.sin(i * 0.13) + 0.3 * Math.sin(i * 0.37 + 1);
-    trackRoot.add(makeRibbon(data, (i) => wL[i] + T.curb, (i) => wL[i] + T.curb + worn(i), 0.03, (i) => P.shoulder[((i / 5) | 0) % 2]));
-    trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb - worn(i + 90), (i) => -wR[i] - T.curb, 0.03, (i) => P.shoulder[((i / 5) | 0) % 2]));
+    if (!hilly) { // (on a hilly track there is no ground at the road's level past the rail: it would float)
+      trackRoot.add(makeRibbon(data, (i) => wL[i] + T.curb, (i) => wL[i] + T.curb + worn(i), 0.03, (i) => P.shoulder[((i / 5) | 0) % 2]));
+      trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb - worn(i + 90), (i) => -wR[i] - T.curb, 0.03, (i) => P.shoulder[((i / 5) | 0) % 2]));
+    }
     // (its width eases in and out through each corner: switching it on by radius per sample left a jagged, burnt-looking edge)
     const wear = new Float32Array(N + 1), W = 12;
     for (let i = 0; i < N; i++) { let sum = 0; for (let d = -W; d <= W; d++) sum += radius[(i + d + N) % N] < 45 ? 1 : 0; wear[i] = 1.2 * sum / (2 * W + 1); }
@@ -1329,12 +1339,12 @@ function buildMeadow(data) {
 
 /** Static scenery merged into one vertex-coloured mesh: however many pieces, one draw call (and one more for its shadow). */
 function propBatch() {
-  const pos = [], col = [], c = new THREE.Color(), v = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), UP = new THREE.Vector3(), sc = new THREE.Vector3();
+  const pos = [], col = [], c = new THREE.Color(), v = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), UP = new THREE.Vector3(), sc = new THREE.Vector3();
   return {
-    /** Adds `geo` at (x, y, z), turned ry around Y and scaled. */
-    put(geo, color, x, y, z, { ry = 0, rz = 0, sx = 1, sy = 1, sz = 1 } = {}) {
+    /** Adds `geo` at (x, y, z), turned ry around Y (then pitched rx) and scaled. */
+    put(geo, color, x, y, z, { ry = 0, rx = 0, rz = 0, sx = 1, sy = 1, sz = 1 } = {}) {
       const g = geo.index ? geo.toNonIndexed() : geo, a = g.attributes.position;
-      m.compose(UP.set(x, y, z), q.setFromEuler(e.set(0, ry, rz)), sc.set(sx, sy, sz));
+      m.compose(UP.set(x, y, z), q.setFromEuler(e.set(rx, ry, rz, 'YXZ')), sc.set(sx, sy, sz));
       c.set(color);
       for (let i = 0; i < a.count; i++) {
         v.fromBufferAttribute(a, i).applyMatrix4(m);
@@ -1388,10 +1398,63 @@ function farmLand(data, rand, plain) {
 }
 
 /**
+ * A track's themed barriers (71.7; `edges`, the look of each stretch per side), standing on the rails' colliders with their road faces lined up and following the
+ * road's height. Boxes, so each piece costs little, all in batch `b`. `kindAt(i, side)` may override a stretch (the desert's bridge).
+ */
+function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, edges, edgeDefault = 'fence', palette: P }, b, kindAt = null) {
+  const BOX = new THREE.BoxGeometry(1, 1, 1), SINK = 0.6; // (reaching below the road: no gap on slopes and banks)
+  const STONES = P.stone || [0xb7aa96, 0xa89b86, 0xc0b39e], HEDGES = [0x3e8a3a, 0x478f3c, 0x38803a], WOOD = P.wood || [0x8f6a42, 0x7f5c38], STEEL = [0xa3402a, 0x8f3824];
+  const BOARDS = [0xffd23a, 0xe8322f, 0x2f6bff, 0xf4efe4, 0x3fb950, 0xff7a1f];
+  const TYRE = new THREE.CylinderGeometry(0.72, 0.72, 0.55, 8);
+  const th = CFG.track.wallThickness, kinds = { 1: new Array(N).fill(edgeDefault), '-1': new Array(N).fill(edgeDefault) };
+  for (const sd of ['1', '-1']) for (const [from, to, kind] of edges[sd]) for (let i = from; i < to && i < N; i++) kinds[sd][i] = kind;
+  const STEP = 4;
+  let tyreLast = null, tyreN = 0;
+  for (const sd of [1, -1]) {
+    tyreLast = null;
+    const at = (i, extra) => { // [x, z, y] on the barrier's line: `extra` metres past the collider's road face
+      const k = i % N, lat = sd * ((sd > 0 ? wL[k] + oL[k] : wR[k] + oR[k]) + CFG.track.curb + extra);
+      return [samples[k].x + normals[k].x * lat, samples[k].z + normals[k].z * lat, surfaceY(k, lat)];
+    };
+    for (let i = 0; i < N; i += STEP) {
+      if (gap[i]) continue;
+      const kind = kindAt?.(i, sd) || kinds[sd][i], n = (i / STEP) | 0;
+      const piece = (depth) => { // the box from this sample to the next along the barrier, `depth` thick
+        const [x0, z0, y0] = at(i, depth / 2), [x1, z1, y1] = at(i + STEP, depth / 2), hor = Math.hypot(x1 - x0, z1 - z0);
+        return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, y: (y0 + y1) / 2, len: Math.hypot(hor, y1 - y0) + 0.12, ry: Math.atan2(x1 - x0, z1 - z0), rx: -Math.atan2(y1 - y0, hor) };
+      };
+      const wall = (color, depth, h, f = piece(depth)) => b.put(BOX, color, f.x, f.y + (h - SINK) / 2, f.z, { ry: f.ry, rx: f.rx, sx: depth, sy: h + SINK, sz: f.len });
+      const beam = (color, y, f) => b.put(BOX, color, f.x, f.y + y, f.z, { ry: f.ry, rx: f.rx, sx: 0.1, sy: 0.16, sz: f.len });
+      const tall = wallH[i] > CFG.track.wallHeight + 0.1; // (around a jump the colliders are taller: only a wall looks right)
+      if (tall) wall(STONES[n % 3], 0.8, wallH[i]);
+      else if (kind === 'fence' || kind === 'steel') {
+        const f = piece(th), [c0, c1] = kind === 'steel' ? STEEL : WOOD;
+        beam(n % 2 ? c1 : c0, 0.55, f);
+        beam(n % 2 ? c1 : c0, 1.02, f);
+        if (n % 2 === 0) { const [px, pz, py] = at(i, th / 2); b.put(BOX, c1, px, py + 0.65 - SINK / 2, pz, { ry: f.ry, sx: 0.2, sy: 1.3 + SINK, sz: 0.2 }); }
+      } else if (kind === 'stone') wall(STONES[n % 3], 0.8, 0.95 + (n % 3) * 0.07);
+      else if (kind === 'hedge') wall(HEDGES[n % 3], 1.4, 1.35 + (n % 4) * 0.08);
+      else if (kind === 'boards') wall(BOARDS[((n / 3) | 0) % BOARDS.length], 0.2, 1.15);
+      else if (kind === 'tyres') {
+        // a stack every 1.5 m along the barrier itself: samples spread out round the outside of a bend, and fixed steps left gaps there
+        for (let j = 0; j < STEP; j++) {
+          const [tx, tz, ty] = at(i + j, 0.72);
+          if (tyreLast && Math.hypot(tx - tyreLast[0], tz - tyreLast[1]) < 1.5) continue;
+          tyreLast = [tx, tz];
+          const c = (tyreN++) % 2 ? 0xe8322f : 0xf4efe4;
+          for (let t = 0; t < 2; t++) b.put(TYRE, t % 2 ? 0x2a2a2d : c, tx, ty + 0.28 + t * 0.55, tz);
+        }
+      }
+    }
+  }
+}
+
+/**
  * Green Valley's landmarks (71.3; the user liked the grandstand and the windmill of 71.1, not the extra trees and bushes): something to recognise in each
  * part of the lap. Visual only, no colliders, clear of the rails. Nearly all of it is one batch: ~5 draw calls in total, less than the clouds cost alone.
  */
-function buildFarm({ N, samples, tangents, normals, wL, wR, oL, oR, radius, edges }, rand, land) {
+function buildFarm(data, rand, land) {
+  const { N, samples, tangents, normals, wL, wR, oL, oR, radius } = data;
   const b = propBatch(), flat = propBatch();
   const onSpot = (x, z) => FARM_SPOTS.some(([sx, sz, r]) => Math.hypot(x - sx, z - sz) < r);
   /** Beside the road at sample i: side 1 = left, `off` metres past the rail. */
@@ -1540,52 +1603,7 @@ function buildFarm({ N, samples, tangents, normals, wL, wR, oL, oR, radius, edge
     box(0x6f5238, 2, 0.2, 0.2, x, gy + 6.5, z, { ry: Math.atan2(normals[i].z, -normals[i].x) });
   }
 
-  // 71.7: the barriers, standing on the rails' colliders with their road faces lined up. Boxes, so each piece costs little (all of it is in the one batch).
-  const STONES = [0xb7aa96, 0xa89b86, 0xc0b39e], HEDGES = [0x3e8a3a, 0x478f3c, 0x38803a], WOOD = [0x8f6a42, 0x7f5c38];
-  const BOARDS = [0xffd23a, 0xe8322f, 0x2f6bff, 0xf4efe4, 0x3fb950, 0xff7a1f];
-  const TYRE = new THREE.CylinderGeometry(0.72, 0.72, 0.55, 8);
-  const th = CFG.track.wallThickness, kinds = { 1: new Array(N).fill('fence'), '-1': new Array(N).fill('fence') };
-  for (const sd of ['1', '-1']) for (const [from, to, kind] of edges[sd]) for (let i = from; i < to && i < N; i++) kinds[sd][i] = kind;
-  const STEP = 4;
-  let tyreLast = null, tyreN = 0;
-  for (const sd of [1, -1]) {
-    tyreLast = null;
-    const at = (i, extra) => { // a point on the barrier's line: `extra` metres past the collider's road face
-      const k = i % N, lat = sd * ((sd > 0 ? wL[k] + oL[k] : wR[k] + oR[k]) + CFG.track.curb + extra);
-      return [samples[k].x + normals[k].x * lat, samples[k].z + normals[k].z * lat];
-    };
-    for (let i = 0; i < N; i += STEP) {
-      const kind = kinds[sd][i], n = (i / STEP) | 0;
-      const piece = (depth) => { // the box from this sample to the next along the barrier, `depth` thick
-        const [x0, z0] = at(i, depth / 2), [x1, z1] = at(i + STEP, depth / 2);
-        return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, len: Math.hypot(x1 - x0, z1 - z0) + 0.12, ry: Math.atan2(x1 - x0, z1 - z0) };
-      };
-      if (kind === 'fence') {
-        const f = piece(th), c = WOOD[n % 2];
-        box(c, 0.1, 0.16, f.len, f.x, 0.55, f.z, { ry: f.ry });
-        box(c, 0.1, 0.16, f.len, f.x, 1.02, f.z, { ry: f.ry });
-        if (n % 2 === 0) { const [px, pz] = at(i, th / 2); box(WOOD[1], 0.2, 1.3, 0.2, px, 0.65, pz, { ry: f.ry }); }
-      } else if (kind === 'stone') {
-        const f = piece(0.8), h = 0.95 + (n % 3) * 0.07;
-        box(STONES[n % 3], 0.8, h, f.len, f.x, h / 2, f.z, { ry: f.ry });
-      } else if (kind === 'hedge') {
-        const f = piece(1.4), h = 1.35 + (n % 4) * 0.08;
-        box(HEDGES[n % 3], 1.4, h, f.len, f.x, h / 2, f.z, { ry: f.ry });
-      } else if (kind === 'boards') {
-        const f = piece(0.25);
-        box(BOARDS[((n / 3) | 0) % BOARDS.length], 0.2, 1.15, f.len, f.x, 0.58, f.z, { ry: f.ry });
-      } else if (kind === 'tyres') {
-        // a stack every 1.5 m along the barrier itself: samples spread out round the outside of a bend, and fixed steps left gaps there
-        for (let j = 0; j < STEP; j++) {
-          const [tx, tz] = at(i + j, 0.72);
-          if (tyreLast && Math.hypot(tx - tyreLast[0], tz - tyreLast[1]) < 1.5) continue;
-          tyreLast = [tx, tz];
-          const c = (tyreN++) % 2 ? 0xe8322f : 0xf4efe4;
-          for (let t = 0; t < 2; t++) b.put(TYRE, t % 2 ? 0x2a2a2d : c, tx, 0.28 + t * 0.55, tz);
-        }
-      }
-    }
-  }
+  buildBarriers(data, b);
 
   // A patched-up road: darker repairs here and there
   for (let k = 0; k < 26; k++) {
@@ -2073,6 +2091,13 @@ function buildDesert(data) {
   }
 
   buildChevrons(data);
+
+  // 72.1: barriers instead of rails (fences, dry-stone walls, tyres, boards; `edges`), rusty steel across the bridge
+  const barriers = propBatch();
+  buildBarriers(data, barriers, (i) => (bridge[i] ? 'steel' : null));
+  const barrierMesh = new THREE.Mesh(barriers.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  barrierMesh.castShadow = true;
+  trackRoot.add(barrierMesh);
 
   // ---- Props on the canyon floor: cacti, boulders, dry bushes ----
   const spot = (uMin, uMax, tries = 40) => {

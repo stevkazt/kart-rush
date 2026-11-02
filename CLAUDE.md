@@ -14,7 +14,7 @@ is POSTed to `/telemetry` at its end (or on restart / quit after 5 s) and `serve
 skill / grip / lineUse, result, `events` (lap, finish, box, use, hit + by/what, blocked, reset + why, rail
 (player, speed loss), pause) and `samples` every second (per kart: metres raced, km/h, place, AI target % of top;
 then the player's pedal). The user prefers this to headless runs ("your tests take too long and my races give
-better data"): analyse their races with a short python script; only smoke-test headless. Something else (a uvicorn
+better data"): analyse their races with a short python script; only smoke-test headless. Records with `end: 'hidden'` are partial copies of a race that may also have a final record: dedupe by `at`, keeping the one with the most events. Newer events: `fps` every 5 s, `slow`, `gpulost`, `inputdrop`, `steer`, `snag`, `offroad`. Something else (a uvicorn
 app) listens on 127.0.0.1:8000, so curl the LAN IP, not localhost. `serve.py` changes need a restart of it.
 **Hosted (2026-10-15):** public repo `github.com/stevkazt/kart-rush`, GitHub Pages from `main` /,
 live at https://stevkazt.github.io/kart-rush/. **Deploy = `git push`** (Pages rebuilds in ~1 min); bump `VERSION`
@@ -116,8 +116,9 @@ dev/test.sh profile 8           # CPU profile, drawing off
 OUT_DIR=x dev/test.sh film 600  # bomb hit on the player, gore on, vertical 390x844: fake clock, 1 PNG + 1 film.jsonl row per 1/30 s (camera, slow-mo, eject, eyes, lens, blood)
 python3 dev/film-report.py <dir> # fixed checks on that film (eye/skeleton on screen, phase times, landing spot, camera) + contact sheets <dir>/sheets
 TRACK=canyon dev/test.sh ...    # any mode on another track
+dev/sim/run.sh <dir> canyon:vertical:4 canyon:skilled:3  # accelerated bot races + summary (see the script); compare builds on the SAME race mix: single races vary a lot
 ```
-Headless Chrome draws in software (5-10 fps), so the game runs in slow motion; for physics runs put
+All test Chrome runs with `--mute-audio` (the user plays music meanwhile); keep it that way in any new script. Run shell scripts with bash: `set -- $x` and some substitutions break under zsh. Headless Chrome draws in software (5-10 fps), so the game runs in slow motion; for physics runs put
 `__r.render = () => {}` in a trace probe (runs about real time). `__loadTrack`, `__resetKart`, `__snap` are
 exposed too.
 `test.sh` also exposes `__r` (renderer: `__r.info.render.calls`) and `__snd` (sound; `__snd.context.state`), and runs
@@ -143,12 +144,12 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
-- **State 2026-11-01 (build 72, committed and pushed):** five-track plan, track by track with the user's phone test after each (history.md 'Five-track plan'). Green Valley is approved and done (scenery left as is, user); next Canyon Run, then Frost Peak. **Scenery must stay cheap: batch it with `propBatch` (docs/tracks.md); the user wants landmarks, not more trees.**
+- **START HERE: docs/history.md 'Where things stand (2026-11-02)'** lists everything pending (five-track plan, shortcuts idea, release blockers, known issues). **State (build 72.1 + `dev/sim/`, UNCOMMITTED; build 72 is pushed):** Green Valley approved and done (scenery left as is, user). Canyon Run got one race: the user had caveats they didn't get to name, and that race ran at exactly 30 fps: ask about both first. **Scenery must stay cheap: batch it with `propBatch` (docs/tracks.md); the user wants landmarks, not more trees.**
 - **State 2026-10-18 (builds 70.1-70.20, HEAD 583ce94, UNCOMMITTED, nothing pushed since 70):** green-shell self-hit fix (bots aim like the player + a wall check, 70.4), no post-hit ghost after a banana (70.5), debug shape tracks incl. **Spiral Run** with road gaps, red pads, bank runs and a centre piece (70.2-70.20; see docs/tracks.md 'Debug shape-test tracks and track features' and history.md). The star-at-start question was answered (luck + grid bots take row 1): keep as is. Difficulty work paused (next: stronger player catch-up; leading-player blue-shell protection needs the user's OK).
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
 - **Hit motions all approved (2026-10-17, build 65.5, uncommitted):** bomb ejects the driver, `bombFire` explosion; see history.md. Bones/burn/skeleton gore and the age banner still owed.
 - **State 2026-10-17 (build 65, VERSION v65):** vertical is the default view; vertical menus, track preview, green-shell aim done (history.md 'Builds 64.40-65'); committed and pushed. Menus need phone feedback.
-- **Open: wall stalls on the canyon** (banks, whoops, post-bridge idx 870-990). Next step: read the `railpost` events in the user's next canyon race (history.md says how). The user tests on the phone: don't run headless physics unless asked; taller walls are ruled out.
+- **Wall stalls on the canyon:** the rail-seam fix (gotcha 14) cut them in bot races (8/27 -> 2/31 rail contacts); confirm with `railpost` events in real canyon races. Taller walls are ruled out. The user tests on the phone: run headless physics only when it's asked for or the change touches physics, and always muted.
 - Next options: check the mushroom-at-wall trick on the Test Lab; the user's own buttons races; rail/steering options.
 - Builds 37-39 are committed locally (HEAD cd8f031), **not pushed**, and not all phone-tested: 8 characters, Hex trickster AI, in-game keyboard, screen flip, settings fix, Rex (veteran look: only the visor flicker kept, scars removed on request), Pip chibi, Koda goggles.
 - Analyse the user's next 4-5 real races (checklist: "What to check" in history.md); watch ghost-on events, boxes per race, hits on the player.
