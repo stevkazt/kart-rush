@@ -69,28 +69,28 @@ const CFG = {
       name: 'Canyon Run', icon: 'cactus', theme: 'desert',
       // ~1150 m figure-8. Start straight (y 0), banked right-hander, under the bridge through a slot canyon, climb with whoops, the Carousel, crest on the mesa (y 9),
       // over the bridge (9 m above the lower road), jump on the way down, banked downhill sweeper to the line.
-      // 72.3 (user: the tight curve was "basically a copy" of Green Valley's hairpin): the Carousel, a long climbing bend round a butte that keeps tightening (R 30 -> 20, idx 513-681, banked).
+      // 72.3 (user: the tight curve was "basically a copy" of Green Valley's hairpin): the Carousel, a long climbing bend round a butte that keeps tightening (R 30 -> 23, idx 513-681, banked).
       // It costs nothing at first and catches you at the end; the road then flicks right, over the crest and under a natural arch.
       points: [
         [181, 20, 0], [180, -15, 0], [174, -50, 0], [160, -78, 0], [138, -96, 0], [110, -104, 0],
         // 72.1, 4th value = half width (roadWidths maps it by index share: point p covers samples ~32.6p): the slot and the bridge narrow to 7 (they were two long empty straights)
         [80, -100, 0], [40, -55, 0], [15, -15, 0, 7], [-15, 15, 0.3, 7], [-45, 45, 1.8, 7], [-80, 75, 3.4, 7],
         [-98, 92, 4], [-115, 107, 4.5], [-137, 119, 5], [-162, 117, 5.6], [-180, 102, 6.2], [-187, 82, 6.9],
-        [-182, 64, 7.6], [-171, 54, 8.2], [-158, 51, 8.6], [-145, 50, 9], [-131, 42, 9], [-122, 24, 9],
-        [-119, 0, 9], [-110, -30, 9], [-95, -48, 9], [-65, -55, 9, 7.5], [-40, -42, 9, 7.5], [-15, -15, 9, 7.5], [15, 15, 9, 7.5], [45, 45, 8.8],
+        [-182, 64, 7.6], [-171, 54, 8.2], [-158, 50, 8.6], [-143, 47, 9], [-127, 35, 9], [-119, 14, 9],
+        [-114, -10, 9], [-107, -33, 9], [-92, -50, 9], [-65, -55, 9, 7.5], [-40, -42, 9, 7.5], [-15, -15, 9, 7.5], [15, 15, 9, 7.5], [45, 45, 8.8],
         [75, 75, 8], [105, 95, 7.2], [140, 100, 4.5], [165, 95, 1.6], [178, 78, 0.3], [181, 50, 0],
       ],
-      bumps: [[440, 14, 0.7], [457, 14, 0.7], [721, 26, 1.9]],
-      jumps: [[1094, 9, 1.1]],
-      banks: [[110, 60, 7], [1160, 45, 5]], // build 69.4: was 12 deg / 8 deg over 45 / 30 m half-lengths (uncomfortable); the chase camera now rolls with the road
+      bumps: [[440, 14, 0.7], [457, 14, 0.7], [745, 26, 1.6]], // (the crest was at 721 right on the flick out of the Carousel: AI resets gathered there)
+      jumps: [[1091, 9, 1.1]],
+      banks: [[110, 60, 7], [1157, 45, 5]], // build 69.4: was 12 deg / 8 deg over 45 / 30 m half-lengths (uncomfortable); the chase camera now rolls with the road
       bankRuns: [[515, 684, 6, 40, 30]], // the Carousel
       basin: [-148, 85, 32], // the bowl it winds round: x, z, radius (buildDesert)
-      boxRows: [230, 405, 780, 1030, 1205], // 5 rows: the longest track (405, 1205 added in build 36)
-      pads: [[40, 0], [316, 0], [480, -2], [1005, 0]], // (316, under the bridge: 72.1). A 6th box row on the bridge was tried: more hits and resets in the bot races, so no
+      boxRows: [230, 405, 777, 1027, 1202], // 5 rows: the longest track (405, 1202 added in build 36)
+      pads: [[40, 0], [316, 0], [480, -2], [1002, 0]], // (316, under the bridge: 72.1). A 6th box row on the bridge was tried: more hits and resets in the bot races, so no
       edgeDefault: 'stone', // what the barrier looks like (see Green Valley's `edges`); buildDesert puts steel on the bridge
       edges: {
-        1: [[1200, 1238, 'boards'], [0, 50, 'boards'], [630, 700, 'tyres'], [712, 870, 'fence']],
-        '-1': [[1200, 1238, 'boards'], [0, 50, 'boards'], [630, 700, 'tyres'], [712, 870, 'fence']],
+        1: [[1197, 1235, 'boards'], [0, 50, 'boards'], [625, 700, 'tyres'], [712, 867, 'fence']],
+        '-1': [[1197, 1235, 'boards'], [0, 50, 'boards'], [625, 700, 'tyres'], [712, 867, 'fence']],
       },
       palette: { shoulder: [0xcfa679, 0xc69c6f], wear: 0x6d665f, stone: [0xd8c3a0, 0xc9b28e, 0xe0cdaa], wood: [0x8a6a48, 0x7a5c3e] },
     },
@@ -139,18 +139,27 @@ const CFG = {
       boxRows: [80, 215, 310, 470, 600],
       pads: [[20, 0], [230, -2], [300, 2], [560, 0]],
     },
-    // Shape tests (70.6, debug only, meadow theme, flat, no new scenery): lengths/radii checked offline.
-    // Tech Run: 1049 m, 20 control points, many medium corners (tightest R12), start straight on the south side.
+    // Harbour Run (72.5; the debug shape test "Tech Run" until now, same id so its records stay): ~1050 m, a daytime port on a narrower road (half width 7.5). Start along a causeway with water on
+    // both sides, over the hump of the swing bridge (a hop when boosted), past the lighthouse, through the container yard (a zigzag of tighter bends between the stacks, under the cranes), up
+    // into the old town (y 4.5, cobbles, houses both sides), down to the fish market and back along the west quay.
     tech: {
-      name: 'Tech Run', icon: 'gear', theme: 'meadow', debug: true, plain: true,
+      name: 'Harbour Run', icon: 'anchor', theme: 'harbour', halfWidth: 7.5,
       points: [
-        [-120, -110], [-60, -110], [0, -110], [60, -105], [105, -75], [105, -35], [65, -10], [75, 30],
-        [115, 50], [125, 95], [85, 130], [40, 120], [5, 85], [-35, 110], [-80, 132], [-125, 125],
-        [-165, 95], [-145, 50], [-170, 15], [-172, -45],
+        [-60, -110, 0], [0, -110, 0], [60, -110, 0], [106, -108, 0], [126, -92, 0], [130, -64, 0], [120, -40, 0], [94, -30, 0], [74, -14, 0], [72, 12, 0],
+        [86, 30, 0], [112, 38, 0], [128, 56, 0], [130, 88, 0.5], [112, 116, 1.5], [78, 126, 2.8], [40, 124, 4], [4, 126, 4.5], [-34, 122, 4], [-70, 124, 2.8],
+        [-108, 122, 1.5], [-142, 108, 0.5], [-164, 80, 0], [-168, 44, 0], [-158, 14, 0], [-170, -18, 0], [-172, -56, 0], [-160, -90, 0], [-138, -108, 0], [-105, -111, 0],
       ],
-      bumps: [[420, 14, 0.6]],
-      boxRows: [80, 300, 520, 740, 960],
-      pads: [[30, 0], [400, 0], [800, 0]],
+      bumps: [[100, 36, 1.3]],
+      bankRuns: [[840, 905, 3, 20, 20]],
+      boxRows: [140, 345, 530, 790, 1000],
+      pads: [[35, 0], [460, 0], [770, -2], [960, 2]],
+      surfaces: [[240, 432, [0x8f9192, 0x88898a]], [560, 725, [0x8b8278, 0x847b71]]], // the yard's concrete, the old town's cobbles
+      edgeDefault: 'quay',
+      edges: {
+        1: [[1090, 1129, 'boards'], [0, 30, 'boards'], [179, 432, 'concrete'], [432, 830, 'stone'], [830, 1040, 'stone']],
+        '-1': [[1090, 1129, 'boards'], [0, 30, 'boards'], [240, 432, 'concrete'], [505, 725, 'stone']],
+      },
+      palette: { road: [0x64686c, 0x606468], dash: 0xf2c12e, shoulder: [0xa9aba6, 0x9fa19c], wear: 0x55585c, stone: [0xd9cdb6, 0xcbbfa8, 0xe3d8c2], wood: [0x7a5230, 0x6b4a2f] },
     },
     // Big Flow: 1485 m, 17 control points, wide flowing bends (tightest R21), long straights; fits the 700 m ground.
     flow: {
@@ -470,7 +479,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '72.4'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.6'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -777,7 +786,7 @@ function buildTrack(def, th) {
   // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
   const P = { ...th.palette, ...def.palette };
   trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02,
-    (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : (P.ice && ice[i] > 0.5 ? P.ice : P.road)[((i / 10) | 0) % 2])));
+    (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : (P.ice && ice[i] > 0.5 ? P.ice : def.surfaces?.find(([from, to]) => i >= from && i < to)?.[2] || P.road)[((i / 10) | 0) % 2])));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
   trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
   const lc = def.levelColors; // the curbs follow the rails' level colours (70.17)
@@ -953,7 +962,7 @@ function roadWidths(def, curve, tangents, normals, N, spacing) {
   const base = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     const u = (i / N) * P, a = Math.floor(u) % P, b = (a + 1) % P, f = u - Math.floor(u);
-    base[i] = lerp(def.points[a][3] ?? T.halfWidth, def.points[b][3] ?? T.halfWidth, f);
+    base[i] = lerp(def.points[a][3] ?? def.halfWidth ?? T.halfWidth, def.points[b][3] ?? def.halfWidth ?? T.halfWidth, f);
   }
   const inner = (sign) => {
     const cap = new Float32Array(N);
@@ -1201,6 +1210,15 @@ const THEMES = {
       rail: [0xd23a3a, 0xf3f6fa], arch: [0x2f6bff, 0xd23a3a],
     },
     build: buildSnow,
+  },
+  harbour: {
+    // a clear blue morning on the coast: bright, no haze to speak of
+    sky: 0x9ad6f5, fog: [0xd8eef6, 140, 560], hemi: [0xffffff, 0xa8b8a8, 1.3], sun: [0xfff4e0, 2.3], sunOffset: [50, 95, -40],
+    palette: {
+      road: [0x64686c, 0x606468], dash: 0xf2c12e, curb: [0xe8322f, 0xf4efe4],
+      rail: [0x1f6fb5, 0xf4efe4], arch: [0x1f6fb5, 0xf2c12e],
+    },
+    build: buildHarbour,
   },
 };
 
@@ -1740,7 +1758,8 @@ function makeTerrain(data, shape, colorAt, { floor = -0.35, step = 3.5, material
       const u = d - flat[i];
       h = Math.min(h, base + (u <= 0 ? floor : floor + rise * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
     });
-    return h === Infinity ? maxY + 1.4 + cliff : h;
+    if (h === Infinity) return rise < 0 ? floor + rise : maxY + rise + cliff; // (out of reach of the road: `rise` < 0 is a lake or the sea, whose bed stays down)
+    return h;
   }
   /** Distance beyond the flat floor of the nearest road part, and that part's sample. */
   const floorDist = (x, z) => {
@@ -1864,6 +1883,34 @@ function buildChevrons({ N, normals, tangents, wL, wR, oL, oR, wallH, radius }) 
     });
     trackRoot.add(mesh);
   }
+}
+
+/**
+ * A ring of far mountains, 1 draw: an icosphere's top half, its vertices pushed about by noise, flat faces. `colorAt(height 0..1, noise 0..1)` paints a face.
+ * `center()` = [x, z] of the ring; `arc` = [from, to] radians, for mountains only on one side (the sea on the other).
+ */
+function farMassifs(rand, noise, count, center, colorAt, { arc = [0, Math.PI * 2], r = [330, 380], h = [70, 130], w = [60, 100] } = {}) {
+  const geo = new THREE.IcosahedronGeometry(1, 2), pos = geo.attributes.position, col = new Float32Array(pos.count * 3), v = new THREE.Vector3(), cc = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) { // (non-indexed: a vertex shared by several faces moves the same way because its bump comes from its position)
+    v.fromBufferAttribute(pos, i);
+    const k = 0.72 + 0.56 * noise(v.x * 2.1 + 40, v.z * 2.1 + v.y * 3.1 + 40);
+    pos.setXYZ(i, v.x * k, Math.max(v.y, 0) * k, v.z * k);
+  }
+  for (let f = 0; f < pos.count; f += 3) { // a face is one colour as a whole
+    cc.set(colorAt((pos.getY(f) + pos.getY(f + 1) + pos.getY(f + 2)) / 3, noise(pos.getX(f) * 5 + 3, pos.getZ(f) * 5)));
+    for (let k = 0; k < 3; k++) col.set([cc.r, cc.g, cc.b], (f + k) * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), count);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), [cx, cz] = center();
+  for (let i = 0; i < count; i++) {
+    const a = lerp(arc[0], arc[1], (i + 0.5 + (rand() - 0.5) * 0.4) / count), d = lerp(r[0], r[1], rand());
+    q.setFromAxisAngle(_up, rand() * Math.PI * 2);
+    mesh.setMatrixAt(i, m.compose(p.set(cx + Math.cos(a) * d, -2, cz + Math.sin(a) * d), q, s.set(lerp(w[0], w[1], rand()), lerp(h[0], h[1], rand()), lerp(w[0], w[1], rand()))));
+  }
+  mesh.frustumCulled = false;
+  trackRoot.add(mesh);
 }
 
 const PRISM = new THREE.CylinderGeometry(1, 1, 1, 3);
@@ -2137,29 +2184,8 @@ function buildSnow(data) {
   scatter(snowman.geometry, snowman.material, 14, 0.5, 5, (sc) => sc.setScalar(0.9 + rand() * 0.3));
 
   // ---- Far mountains: rough massifs, snow above a line, bare rock below (72.4; the user called plain cones "just triangles") ----
-  const massif = new THREE.IcosahedronGeometry(1, 2), mPos = massif.attributes.position, mCol = new Float32Array(mPos.count * 3), mv = new THREE.Vector3();
-  // (non-indexed: faces stay flat. A vertex shared by several faces must move the same way, so the bump comes from its position, not a counter)
-  for (let i = 0; i < mPos.count; i++) {
-    mv.fromBufferAttribute(mPos, i);
-    const k = 0.72 + 0.56 * noise(mv.x * 2.1 + 40, mv.z * 2.1 + mv.y * 3.1 + 40);
-    mPos.setXYZ(i, mv.x * k, Math.max(mv.y, 0) * k, mv.z * k);
-  }
-  for (let f = 0; f < mPos.count; f += 3) { // a face is snow or rock as a whole
-    const y = (mPos.getY(f) + mPos.getY(f + 1) + mPos.getY(f + 2)) / 3;
-    cc.set(y + noise(mPos.getX(f) * 5 + 3, mPos.getZ(f) * 5) * 0.28 > 0.5 ? 0xf2f6fa : y > 0.3 ? 0xa9b6c6 : 0x8fa3bd);
-    for (let v = 0; v < 3; v++) mCol.set([cc.r, cc.g, cc.b], (f + v) * 3);
-  }
-  massif.setAttribute('color', new THREE.BufferAttribute(mCol, 3));
-  massif.computeVertexNormals();
-  const peakMesh = new THREE.InstancedMesh(massif, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 18);
-  const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), ps = new THREE.Vector3(), pp = new THREE.Vector3();
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2 + rand() * 0.2, r = 330 + rand() * 50, h = 70 + rand() * 60;
-    pq.setFromAxisAngle(_up, rand() * Math.PI * 2);
-    peakMesh.setMatrixAt(i, pm.compose(pp.set(cx + Math.cos(a) * r, -2, cz + Math.sin(a) * r), pq, ps.set(60 + rand() * 40, h, 60 + rand() * 40)));
-  }
-  trackRoot.add(peakMesh);
+  farMassifs(rand, noise, 18, () => [cx, cz], (y, n) => (y + n * 0.28 > 0.5 ? 0xf2f6fa : y > 0.3 ? 0xa9b6c6 : 0x8fa3bd));
 
   // ---- Light snowfall: flakes in a box round the camera, wrapping as it moves ----
   const FLAKES = 450, BOX = 70, TALL = 30;
@@ -2198,6 +2224,265 @@ function buildSnow(data) {
       fGeo.attributes.position.needsUpdate = true;
     },
   };
+}
+
+/**
+ * A working port on a clear morning (72.5). The road runs on quays: water on both sides of the causeway, an inner harbour in the middle of the loop, the yard and the old town on land. Ground from
+ * makeTerrain, sunk under the water where `water` says so (the slope down to it is a rock embankment). Water is one plane with a slowly moving texture. Everything else is one batch, plus moving
+ * boats and gulls (instanced, 1 draw each).
+ */
+function buildHarbour(data) {
+  const { N, samples, tangents, normals, wL, wR } = data;
+  const rand = seededRand(2024), noise = makeNoise(rand);
+  const yard = (x, z) => smoothstep(50, 62, x) * smoothstep(70, 56, z); // the port's flat concrete
+  const inner = (x, z) => (1 - yard(x, z)) * (1 - smoothstep(0.82, 1.02, ((x + 30) / 124) ** 2 + ((z - 2) / 108) ** 2 + (noise(x / 30 + 3, z / 30) - 0.5) * 0.1));
+  const sea = (x, z) => Math.max(smoothstep(-118, -124, z), x > 146 ? smoothstep(146, 152, x) * smoothstep(70, 40, z) : 0, x < -192 ? smoothstep(-192, -198, x) : 0);
+  const water = (x, z) => Math.max(inner(x, z), sea(x, z));
+  const CONCRETE = [0x9da09f, 0x959897, 0xa5a8a6].map((h) => new THREE.Color(h)), ROCK = [0x7c7f80, 0x6d7072].map((h) => new THREE.Color(h));
+  const GRASS = [0x8fb060, 0x9ab968, 0x82a658].map((h) => new THREE.Color(h)), PALE = new THREE.Color(0xc9bb95), DRY = new THREE.Color(0x77914f);
+  const ground = makeTerrain(data,
+    (x, z) => {
+      const w = water(x, z), y = yard(x, z), land = (1 - w) * (1 - y);
+      return [(5 + 26 * noise(x / 70 + 6, z / 70) * smoothstep(100, 170, z)) * land, 5 + 8 * noise(x / 24, z / 24), 14 + 16 * noise(x / 30 + 8, z / 30), lerp(1.4 * land, -3.2, w)];
+    },
+    (x, z, h, slope, cc) => {
+      if (h < -0.7) cc.copy(ROCK[(noise(x / 3, z / 3) * 1.999) | 0]);
+      else if (yard(x, z) > 0.5) cc.copy(CONCRETE[(noise(x / 9, z / 9) * 2.999) | 0]);
+      else if (h < 1.5) cc.copy(PALE);
+      else cc.copy(GRASS[(noise(x / 12 + 4, z / 12) * 2.999) | 0]).lerp(DRY, smoothstep(0.25, 0.7, slope));
+    });
+  const { heightAt, floorDist, minX, maxX, minZ, maxZ } = ground;
+  const sky = makeSky(0xe3f2f7, 0xa9dbf5, 0x4fa8e8, 0xfff4e0);
+  buildChevrons(data);
+
+  // The water: a plane, a tiled texture of soft glints, drifting
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g2 = cv.getContext('2d');
+  g2.fillStyle = '#3aa6c9'; g2.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 90; i++) {
+    g2.fillStyle = i % 3 ? 'rgba(120,214,232,0.5)' : 'rgba(235,250,255,0.55)';
+    g2.fillRect(rand() * 128, rand() * 128, 6 + rand() * 18, 1 + rand() * 1.5);
+    g2.fillStyle = 'rgba(30,120,160,0.4)';
+    g2.fillRect(rand() * 128, rand() * 128, 8 + rand() * 16, 2);
+  }
+  const wTex = new THREE.CanvasTexture(cv);
+  wTex.wrapS = wTex.wrapT = THREE.RepeatWrapping; wTex.repeat.set(70, 70); wTex.colorSpace = THREE.SRGBColorSpace;
+  const waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), new THREE.MeshBasicMaterial({ map: wTex }));
+  waterMesh.rotation.x = -Math.PI / 2;
+  waterMesh.position.set((minX + maxX) / 2, -1.2, (minZ + maxZ) / 2);
+  trackRoot.add(waterMesh);
+
+  farMassifs(rand, noise, 9, () => [(minX + maxX) / 2, (minZ + maxZ) / 2], (y, n) => (y + n * 0.2 > 0.62 ? 0xa8b39a : y > 0.28 ? 0x7f9a66 : 0x6e8f5a), { arc: [0.25, Math.PI - 0.25], r: [290, 340], h: [55, 110], w: [70, 110] });
+
+  const b = propBatch(), BOX = new THREE.BoxGeometry(1, 1, 1);
+  const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  const CYL = new THREE.CylinderGeometry(1, 1, 1, 10), CONE = new THREE.ConeGeometry(1, 1, 8);
+  buildBarriers(data, b);
+
+  /** A frame at sample i, `side` of the road, `off` past the rail: at(along, out) -> [x, z], out = away from the road. */
+  const frame = (i, side, off) => {
+    const k = ((i % N) + N) % N, [x, z] = besideRoad(data, k, side, off), t = tangents[k], n = normals[k];
+    return { k, x, z, t, n, ry: Math.atan2(t.x, t.z), y: samples[k].y - 0.4, at: (a, o) => [x + t.x * a + n.x * side * o, z + t.z * a + n.z * side * o] };
+  };
+
+  // ---- The swing bridge on the causeway: blue steel arches either side, stone piers in the water ----
+  const STEEL = 0x1f6fb5, bi = 100;
+  for (const sd of [1, -1]) {
+    let prev = null;
+    for (let k = -20; k <= 20; k += 2) {
+      const i = bi + k, f = frame(i, sd, -0.1), rise = 7.2 * (1 - (k / 20) ** 2), top = new THREE.Vector3(f.x, samples[i].y + rise, f.z);
+      if (k % 4 === 0) box(STEEL, 0.32, Math.max(0.2, rise), 0.32, f.x, samples[i].y + rise / 2, f.z);
+      if (prev) { const len = prev.distanceTo(top); box(STEEL, 0.5, 0.5, len, (prev.x + top.x) / 2, (prev.y + top.y) / 2, (prev.z + top.z) / 2, { ry: f.ry, rx: -Math.asin((top.y - prev.y) / len) }); }
+      prev = top;
+    }
+    const p = frame(bi, sd, 1.4);
+    box(0xbdb6a6, 3.5, 5, 20, p.x, -2.5, p.z, { ry: p.ry });
+  }
+  for (const k of [-12, 12, 0]) { const f = frame(bi + k, 1, -0.1), n = normals[bi + k], w = (wL[bi + k] + wR[bi + k]) + 2 * (CFG.track.curb + CFG.track.wallThickness); const rise = 7.2 * (1 - (k / 20) ** 2); box(STEEL, w, 0.3, 0.35, f.x - n.x * w / 2, samples[bi + k].y + rise, f.z - n.z * w / 2, { ry: f.ry }); }
+  // Lamp posts along the causeway
+  for (let i = 10; i < 180; i += 28) if (Math.abs(i - bi) > 24) for (const sd of [1, -1]) {
+    const f = frame(i, sd, 0.3);
+    box(0x2b3a4a, 0.16, 6, 0.16, f.x, f.y + 3, f.z);
+    const [lx, lz] = f.at(0, -1.4);
+    box(0x2b3a4a, 0.1, 0.1, 2.8, (f.x + lx) / 2, f.y + 6, (f.z + lz) / 2, { ry: f.ry + Math.PI / 2 });
+    box(0xfff0c0, 0.5, 0.2, 0.5, lx, f.y + 5.9, lz);
+  }
+
+  // ---- The lighthouse on its mole, dead ahead down the start straight ----
+  const LX = 186, LZ = -112;
+  for (let k = 0; k < 8; k++) box(k % 2 ? 0x8d9092 : 0x7c7f80, 6, 3, 7, 150 + k * 5, -0.6, -116 + k * 0.5, { ry: rand() * 0.2 });
+  b.put(CYL, 0x8d9092, LX, 0, LZ, { sx: 6, sy: 2.4, sz: 6 });
+  for (let k = 0; k < 6; k++) b.put(CYL, k % 2 ? 0xf4efe4 : 0xd23a3a, LX, 1.2 + 2.4 * k + 1.2, LZ, { sx: 3 - k * 0.2, sy: 2.4, sz: 3 - k * 0.2 });
+  b.put(CYL, 0x2b3a4a, LX, 16, LZ, { sx: 2.5, sy: 0.4, sz: 2.5 });
+  b.put(CYL, 0xfff0a8, LX, 17.3, LZ, { sx: 1.3, sy: 2.2, sz: 1.3 });
+  b.put(CONE, 0xd23a3a, LX, 19.4, LZ, { sx: 1.8, sy: 2, sz: 1.8 });
+
+  // ---- The container yard: stacks along the zigzag, cranes and a ship on the east quay ----
+  const BOXES = [0xc8452f, 0x2f6bb0, 0x3f8f57, 0xe2b72e, 0xe07b2a, 0x7c3f8f, 0xb9bdc0, 0x28708a];
+  const stack = (x, z, ry, tall) => {
+    if (floorDist(x, z).u < -1.5) return; // (not on the inside of a bend, over another piece of the road)
+    for (let h = 0; h < tall; h++) {
+      const c = BOXES[(rand() * BOXES.length) | 0];
+      box(c, 2.5, 2.5, 6.1, x + (rand() - 0.5) * 0.3, -0.35 + 1.25 + h * 2.55, z + (rand() - 0.5) * 0.3, { ry: ry + (rand() - 0.5) * 0.03 });
+      box(0x2b2f36, 2.56, 0.1, 6.16, x, -0.35 + 2.52 + h * 2.55, z, { ry }); // (a dark seam, so a stack reads as boxes)
+    }
+  };
+  for (let i = 236; i < 440; i += 7) for (const sd of [1, -1]) {
+    for (let row = 0; row < 2; row++) {
+      const f = frame(i, sd, 1.6 + row * 3.1);
+      stack(f.x, f.z, f.ry, 1 + (((i * 7 + row * 5 + (sd > 0 ? 3 : 0)) * 13) % 3));
+    }
+  }
+  const crane = (cx, cz, c) => { // legs astride the quay, a boat-ward boom
+    for (const [dx, dz] of [[-9, -6], [9, -6], [-9, 6], [9, 6]]) box(c, 0.9, 22, 0.9, cx + dx, 11, cz + dz);
+    for (const dz of [-6, 6]) { box(c, 19, 0.8, 0.8, cx, 22, cz + dz); box(c, 19, 0.6, 0.6, cx, 11, cz + dz); }
+    for (const dx of [-9, 9]) box(c, 0.8, 0.8, 13, cx + dx, 22, cz);
+    box(c, 72, 1.4, 2.4, cx + 18, 26, cz);
+    box(0xf4efe4, 4, 3, 4, cx + 2, 28.6, cz);
+    box(c, 1, 12, 1, cx + 3, 33, cz);
+    for (const sd of [-1, 1]) { const dx = sd * 22, len = Math.hypot(22, 7); box(0x2b2f36, 0.12, 0.12, len, cx + 3 + dx / 2, 35.5, cz, { ry: Math.PI / 2, rx: -sd * Math.atan2(7, 22) }); }
+    box(0x2b2f36, 3, 1, 3, cx + 38, 24.5, cz);
+    box(0x2b2f36, 0.1, 13, 0.1, cx + 38, 18, cz);
+    box(0xe07b2a, 2.6, 2.6, 6.2, cx + 38, 10.6, cz, { ry: Math.PI / 2 });
+  };
+  crane(152, -46, 0xc8452f);
+  crane(152, -6, 0x1f6fb5);
+  // A ship alongside: hull, deck stacks, the bridge at the stern
+  const SX = 186, SZ = -24;
+  box(0x263b52, 18, 7, 84, SX, 1.8, SZ);
+  box(0xa8352a, 18.2, 1.6, 84.2, SX, -0.8, SZ);
+  b.put(new THREE.CylinderGeometry(9, 9, 7, 3), 0x263b52, SX, 1.8, SZ + 42 + 5, { ry: Math.PI, sx: 1, sz: 1.1 });
+  for (let r = -2; r <= 1; r++) for (let c = -1; c <= 1; c++) for (let h = 0; h < 2 + ((r * 3 + c + 9) % 3); h++) box(BOXES[(rand() * BOXES.length) | 0], 4.8, 2.5, 12, SX + c * 5.2, 6.6 + h * 2.55, SZ + 12 + r * 13);
+  box(0xf4efe4, 15, 9, 10, SX, 9.8, SZ - 34);
+  box(0x2e3a44, 15.3, 1.2, 10.2, SX, 12.6, SZ - 34);
+  b.put(CYL, 0xc8452f, SX, 16.5, SZ - 37, { sx: 1.5, sy: 5, sz: 1.5 });
+
+  // ---- The old town: rows of houses both sides of the street, more climbing the hill behind ----
+  const WALLS = [0xe8b54e, 0xd97f4e, 0xefd9b0, 0xc9694a, 0x7fb3b9, 0xf0e4d0, 0xd9a0a0, 0xa9b889], ROOF = [0xb9552f, 0xa84a2c, 0xc66a3a];
+  const house = (x, z, g, ry, w, h, d, c) => {
+    box(WALLS[c % WALLS.length], d, h, w, x, g + h / 2, z, { ry });
+    gable(b, ROOF[c % 3], x, g + h, z, d + 1, w + 1, 2.4, ry);
+    const fx = Math.sin(ry + Math.PI / 2), fz = Math.cos(ry + Math.PI / 2); // along the face's normal; the face toward the road is picked by the caller via d's side, so both faces get shutters
+    for (const face of [1, -1]) for (let f = 0; f < Math.floor(h / 3); f++) for (const a of [-w / 4, w / 4]) {
+      const wx = x + Math.sin(ry) * a + fx * face * (d / 2 + 0.02), wz = z + Math.cos(ry) * a + fz * face * (d / 2 + 0.02);
+      box(0x2e3a44, 0.08, 1.2, 0.8, wx, g + 1.8 + f * 3, wz, { ry });
+      box(0x3f8f7a, 0.1, 1.2, 0.28, wx + Math.sin(ry) * 0.5, g + 1.8 + f * 3, wz + Math.cos(ry) * 0.5, { ry });
+      box(0x3f8f7a, 0.1, 1.2, 0.28, wx - Math.sin(ry) * 0.5, g + 1.8 + f * 3, wz - Math.cos(ry) * 0.5, { ry });
+    }
+  };
+  let hc = 0;
+  for (let i = 515; i < 800; i += 11) for (const sd of [1, -1]) {
+    if (sd < 0 && (i < 545 || i > 730)) continue;
+    const f = frame(i, sd, 1.2), w = 8.5 + (hc * 5 % 3), h = 6 + (hc * 3 % 4) * 2;
+    const [hx, hz] = f.at(0, 3.5);
+    if (floorDist(hx, hz).u > -4.5 + 0) house(hx, hz, f.y, f.ry, w, h, 7, hc);
+    hc++;
+    if (sd > 0) for (let r = 1; r <= 2; r++) {
+      const [ux, uz] = f.at((r % 2) * 4, 3.5 + r * 10);
+      house(ux, uz, heightAt(ux, uz) - 0.5 + r * 0.8, f.ry, w, 6 + (hc * 7 % 3) * 2, 7, hc + r * 3);
+    }
+  }
+  // Awnings and cafe tables along the cobbles
+  for (let i = 570; i < 720; i += 16) for (const sd of [1, -1]) {
+    const f = frame(i, sd, 0.15), c = [0xd23a3a, 0x2f6bb0, 0x3f8f57][(i >> 4) % 3];
+    for (let k = -2; k <= 2; k++) { const [ax, az] = f.at(k * 0.9, 1.1); box(k % 2 ? 0xf4efe4 : c, 1.6, 0.1, 0.9, ax, f.y + 3.1, az, { ry: f.ry, rz: -sd * 0 }); }
+  }
+  // A church tower up the hill: the town's landmark
+  const CX = 2, CZ = 158, cg = heightAt(CX, CZ) - 1;
+  box(0xefe2c6, 6, 22, 6, CX, cg + 11, CZ);
+  b.put(new THREE.ConeGeometry(4.6, 6, 4), 0xb9552f, CX, cg + 25, CZ, { ry: Math.PI / 4 });
+  box(0xe9dcc0, 16, 9, 9, CX + 10, cg + 4.5, CZ - 1);
+  gable(b, 0xb9552f, CX + 10, cg + 9, CZ - 1, 10, 16, 3.5, Math.PI / 2);
+
+  // Cypresses in groups on the hill
+  const CYPRESS = new THREE.ConeGeometry(1, 1, 6);
+  for (let t = 0, n = 0; t < 900 && n < 70; t++) {
+    const x = minX + rand() * (maxX - minX), z = 130 + rand() * 100;
+    if (noise(x / 26 + 11, z / 26) < 0.55 || floorDist(x, z).u < 12) continue;
+    const y = heightAt(x, z), h = 7 + rand() * 6;
+    b.put(CYPRESS, n % 3 ? 0x3e6b3a : 0x47753f, x, y + h / 2, z, { sx: 1.2 + rand() * 0.5, sy: h, sz: 1.2 + rand() * 0.5 });
+    n++;
+  }
+
+  // ---- The fish market and warehouses on the west quay, piers into the harbour ----
+  for (let i = 850; i < 1020; i += 15) {
+    const f = frame(i, 1, 1.2), c = [0xd23a3a, 0x2f6bb0, 0xe2b72e, 0x3f8f57][((i / 15) | 0) % 4];
+    for (const a of [-1.8, 1.8]) for (const o of [0.4, 3.6]) { const [px, pz] = f.at(a, o); box(0x5c3f28, 0.14, 2.6, 0.14, px, f.y + 1.3, pz); }
+    for (let k = -2; k <= 2; k++) { const [ax, az] = f.at(k * 0.85, 2); box(k % 2 ? 0xf4efe4 : c, 3.8, 0.12, 0.85, ax, f.y + 2.7, az, { ry: f.ry + Math.PI / 2, rz: 0.1 }); }
+    const [tx, tz] = f.at(0, 2);
+    box(0x8a6a48, 3, 0.9, 2.2, tx, f.y + 0.45, tz, { ry: f.ry });
+    for (let k = -1; k <= 1; k++) { const [cx, cz] = f.at(k, 1.8); box(0x8fc7d9, 0.8, 0.25, 0.8, cx, f.y + 1, cz, { ry: f.ry }); }
+  }
+  for (const i of [1062, 1094]) { // warehouses behind the last bend
+    const f = frame(i, 1, 2), [hx, hz] = f.at(0, 9);
+    box(0xb86a4a, 14, 8, 26, hx, f.y + 4, hz, { ry: f.ry });
+    gable(b, 0x7c7f80, hx, f.y + 8, hz, 15, 27, 3, f.ry);
+    const [dx, dz] = f.at(0, 1.9);
+    box(0x2e3a44, 0.1, 5, 7, dx, f.y + 2.5, dz, { ry: f.ry });
+  }
+  const WOOD = [0x8a6a48, 0x7a5c3e], moorings = [];
+  for (const i of [872, 925, 985, 590, 690]) {
+    const sd = -1, len = 24, f = frame(i, sd, 2.5), [mx, mz] = f.at(0, 1 + len / 2);
+    if (i > 800 || true) {
+      box(WOOD[0], len, 0.3, 3.4, mx, -0.15, mz, { ry: f.ry + Math.PI / 2 + Math.PI / 2 - Math.PI / 2 });
+      for (let o = 2; o < len; o += 5) for (const a of [-1.6, 1.6]) { const [px, pz] = f.at(a, 1 + o); box(WOOD[1], 0.3, 2.6, 0.3, px, -1.2, pz); }
+      moorings.push(f.at(-6, 1 + len * 0.55), f.at(6, 1 + len * 0.8), f.at(6, 1 + len * 0.35));
+    }
+    moorings[moorings.length - 1].push(f.ry);
+    moorings[moorings.length - 2].push(f.ry);
+    moorings[moorings.length - 3].push(f.ry);
+  }
+
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+
+  // ---- What moves: boats bobbing at their moorings, a tug and a yacht crossing the harbour, gulls ----
+  const bb = propBatch();
+  bb.put(BOX, 0xffffff, 0, 0.3, 0, { sx: 2.6, sy: 1.1, sz: 7 });
+  bb.put(new THREE.CylinderGeometry(1.3, 1.3, 1.1, 3), 0xffffff, 0, 0.3, 4.3, { ry: Math.PI, sz: 1.1 });
+  bb.put(BOX, 0xf4efe4, 0, 1.3, -0.8, { sx: 1.8, sy: 1, sz: 2.6 });
+  bb.put(BOX, 0x2e3a44, 0, 1.45, -0.8, { sx: 1.84, sy: 0.35, sz: 2.64 });
+  bb.put(BOX, 0x5c3f28, 0, 3.2, 0.9, { sx: 0.1, sy: 4, sz: 0.1 });
+  const boats = [...moorings.map(([x, z, ry], i) => ({ x, z, ry, phase: i * 1.7 })), { orbit: [-30, 8, 60, 45, 0.05] }, { orbit: [-40, 4, 85, 62, -0.035] }, { orbit: [10, -20, 38, 28, 0.07] }];
+  const boatMesh = new THREE.InstancedMesh(bb.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), boats.length), bc = [0xd23a3a, 0x2f6bb0, 0xf4efe4, 0x3f8f57, 0xe2b72e, 0x28708a];
+  const col = new THREE.Color();
+  boats.forEach((_b, i) => boatMesh.setColorAt(i, col.set(bc[i % bc.length])));
+  boatMesh.frustumCulled = false;
+  const gb = propBatch();
+  gb.put(BOX, 0xf8f8f8, 0, 0, 0, { sx: 1.8, sy: 0.05, sz: 0.34 });
+  gb.put(BOX, 0xe8e8e8, 0, 0, 0.05, { sx: 0.16, sy: 0.14, sz: 0.7 });
+  const GULLS = 10, gulls = new THREE.InstancedMesh(gb.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), GULLS);
+  gulls.frustumCulled = false;
+  trackRoot.add(boatMesh, gulls);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+  let clock = 0;
+  const place = (dt) => {
+    clock += dt;
+    wTex.offset.set(clock * 0.006, clock * 0.0035);
+    boats.forEach((o, i) => {
+      if (o.orbit) {
+        const [ox, oz, rx, rz, w] = o.orbit, a = clock * w + i;
+        p.set(ox + Math.cos(a) * rx, -1 + Math.sin(clock * 0.9 + i) * 0.05, oz + Math.sin(a) * rz);
+        e.set(0, Math.atan2(-Math.sin(a) * rx * Math.sign(w), Math.cos(a) * rz * Math.sign(w)), 0);
+      } else {
+        p.set(o.x, -1 + Math.sin(clock * 1.1 + o.phase) * 0.09, o.z);
+        e.set(Math.sin(clock * 0.8 + o.phase) * 0.03, o.ry, Math.sin(clock * 0.65 + o.phase) * 0.04);
+      }
+      boatMesh.setMatrixAt(i, m.compose(p, q.setFromEuler(e), sc));
+    });
+    boatMesh.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < GULLS; i++) {
+      const a = clock * (0.24 + (i % 3) * 0.06) + i * 2.1, r = 26 + (i % 4) * 14, c = i % 2 ? [40, -116] : [120, -40];
+      p.set(c[0] + Math.cos(a) * r, 16 + (i % 5) * 3 + Math.sin(clock + i) * 1.4, c[1] + Math.sin(a) * r);
+      e.set(0, -a, Math.sin(clock * 3.3 + i) * 0.22);
+      gulls.setMatrixAt(i, m.compose(p, q.setFromEuler(e), sc));
+    }
+    gulls.instanceMatrix.needsUpdate = true;
+  };
+  place(0);
+  return { update(dt) { sky.update(); place(dt); } };
 }
 
 /** Where a prop beside the road stands: side 1 = left, `off` metres past the rail. [x, z] */
@@ -2252,12 +2537,12 @@ function canyonLandmarks(data, heightAt) {
     const [x, z] = besideRoad(data, i, -1, 6 + rand() * 6); // (right: the inside of the bend, standing in the bowl)
     spire(x, z, 8 + rand() * 8, 1.6 + rand());
   }
-  for (const i of [470, 500, 760, 800]) for (const side of [1, -1]) {
+  for (const i of [470, 500, 770, 815]) for (const side of [1, -1]) {
     const [x, z] = besideRoad(data, i + ((rand() * 12) | 0), side, 6 + rand() * 5);
     spire(x, z, 8 + rand() * 7, 1.5 + rand());
   }
   // The natural arch on the straight after the crest (it needs a long view: the chase camera looks down, and an arch on the bend was never in frame)
-  rockArch(b, data, 762, 13.5, 8.5, STRATA, rand);
+  rockArch(b, data, 792, 13.5, 8.5, STRATA, rand);
 
   // Main street: false-fronted western buildings on both sides of the start straight
   const PAINT = [0x9c6b45, 0xb5803f, 0x8a5a3c, 0xc9a06a, 0x7d5a44, 0xa8553a, 0x6f7f6a], TRIM = 0xe9d9b8, DARK = 0x3a2a20;
