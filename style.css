@@ -1379,3 +1379,6 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
   color: #fff; font-size: clamp(26px, calc(var(--app-h) * 0.09), 44px); text-shadow: 0 3px 0 rgba(0,0,0,0.55), 0 0 14px rgba(0,0,0,0.35); pointer-events: none; z-index: 5; }
 .cine #cine-title { display: block; }
 .cine #hud, .cine #controls { opacity: 0; pointer-events: none; }
+
+/* Grand Prix (72.9) */
+.btn-cup { margin-top: 8px; font-size: clamp(11px, calc(var(--app-h) * 0.034), 14px); padding: 7px 14px; }

@@ -458,7 +458,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '72.8'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.9'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -3943,12 +3943,13 @@ function initControls() {
     if (state.intro > 0) beginCountdown();
     else if (state.podium > 0) endPodium();
   });
-  onTap($('btn-again'), startRace);
-  onTap($('btn-menu'), () => { sound.click(); showMenu(); });
+  onTap($('btn-again'), () => { if (cup) cupNext(); else startRace(); });
+  onTap($('btn-menu'), () => { sound.click(); cup = null; showMenu(); });
+  onTap($('btn-cup'), () => { dbgClear(); cupStart(); });
   $('btn-pause').addEventListener('pointerdown', (e) => { e.preventDefault(); pauseGame(); });
   onTap($('btn-resume'), resumeGame);
   onTap($('btn-restart'), () => { state.paused = false; startRace(); });
-  onTap($('btn-quit'), () => { state.paused = false; sound.unlock(); showMenu(); });
+  onTap($('btn-quit'), () => { state.paused = false; sound.unlock(); cup = null; showMenu(); });
   document.querySelectorAll('.btn-settings').forEach((b) => onTap(b, () => { sound.click(); showSettings(); }));
   for (const b of $('steer-pick').children) onTap(b, () => { sound.click(); setSteering(b.dataset.steer); });
   for (const b of $('flip-pick').children) onTap(b, () => { sound.click(); setFlip(b.dataset.flip === '1'); });
@@ -4109,7 +4110,7 @@ function startRace() {
   });
   clearItems();
   fx.reset();
-  sitOut++; // a different personality sits this one out (see castDrivers)
+  if (!cup || cup.at === 0) sitOut++; // a different personality sits this one out (see castDrivers). In a cup the field stays the same throughout.
   try { localStorage.setItem(SITOUT_KEY, sitOut); } catch { /* storage blocked */ }
   castDrivers();
   placeOnGrid();
@@ -4457,6 +4458,50 @@ function selectTrack(id) {
   placeOnGrid();
   camState.snap = true;
   warmUpShaders(); // the new track's materials, before the race needs them
+}
+
+// ---------- Grand Prix (72.9): all five tracks in a row, points per race, the same field throughout ----------
+const CUP_TRACKS = ['meadow', 'canyon', 'frost', 'tech', 'spiral'], CUP_POINTS = [10, 8, 6, 4, 2, 1], CUP_KEY = 'kartrush.cupBest';
+let cup = null; // { at: index in CUP_TRACKS, pts: { racer: points }, over: the final standings are showing }
+const cupId = (k) => (k.isPlayer ? 'me' : k.name);
+const cupRaceScore = (k) => CUP_POINTS[k.place - 1] || 0;
+function cupStart() {
+  cup = { at: 0, pts: {}, over: false };
+  selectTrack(CUP_TRACKS[0]);
+  startRace();
+  showMessage(`RACE 1 OF ${CUP_TRACKS.length}`);
+}
+function cupNext() {
+  if (cup.over) return cupStart(); // the button says NEW CUP
+  for (const k of karts) cup.pts[cupId(k)] = (cup.pts[cupId(k)] || 0) + cupRaceScore(k);
+  if (cup.at === CUP_TRACKS.length - 1) return cupFinal();
+  cup.at++;
+  selectTrack(CUP_TRACKS[cup.at]);
+  startRace();
+  showMessage(`RACE ${cup.at + 1} OF ${CUP_TRACKS.length}`);
+}
+/** The results screen again, with the overall table. */
+function cupFinal() {
+  cup.over = true;
+  teleSend('done'); // (the AIs that were still racing)
+  const table = [...karts].sort((a, c) => (cup.pts[cupId(c)] || 0) - (cup.pts[cupId(a)] || 0)), place = table.indexOf(kart) + 1, medal = ['g', 's', 'b'];
+  hud.standings.innerHTML = table.map((k, i) => `<tr class="${k.isPlayer ? 'me' : ''}" style="animation-delay:${0.15 + i * 0.07}s">
+    <td class="pos ${medal[i] || ''}"><i>${i + 1}</i></td>
+    <td class="name"><i class="swatch" style="background:${k.color}"></i>${k.isPlayer ? escapeHtml(profile?.name || 'YOU') : k.name}</td>
+    <td class="gap">${cup.pts[cupId(k)] || 0} pts</td></tr>`).join('');
+  hud.resPlace.className = `big-place p${place}`;
+  hud.resPlace.innerHTML = `${place}<sup>${ordinal(place).slice(-2)}</sup>`;
+  hud.resTime.textContent = `${cup.pts.me || 0}`;
+  hud.resLap.textContent = table[0].isPlayer ? 'YOU' : table[0].name;
+  $('res-time-label').textContent = 'POINTS';
+  $('res-lap-label').textContent = 'WINNER';
+  let best = 0;
+  try { best = +localStorage.getItem(CUP_KEY) || 0; if (!best || place < best) localStorage.setItem(CUP_KEY, place); } catch { /* storage blocked */ }
+  hud.resRecord.innerHTML = !best || place < best ? '<span class="new">&#9733; BEST GRAND PRIX</span>' : `Best Grand Prix: ${ordinal(best)}`;
+  $('btn-again').textContent = 'NEW CUP';
+  if (place === 1) confetti();
+  sound.finish(place === 1);
+  showOverlay(hud.resultsScreen);
 }
 
 /** Title screen. The karts sit on the grid behind it. */
@@ -5116,7 +5161,8 @@ function showResults() {
   const winner = karts.find((k) => k.place === 1);
   const medal = ['g', 's', 'b'];
   hud.standings.innerHTML = [...karts].sort((a, b) => a.place - b.place).map((k, i) => {
-    const gap = !k.finished ? 'racing&hellip;' : k === winner ? fmtTime(k.finishTime) : `+${(k.finishTime - winner.finishTime).toFixed(2)}`;
+    const gap = cup ? `+${cupRaceScore(k)} &middot; ${(cup.pts[cupId(k)] || 0) + cupRaceScore(k)} pts`
+      : !k.finished ? 'racing&hellip;' : k === winner ? fmtTime(k.finishTime) : `+${(k.finishTime - winner.finishTime).toFixed(2)}`;
     // rows only animate the first time, not on every refresh
     return `<tr class="${k.isPlayer ? 'me' : ''}" style="${first ? `animation-delay:${0.15 + i * 0.07}s` : 'animation:none'}">
       <td class="pos ${medal[k.place - 1] || ''}"><i>${k.place}</i></td>
@@ -5126,6 +5172,9 @@ function showResults() {
   }).join('');
   if (!first) return;
   sound.music('menu');
+  $('res-time-label').textContent = 'TIME';
+  $('res-lap-label').textContent = 'BEST LAP';
+  $('btn-again').textContent = !cup ? 'RACE AGAIN' : cup.at === CUP_TRACKS.length - 1 ? 'FINAL TABLE' : 'NEXT RACE';
 
   const p = kart.place;
   hud.resPlace.className = `big-place p${p}`;
@@ -5144,16 +5193,17 @@ function showResults() {
     ? `<span class="new">&#9733; NEW ${newRace ? 'RECORD' : 'BEST LAP'}</span>`
     : `Record ${fmtTime(rec.race)} &middot; best lap ${fmtTime(rec.lap)}`;
 
-  if (p === 1) {
-    const colors = ['#ffe14a', '#5cc8ff', '#ff5fa2', '#7dff9b', '#ffffff'];
-    hud.confetti.replaceChildren(...Array.from({ length: 36 }, (_, i) => {
-      const c = document.createElement('i');
-      c.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % colors.length]};` +
-        `animation-duration:${2.2 + Math.random() * 1.8}s;animation-delay:${Math.random() * 1.2}s`;
-      return c;
-    }));
-  }
+  if (p === 1) confetti();
   showOverlay(hud.resultsScreen);
+}
+function confetti() {
+  const colors = ['#ffe14a', '#5cc8ff', '#ff5fa2', '#7dff9b', '#ffffff'];
+  hud.confetti.replaceChildren(...Array.from({ length: 36 }, (_, i) => {
+    const c = document.createElement('i');
+    c.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % colors.length]};` +
+      `animation-duration:${2.2 + Math.random() * 1.8}s;animation-delay:${Math.random() * 1.2}s`;
+    return c;
+  }));
 }
 
 /**

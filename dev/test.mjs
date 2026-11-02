@@ -50,7 +50,7 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-if (!['studio', 'pick', 'settings'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
+if (!['studio', 'pick', 'settings', 'cup', 'menu'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -129,6 +129,28 @@ if (mode === 'autopilot' || mode === 'trace') {
   await sleep(1500);
   await shot('results');
   console.log(await ev(`JSON.stringify({ errors: window.__errs || 0, visible: __karts.map((k) => k.group.visible) })`));
+} else if (mode === 'cup') {
+  // the whole Grand Prix, each race ended on the spot: table after each, final table, no errors. Prints the points.
+  const shot = async (name) => { const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}cup-${name}.png`), Buffer.from(s.data, 'base64')); };
+  await ev(`window.__errs = []; window.addEventListener('error', (e) => __errs.push(e.message));`);
+  await ev(`document.getElementById('btn-cup').click()`);
+  for (let r = 0; r < 5; r++) {
+    await sleep(1000);
+    for (let t = 0; t < 600 && (await ev(`__s.phase`)) !== 'race'; t++) { await ev(`if (__s.intro > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
+    console.log('race', r, await ev(`__t.id + ' ' + __t.def.name`));
+    await ev(`__karts.forEach((k, i) => { k.place = ((i + ${r}) % 6) + 1; }); __finish(__k)`);
+    for (let t = 0; t < 600 && !(await ev(`__s.resultsShown`)); t++) { await ev(`if (__s.podium > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
+    await sleep(800);
+    if (r === 1) await shot('race2');
+    console.log(await ev(`[...document.querySelectorAll('#standings tr')].map((t) => t.innerText.replace(/\\s+/g, ' ')).join(' | ') + ' // ' + document.getElementById('btn-again').textContent`));
+    await ev(`document.getElementById('btn-again').click()`);
+  }
+  await sleep(1500);
+  await shot('final');
+  console.log(await ev(`[...document.querySelectorAll('#standings tr')].map((t) => t.innerText.replace(/\\s+/g, ' ')).join(' | ') + ' // ' + document.getElementById('btn-again').textContent`));
+  console.log('errors', await ev(`JSON.stringify(__errs)`));
+} else if (mode === 'menu') {
+  const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}menu.png`), Buffer.from(s.data, 'base64'));
 } else if (mode === 'shots') {
   while ((await ev('__s.phase')) !== 'race') await sleep(200);
   for (const spec of arg.split(',')) {

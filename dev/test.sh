@@ -3,6 +3,8 @@
 #   dev/test.sh autopilot [seconds=80]      full race driven by dev/autopilot.js
 #   dev/test.sh trace <probe.js> [seconds=40]  autopilot race + a probe script that pushes lines to __log
 #   dev/test.sh cine                       screenshots of the opening shots and the podium (OUT_DIR)
+#   dev/test.sh cup                        the whole Grand Prix, races ended on the spot: tables, points, errors
+#   dev/test.sh menu                       a screenshot of the title screen
 #   dev/test.sh film [maxFrames=600]       bomb hit on the player (gore on), every frame at a fixed 1/30 s: PNGs + film.jsonl (OUT_DIR)
 #   dev/test.sh shots 300,880:3           screenshots with the player parked at sample idx[:lane] (OUT_DIR)
 #   dev/test.sh studio [front,side,back,fast,turn,chase,face]  lobby close-ups of the player's driver
@@ -55,6 +57,10 @@ if [ "$MODE" = "trace" ]; then
   run trace "${2:-40}" "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 elif [ "$MODE" = "cine" ]; then
   run cine x
+elif [ "$MODE" = "cup" ]; then
+  run cup x
+elif [ "$MODE" = "menu" ]; then
+  run menu x
 elif [ "$MODE" = "film" ]; then
   run film "${1:-600}"
 elif [ "$MODE" = "shots" ]; then
