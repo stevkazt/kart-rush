@@ -1,3 +1,4 @@
 .DS_Store
 dev/telemetry/
 dev/shots/
+dev/sim/__pycache__/

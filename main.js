@@ -204,8 +204,7 @@ const CFG = {
         [0, 34, 10.0], [-18, 39, 10.0], [-31, 52, 10.0], [-35, 70, 11.25], [-30, 87, 12.5], [-17, 100, 13.75],
         [0, 104, 15.0], [17, 99, 15.0], [29, 87, 15.0], [33, 70, 16.25], [28, 54, 17.5], [16, 42, 18.75],
         [0, 38, 20.0], [-16, 43, 20.0], [-27, 54, 20.0], [-31, 70, 21.25], [-27, 85, 22.5], [-15, 96, 23.75],
-        // (4th value, half width by index share, point p covers samples ~31p: these four are the landing, idx ~1190-1280)
-        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0, 11], [130, 152, 25.0, 11], [125, 186, 25.0, 11], [95, 200, 25.0, 11],
+        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0], [130, 152, 25.0], [125, 186, 25.0], [95, 200, 25.0],
         [68, 200, 25.0], [40, 200, 25.0], [8, 200, 15.0], [-18, 200, 11.6], [-44, 199, 11.0], [-76, 196, 11.0],
         [-98, 164, 9], [-110, 110, 6.6], [-112, 50, 4], [-95, -18, 1.6], [-58, -58, 0.3],
       ],
@@ -483,7 +482,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '72.11'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.12'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -748,7 +747,13 @@ function buildTrack(def, th) {
     for (let i = 0; i < N; i++) { const q = samples[i], d = (q.x - px) ** 2 + (q.z - pz) ** 2 + (q.y - py) ** 2; if (d < bd) { bd = d; best = i; } }
     return best;
   };
-  for (const pi of def.gaps || []) { const end = nearestSample(pi + 1); for (let i = nearestSample(pi); i !== end; i = (i + 1) % N) gap[i] = 1; }
+  // ...airZone: from just before the lip to well past the foot, where wheels off the road are the jump, not a kart in trouble
+  const airZone = new Uint8Array(N + 1);
+  for (const pi of def.gaps || []) {
+    const end = nearestSample(pi + 1);
+    for (let i = nearestSample(pi); i !== end; i = (i + 1) % N) gap[i] = 1;
+    for (let i = nearestSample(pi) - 10, stop = end + Math.round(75 / T.spacing); i < stop; i++) airZone[(i + N) % N] = 1;
+  }
   // Ice: 0..1 per sample, ramping in and out over ~8 m
   const ice = new Float32Array(N + 1);
   const edge = Math.max(1, Math.round(8 / spacing));
@@ -769,7 +774,7 @@ function buildTrack(def, th) {
     }
   }
   oL[N] = oL[0]; oR[N] = oR[0];
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, oL, oR, bank, wallH, hilly, ice, gap, levelColors: def.levelColors, edges: def.edges, edgeDefault: def.edgeDefault, palette: { ...th.palette, ...def.palette } };
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, oL, oR, bank, wallH, hilly, ice, gap, airZone, levelColors: def.levelColors, edges: def.edges, edgeDefault: def.edgeDefault, palette: { ...th.palette, ...def.palette } };
   track = data; // the road helpers below (surfaceY, roadPoint...) read the global
 
   if (hilly) {
@@ -4539,7 +4544,7 @@ function updateKartProgress(k, dt, racing) {
   const up = k.body.quaternion.vmult(LOCAL_UP, tmpVec);
   // Fewer than 3 wheels down for a while = beached (e.g. perched on a wall with the rear in the air)
   const wheelsDown = k.vehicle.wheelInfos.filter((w) => w.raycastResult.hasHit).length;
-  k.flipTimer = up.y < 0.3 || wheelsDown < 3 ? k.flipTimer + dt : 0;
+  k.flipTimer = up.y < 0.3 || (wheelsDown < 3 && !track.airZone[idx]) ? k.flipTimer + dt : 0; // (72.12: a long jump took > 1.5 s, and the kart was reset in mid-air, upright)
   // Off the road (over a rail, off a jump): well below the road surface for a moment
   const below = surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
   k.fallT = below ? k.fallT + dt : 0;
@@ -4568,7 +4573,10 @@ function updateKartProgress(k, dt, racing) {
     k.stuckT = 0;
     if (state.phase !== 'countdown') teleEvent('reset', k, { why: k.lastReset, lat: +lat.toFixed(2), face: +railFace.toFixed(2), h: +(k.body.position.y - surfaceY(idx, clampLane(idx, lat, 0))).toFixed(2), kmh: Math.round(k.speed * 3.6) });
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
-    resetKart(k, k.trackIdx, lane);
+    // (72.12: put back over the hole it fell again, and again: one bot was reset ~400 times. Back before the lip instead, with room for the red pads)
+    let at = k.trackIdx;
+    if (track.gap[at]) { while (track.gap[at]) at = (at - 1 + track.N) % track.N; at = (at - Math.round(47 / track.spacing) + track.N) % track.N; }
+    resetKart(k, at, k.ai && at !== k.trackIdx ? 0 : lane);
     if (racing) { k.ghost = CFG.kart.ghostTime; setGhost(k, true); }
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
     if (k.isPlayer) camState.snap = true;
