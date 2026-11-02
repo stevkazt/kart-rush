@@ -181,35 +181,29 @@ const CFG = {
       boxRows: [120, 420, 720, 1020, 1320, 1620],
       pads: [[30, 0], [600, 0], [1200, 0], [1700, 0]],
     },
-    // Spiral Run (user: the long track is boring, "a spiral of 3 levels in the middle"). 70.14: the helix is a CONE (R40 -> R30
-    // over 2.5 turns, tighter as it climbs), climbs in steps (per turn: plateau 60 deg, ramp +5 m over 120 deg, twice, so the
-    // coils stay exactly 10 m apart) to y 25, with one long BANK RUN (`bankRuns`: 9.5 deg, 150 m smooth entry inside the
-    // spiral, 75 m exit). Then a wide turn and a 70 m straight ending in 3 RED pads (full-width strips, top speed +10 m/s,
-    // 1.6x longer), then the road is CUT (`gaps`: control point 43 = the lip, idx ~1274, to the foot at ~1312): a 32 m hole
-    // and a 14 m fall (gravity 20) onto the lower level (y 11). 70.19: the foot (receiving edge) is 10 m below the lip (y 15) and a ~15% landing RAMP
-    // (~30 m) takes it down to y 11, so a boosted kart lands along the slope (it lost ~130 km/h on the flat landing). 70.18 had the foot
-    // at y 17.3: the user hit its edge ~2 m short. Any kart arriving at >= 32 m/s (boosted) clears the edge; an unboosted one (26) does not. The user keeps the 32 m hole. Then a 60 m landing run and
-    // one gentle descent. 1823 m, N 1961, tightest R16 (after the spiral). Offline check: dev/track-check.py.
+    // Spiral Run, the volcano (72.7; same id as the debug shape test, so its records stay). ~1540 m (trimmed from 1823: the outer ring and the final descent). Short ring, then 2.5 turns up the cone (R 40 -> 30,
+    // three levels 10 m apart, climbing in steps: 2 plateaus + 2 ramps per turn, +5 m per ramp) to y 25, one long bank run, a wide turn on the ridge, a 70 m straight ending in 3 RED full-width pads, then the road is
+    // CUT (`gaps`: control point 43 = the lip, idx ~1173, to the foot at ~1209): a 32 m hole over the lava, 10 m down to the receiving edge (y 15), a ~15% landing ramp to y 11 (a flat landing killed ~130 km/h),
+    // a landing run and one gentle descent, over a lava river. A kart arriving at >= 32 m/s (boosted) clears the edge; an unboosted one (26) does not, and everyone can reach a pad.
     spiral: {
-      name: 'Spiral Run', icon: 'gear', theme: 'meadow', debug: true, plain: true, gaps: [43],
-      bankRuns: [[374, 1010, 9.5, 150, 75]], // helix start .. end + exit
-      axis: [0, 70, 7.5, 34],                // x, z, radius, height of the centre piece (70.20: tower + platforms + bridges + signs)
-      helix: [374, 965],                     // sample range of the helix: the gantry bridges are spread along it
-      signs: [440, 565, 685, 800, 905],      // chevron boards beside the start of each ramp
-      levelColors: { from: 374, to: 1274, step: 10, colors: [[0x2f6bff, 0xf3f6fa], [0xffc400, 0xf3f6fa], [0xe03030, 0xf3f6fa]] }, // blue, yellow, red (top + the straight to the lip)
+      name: 'Spiral Run', icon: 'volcano', theme: 'volcano', gaps: [43],
+      bankRuns: [[294, 930, 9.5, 150, 75]], // helix start .. end + exit
       points: [
-        [91, -137, 0], [153, -104, 0], [169, -46, 0], [140, 7, 0], [101, 38, 0], [62, 30, 0],
+        [-10, -62, 0], [45, -62, 0], [92, -50, 0], [108, -14, 0], [88, 18, 0], [45, 30, 0],
         [0, 30, 0], [-20, 36, 0], [-34, 50, 0], [-39, 70, 1.25], [-33, 89, 2.5], [-19, 103, 3.75],
         [0, 108, 5.0], [19, 103, 5.0], [32, 89, 5.0], [37, 70, 6.25], [32, 52, 7.5], [18, 39, 8.75],
         [0, 34, 10.0], [-18, 39, 10.0], [-31, 52, 10.0], [-35, 70, 11.25], [-30, 87, 12.5], [-17, 100, 13.75],
         [0, 104, 15.0], [17, 99, 15.0], [29, 87, 15.0], [33, 70, 16.25], [28, 54, 17.5], [16, 42, 18.75],
         [0, 38, 20.0], [-16, 43, 20.0], [-27, 54, 20.0], [-31, 70, 21.25], [-27, 85, 22.5], [-15, 96, 23.75],
-        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0], [140, 150, 25.0], [135, 186, 25.0], [100, 200, 25.0],
-        [70, 200, 25.0], [40, 200, 25.0], [8, 200, 15.0], [-18, 200, 11.6], [-44, 199, 11.0], [-76, 196, 11.0],
-        [-98, 164, 9.2], [-108, 104, 7.3], [-140, 66, 5.5], [-152, 12, 3.7], [-130, -60, 1.8],
+        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0], [130, 152, 25.0], [125, 186, 25.0], [95, 200, 25.0],
+        [68, 200, 25.0], [40, 200, 25.0], [8, 200, 15.0], [-18, 200, 11.6], [-44, 199, 11.0], [-76, 196, 11.0],
+        [-98, 164, 9], [-110, 110, 6.6], [-112, 50, 4], [-95, -18, 1.6], [-58, -58, 0.3],
       ],
-      boxRows: [100, 300, 560, 850, 1130, 1500, 1780],   // none near the drop (idx ~1214-1362)
-      pads: [[30, 0], [250, 0], [473, 0, 'wide'], [600, 0, 'wide'], [720, 0, 'wide'], [833, 0, 'wide'], [939, 0, 'wide'], [1247, 0, 'red'], [1257, 0, 'red'], [1267, 0, 'red'], [1570, 0], [1820, 0]], // red full-width boosters right before the lip (1274)
+      boxRows: [80, 240, 480, 770, 1030, 1330, 1560],   // none near the drop (idx ~1113-1261)
+      pads: [[30, 0], [200, 0], [393, 0, 'wide'], [520, 0, 'wide'], [640, 0, 'wide'], [753, 0, 'wide'], [859, 0, 'wide'], [1146, 0, 'red'], [1156, 0, 'red'], [1166, 0, 'red'], [1390, 0], [1610, 0]], // red full-width boosters right before the lip (1173)
+      edgeDefault: 'basalt',
+      edges: { 1: [[1620, 1655, 'boards'], [0, 40, 'boards']], '-1': [[1620, 1655, 'boards'], [0, 40, 'boards']] },
+      palette: { road: [0x8e8884, 0x88827e], dash: 0xff9a3a, curb: [0xe8622a, 0xf3e2c8], shoulder: [0x7a6a62, 0x6e5f58], wear: 0x6f6965 },
     },
   },
 
@@ -479,7 +473,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '72.6'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.7'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -1220,6 +1214,15 @@ const THEMES = {
     },
     build: buildHarbour,
   },
+  volcano: {
+    // a bright, clear day on a live volcano: blue sky, warm rock in full sun, the lava the only thing that glows (user: no dark scenes)
+    sky: 0xa9cfea, fog: [0xecdccb, 130, 480], hemi: [0xfff4e8, 0xb08a70, 1.5], sun: [0xfff0d8, 2.4], sunOffset: [-60, 110, -50],
+    palette: {
+      road: [0x8e8884, 0x88827e], dash: 0xff9a3a, curb: [0xe8622a, 0xf3e2c8],
+      rail: [0x4b4548, 0xe8622a], arch: [0x2c2422, 0xe8622a],
+    },
+    build: buildVolcano,
+  },
 };
 
 function buildMeadow(data) {
@@ -1229,58 +1232,6 @@ function buildMeadow(data) {
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   trackRoot.add(ground);
-  if (def?.axis) { // 70.20: the centre piece of a spiral, basic shapes, visual only (no colliders): a tower, a platform per level,
-    // radial bridges (beam + rails) at heights between the road's levels, and yellow chevron boards beside the ramps
-    const [ax, az, ar, ah] = def.axis;
-    const group = new THREE.Group(); group.position.set(ax, 0, az); trackRoot.add(group);
-    const lc = def.levelColors?.colors || [[0x2f6bff], [0xffc400], [0xe03030]];
-    const levelCol = (y) => lc[clamp(Math.floor((y + 1) / (def.levelColors?.step || 10)), 0, lc.length - 1)][0];
-    const grey = lambert(0x66728a), dark = lambert(0x2f3b52);
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(ar, ar * 1.12, ah, 20, 1), grey);
-    tower.position.y = ah / 2; group.add(tower);
-    for (let y = 2.5; y < ah; y += 5) { // a platform ring per 5 m, coloured by level
-      const ring = new THREE.Mesh(new THREE.CylinderGeometry(ar + 1.6, ar + 1.6, 0.5, 20), lambert(levelCol(y)));
-      ring.position.y = y; group.add(ring);
-    }
-    // bridges (70.21, was short radial stubs inside the inner rail that the chase camera never sees): gantries that cross OVER the
-    // road, from the tower to 13 m past the road's centre line, 6.5 m above the road surface at that spot (the coil above is 10 m
-    // up, so 3.5 m clear of it), ten spread along the helix (`def.helix` = [from idx, to idx]), so they come up ahead of the kart
-    if (def.helix) {
-      const [h0, h1] = def.helix, count = 10, mats = {};
-      const matFor = (y) => (mats[levelCol(y)] ||= lambert(levelCol(y)));
-      for (let k = 0; k < count; k++) {
-        const i = Math.round(h0 + ((k + 0.5) * (h1 - h0)) / count), sp = samples[i];
-        const dx = sp.x - ax, dz = sp.z - az, rr = Math.hypot(dx, dz), len = rr + 13 - ar, y = sp.y + 6.5;
-        const g = new THREE.Group(), m = matFor(y);
-        g.add(new THREE.Mesh(new THREE.BoxGeometry(len, 0.5, 2.8), m));
-        for (const side of [-1, 1]) for (const h of [0.5, 1.15]) {
-          const r = new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.14), m); r.position.set(0, h, side * 1.35); g.add(r);
-        }
-        const under = new THREE.Mesh(new THREE.BoxGeometry(len, 0.3, 0.3), dark); under.position.set(0, -0.6, 0); g.add(under); // a spine below
-        g.rotation.y = Math.atan2(-dz, dx);
-        g.position.set((dx / rr) * (ar + len / 2), y, (dz / rr) * (ar + len / 2)); // the group already sits at the centre
-        group.add(g);
-      }
-    }
-    // chevron boards: a post just outside the inner rail (the bend's centre side), facing the oncoming kart
-    if (def.signs?.length) {
-      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 48;
-      const g = cv.getContext('2d');
-      g.fillStyle = '#f2b705'; g.fillRect(0, 0, 128, 48);
-      g.strokeStyle = '#1b1b1b'; g.lineWidth = 8; g.lineJoin = 'miter';
-      for (const x of [20, 62, 104]) { g.beginPath(); g.moveTo(x + 10, 8); g.lineTo(x - 8, 24); g.lineTo(x + 10, 40); g.stroke(); } // '<<<': the bend goes left
-      const signMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
-      for (const i of def.signs) {
-        const t = tangents[i], n = normals[i];
-        const off = wL[i] + CFG.track.curb + CFG.track.wallThickness + 1.2;
-        const sy = surfaceY(i, off); // the banked road's surface at the post (the inner side is lower)
-        const px = samples[i].x + n.x * off, pz = samples[i].z + n.z * off;
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.2, 0.25), dark); post.position.set(px, sy + 1.6, pz); trackRoot.add(post);
-        const board = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 1.6), signMat);
-        board.position.set(px, sy + 3.3, pz); board.rotation.y = Math.atan2(-t.x, -t.z); trackRoot.add(board);
-      }
-    }
-  }
   if (!def?.plain) buildChevrons(data); // 71.1: the other themes have them too
   if (def?.plain) return { update() {} }; // 70.8: shape-test tracks get the ground only (the ring of mountains at r 240-280 stood on the big loops' road)
 
@@ -1718,9 +1669,9 @@ const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); retu
  * then a rise (1.4 m) and a wall / hill of `shape(x, z)` = [height, where it starts, how wide its slope is,
  * rise] (metres beyond the flat floor). Each point takes the lowest of (nearby road height + rise with distance),
  * so where two parts of the track are close at different heights the ground follows the lower one.
- * `colorAt(x, z, h, slope, color)` paints it. Adds the mesh to trackRoot; returns the lookups the scenery uses.
+ * `colorAt(x, z, h, slope, color)` paints it. `carve(x, z, h)` has the last word on a height. Adds the mesh to trackRoot; returns the lookups the scenery uses.
  */
-function makeTerrain(data, shape, colorAt, { floor = -0.35, step = 3.5, material = {} } = {}) {
+function makeTerrain(data, shape, colorAt, { floor = -0.35, step = 3.5, material = {}, carve = null } = {}) {
   const { N, samples, normals, wL, wR, oL, oR, bank } = data;
   const T = CFG.track;
   const flat = new Float32Array(N); // road + rails + 2.5 m of flat floor, from the centre line
@@ -1758,8 +1709,8 @@ function makeTerrain(data, shape, colorAt, { floor = -0.35, step = 3.5, material
       const u = d - flat[i];
       h = Math.min(h, base + (u <= 0 ? floor : floor + rise * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
     });
-    if (h === Infinity) return rise < 0 ? floor + rise : maxY + rise + cliff; // (out of reach of the road: `rise` < 0 is a lake or the sea, whose bed stays down)
-    return h;
+    if (h === Infinity) h = rise < 0 ? floor + rise : maxY + rise + cliff; // (out of reach of the road: `rise` < 0 is a lake or the sea, whose bed stays down)
+    return carve ? carve(x, z, h) : h; // (`carve`: cuts through even the flat beside the road: a river passing under it, a pit)
   }
   /** Distance beyond the flat floor of the nearest road part, and that part's sample. */
   const floorDist = (x, z) => {
@@ -2484,6 +2435,224 @@ function buildHarbour(data) {
   place(0);
   return { update(dt) { sky.update(); place(dt); } };
 }
+
+/**
+ * The volcano (72.7). The road winds up the cone itself, on basalt columns where it stands off the ground, along a ridge, and jumps a lava pit. A bright day: warm rock in full sun, only the lava glows.
+ * makeTerrain for the ground (`carve` cuts the pit and the lava rivers, which pass under the road), one plane of moving lava under it all, one batch for everything standing, instanced smoke and bombs.
+ */
+function buildVolcano(data) {
+  const { N, samples, tangents, normals, wL, wR, gap } = data, T = CFG.track;
+  const rand = seededRand(1999), noise = makeNoise(rand);
+  const AX = -1, AZ = 70; // the cone's axis
+  const segDist = (x, z, a, c) => { const dx = c[0] - a[0], dz = c[1] - a[1], u = clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz), 0, 1); return Math.hypot(x - a[0] - dx * u, z - a[1] - dz * u); };
+  const RIVERS = [[[20, 175], [-35, 165], [-70, 140], [-125, 130], [-170, 90]], [[0, 22], [-18, -12], [24, -38], [70, -30], [130, -48]]];
+  const riverD = (x, z) => { let d = Infinity; for (const r of RIVERS) for (let i = 0; i < r.length - 1; i++) d = Math.min(d, segDist(x, z, r[i], r[i + 1])); return d + (noise(x / 14 + 2, z / 14) - 0.5) * 7; };
+  const pitD = (x, z) => Math.hypot(Math.max(Math.abs(x - 24) - 30, 0), Math.max(Math.abs(z - 200) - 36, 0)) + (noise(x / 16, z / 16 + 7) - 0.5) * 10;
+  const BASALT = [0x7a6a62, 0x6e5f58, 0x84736a].map((h) => new THREE.Color(h)), ASH = [0xa09084, 0x978779, 0xa89888].map((h) => new THREE.Color(h));
+  const RUST = new THREE.Color(0xa8553a), SULPHUR = new THREE.Color(0xc9a850), SCORCH = new THREE.Color(0x3d3230);
+  const ground = makeTerrain(data,
+    (x, z) => [5 + 22 * noise(x / 80 + 12, z / 80), 5 + 8 * noise(x / 22, z / 22), 9 + 12 * noise(x / 26 + 5, z / 26)],
+    (x, z, h, slope, cc) => {
+      const edge = Math.min(riverD(x, z) - 4, pitD(x, z));
+      if (edge < 4) cc.copy(SCORCH);
+      else if (slope > 0.7) cc.copy(BASALT[(((h + noise(x / 8, z / 8) * 3) / 2.6) | 0) % 3]).lerp(RUST, 0.45 * noise(x / 11 + 3, z / 11));
+      else if (noise(x / 40 + 15, z / 40) > 0.72) cc.copy(SULPHUR).lerp(ASH[0], 0.4);
+      else cc.copy(ASH[(noise(x / 13 + 9, z / 13) * 2.999) | 0]);
+    },
+    { carve: (x, z, h) => {
+      const m = Math.max(1 - smoothstep(0, 16, pitD(x, z)), (1 - smoothstep(4, 9, riverD(x, z))));
+      return m > 0 ? lerp(h, -6, m) : h;
+    } });
+  const { heightAt, nearby, minX, maxX, minZ, maxZ } = ground;
+  // Ash beyond the height field, and the lava under it: only the carved places let it show
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+  const plain = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), lambert(0x9a8a7c));
+  plain.rotation.x = -Math.PI / 2; plain.position.set(cx, -5, cz);
+  trackRoot.add(plain);
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g2 = cv.getContext('2d');
+  g2.fillStyle = '#ff7a1f'; g2.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 26; i++) { g2.fillStyle = i % 2 ? 'rgba(255,214,90,0.8)' : 'rgba(255,240,170,0.6)'; g2.beginPath(); g2.arc(rand() * 128, rand() * 128, 3 + rand() * 9, 0, 7); g2.fill(); }
+  for (let i = 0; i < 22; i++) { g2.fillStyle = 'rgba(120,40,16,0.75)'; g2.beginPath(); g2.ellipse(rand() * 128, rand() * 128, 4 + rand() * 11, 2 + rand() * 4, rand() * 3, 0, 7); g2.fill(); }
+  const lavaTex = new THREE.CanvasTexture(cv);
+  lavaTex.wrapS = lavaTex.wrapT = THREE.RepeatWrapping; lavaTex.repeat.set(26, 26); lavaTex.colorSpace = THREE.SRGBColorSpace;
+  const lava = new THREE.Mesh(new THREE.PlaneGeometry(maxX - minX + 150, maxZ - minZ + 150), new THREE.MeshBasicMaterial({ map: lavaTex, fog: false }));
+  lava.rotation.x = -Math.PI / 2; lava.position.set(cx, -3, cz);
+  trackRoot.add(lava);
+  const sky = makeSky(0xf3dcc2, 0xa9cfea, 0x5a9be0, 0xffe2b0);
+  buildChevrons(data);
+  farMassifs(rand, noise, 16, () => [cx, cz], (y, n) => (y + n * 0.25 > 0.62 ? 0xa08a7c : y > 0.3 ? 0x8a6a58 : 0x7a5a4c), { r: [340, 400], h: [50, 110] });
+
+  const b = propBatch(), BOX = new THREE.BoxGeometry(1, 1, 1), HEX = new THREE.CylinderGeometry(1, 1, 1, 6), LUMP = new THREE.IcosahedronGeometry(1, 0), SPIRE = new THREE.ConeGeometry(1, 1, 5);
+  const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  buildBarriers(data, b);
+
+  // ---- Where the road stands off the ground: a deck under it, a rusty face along its edge, basalt columns under the outside ----
+  const deck = [], rimColor = 0x7d5240;
+  const lat = (i, sd, extra) => sd * ((sd > 0 ? wL[i] : wR[i]) + T.curb + T.wallThickness + extra);
+  const groundBelow = (i, sd) => { const p = roadPoint(i, lat(i, sd, 1.2), 0); return { p, g: heightAt(p.x, p.z) }; };
+  const raised = new Uint8Array(N + 1);
+  for (let i = 0; i < N; i++) {
+    if (gap[i]) continue;
+    const a = groundBelow(i, 1), c = groundBelow(i, -1);
+    if (a.p.y - a.g > 1.4 || c.p.y - c.g > 1.4) raised[i] = 1;
+  }
+  for (let i = 0; i < N; i += 2) {
+    const j = Math.min(i + 2, N);
+    if (!(raised[i] || raised[j % N]) || gap[i] || gap[j % N]) continue;
+    const a0 = roadPoint(i, lat(i, -1, 1.5), -0.55), a1 = roadPoint(i, lat(i, 1, 1.5), -0.55), b0 = roadPoint(j, lat(j, -1, 1.5), -0.55), b1 = roadPoint(j, lat(j, 1, 1.5), -0.55);
+    deck.push(...a0.toArray(), ...a1.toArray(), ...b0.toArray(), ...b0.toArray(), ...a1.toArray(), ...b1.toArray());
+    for (const [p, q, s] of [[a0, b0, 1], [a1, b1, -1]]) { // the faces, 1.5 m deep
+      const pu = p.clone(), qu = q.clone(), pd = p.clone().setY(p.y - 1.5), qd = q.clone().setY(q.y - 1.5), v = s > 0 ? [pu, qu, pd, pd, qu, qd] : [pu, pd, qu, qu, pd, qd];
+      for (const w of v) deck.push(w.x, w.y, w.z);
+    }
+  }
+  if (deck.length) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(deck, 3));
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: rimColor, side: THREE.DoubleSide }));
+    trackRoot.add(m);
+  }
+  for (const sd of [1, -1]) for (let i = 2; i < N; i += 11) {
+    if (!raised[i] || gap[i]) continue;
+    const p = roadPoint(i, lat(i, sd, 1.1), -1);
+    // down to the ground, or to whatever part of the road passes under here
+    let foot = heightAt(p.x, p.z) - 0.5, onRoad = false;
+    nearby(p.x, p.z, (j, d) => {
+      if (d > 16 || samples[j].y > p.y - 3) return;
+      const off = Math.abs(lateral(j, p));
+      if (off < Math.max(wL[j], wR[j]) + T.curb + 0.6) onRoad = true; // (a column standing in a lane of the road below: no)
+      else if (off < Math.max(wL[j], wR[j]) + 3.5) foot = Math.max(foot, samples[j].y + 0.2); // ...on the rail beside it: fine
+    });
+    const h = p.y - foot;
+    if (onRoad || h < 0.8) continue;
+    for (let k = 0; k < 3; k++) { // a cluster: the columns basalt really forms
+      const a = rand() * 6.3, o = k ? 0.9 : 0, w = 0.9 + rand() * 0.35, tall = h * (k ? 0.92 : 1);
+      b.put(HEX, BASALT_HEX[((i >> 2) + k) % 3], p.x + Math.cos(a) * o, foot + tall / 2, p.z + Math.sin(a) * o, { ry: rand() * 3, sx: w, sy: tall, sz: w });
+    }
+  }
+
+  // ---- The cone: rings of faceted rock inside the coils, a lava streak on its faces, a crater ----
+  const rOf = (y) => (y < 25 ? 26.5 - 0.36 * y : 17.5 - 0.42 * (y - 25));
+  const RINGS = [-2, 3, 8, 13, 18, 23, 28, 33, 38, 43, 47], SEG = 26, pos = [], col = [], cc = new THREE.Color();
+  const pt = (r, a) => { const y = RINGS[r], rr = rOf(y) * (1 + (noise(a * 3 + 9, y / 6 + 3) - 0.5) * (y > 25 ? 0.28 : 0.1)); return [AX + Math.cos(a) * rr, y, AZ + Math.sin(a) * rr]; };
+  for (let r = 0; r < RINGS.length - 1; r++) for (let s = 0; s < SEG; s++) {
+    const a0 = (s / SEG) * 6.2832, a1 = ((s + 1) / SEG) * 6.2832;
+    const A = pt(r, a0), B = pt(r, a1), C = pt(r + 1, a0), D = pt(r + 1, a1), streak = s % 9 === 2, y = RINGS[r];
+    cc.set(streak && y > 8 ? (r % 2 ? 0xff9a3a : 0xff7a1f) : y > 40 ? 0x3d3230 : y > 33 ? 0xc9a850 : [0x7a6a62, 0x6e5f58, 0x8a5a48][(r * 3 + s) % 3]);
+    for (const v of [A, C, B, B, C, D]) { pos.push(...v); col.push(cc.r, cc.g, cc.b); }
+  }
+  const coneG = new THREE.BufferGeometry();
+  coneG.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  coneG.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  coneG.computeVertexNormals();
+  const cone = new THREE.Mesh(coneG, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide }));
+  cone.castShadow = true;
+  trackRoot.add(cone);
+  const crater = new THREE.Mesh(new THREE.CircleGeometry(rOf(47) + 2, 18), new THREE.MeshBasicMaterial({ map: lavaTex, fog: false }));
+  crater.rotation.x = -Math.PI / 2; crater.position.set(AX, 45, AZ);
+  trackRoot.add(crater);
+
+  // ---- The geothermal station on the start straight: halls, silver pipes along the road, one crossing over it, steam ----
+  const PIPE = new THREE.CylinderGeometry(1, 1, 1, 8).rotateX(Math.PI / 2), STEEL = 0xcfd3d6, CONCRETE = [0xc4bdb2, 0xb5aea3];
+  const frame = (i, sd, off) => { const k = ((i % N) + N) % N, [x, z] = besideRoad(data, k, sd, off), t = tangents[k], n = normals[k]; return { k, x, z, t, n, ry: Math.atan2(t.x, t.z), y: samples[k].y - 0.4, at: (a, o) => [x + t.x * a + n.x * sd * o, z + t.z * a + n.z * sd * o] }; };
+  for (const sd of [1, -1]) {
+    for (let i = -30; i < 66; i += 24) {
+      const f = frame(i, sd, 5.5), [hx, hz] = f.at(0, 5), h = 7 + ((i + 30) / 24) % 3 * 2;
+      box(CONCRETE[(i + 30) / 24 % 2], 10, h, 20, hx, f.y + h / 2, hz, { ry: f.ry });
+      box(0xe8622a, 10.2, 0.7, 20.2, hx, f.y + h - 0.8, hz, { ry: f.ry });
+      const [wx, wz] = f.at(0, -0.02);
+      for (let a = -6; a <= 6; a += 4) { const [ax, az] = f.at(a, -0.02); box(0x2e3a44, 0.12, 2, 2.4, ax, f.y + h * 0.55, az, { ry: f.ry }); }
+      const [sx, sz] = f.at(-5, 7.5);
+      b.put(new THREE.CylinderGeometry(1.5, 2.2, 15, 10), CONCRETE[0], sx, f.y + 7.5, sz);
+      b.put(new THREE.CylinderGeometry(1.6, 1.6, 1.2, 10), 0xe8622a, sx, f.y + 13, sz);
+    }
+    for (let i = -24; i < 62; i += 4) { const f = frame(i, sd, 2.4); b.put(PIPE, STEEL, f.x, f.y + 1.6, f.z, { ry: f.ry, sx: 0.5, sy: 0.5, sz: 4.2 }); if (i % 12 === 0) box(0x5e6670, 0.3, 1.5, 0.3, f.x, f.y + 0.75, f.z); }
+  }
+  for (const i of [48, 14, -18]) { // pipes over the road, on towers
+    const f = frame(i, 1, 2.4), g = frame(i, -1, 2.4), mx = (f.x + g.x) / 2, mz = (f.z + g.z) / 2, span = Math.hypot(f.x - g.x, f.z - g.z);
+    b.put(PIPE, STEEL, mx, f.y + 7, mz, { ry: f.ry + Math.PI / 2, sx: 0.5, sy: 0.5, sz: span + 1 });
+    for (const q of [f, g]) { box(0x5e6670, 0.5, 7.2, 0.5, q.x, q.y + 3.6, q.z); b.put(PIPE, STEEL, q.x, q.y + 4.3, q.z, { rx: Math.PI / 2, sx: 0.4, sy: 0.4, sz: 5.4 }); }
+  }
+
+  // ---- The jump: a striped gantry before the lip, a warning wall of hazard boards each side of the hole, a viewing deck with a crowd ----
+  const lip = 1173;
+  for (const i of [1110, 1140]) {
+    const f = frame(i, 1, 0.5), g = frame(i, -1, 0.5), mx = (f.x + g.x) / 2, mz = (f.z + g.z) / 2, span = Math.hypot(f.x - g.x, f.z - g.z), top = samples[i].y + 7;
+    for (let k = 0; k < 8; k++) { const u = (k + 0.5) / 8 - 0.5; box(k % 2 ? 0x2c2422 : 0xffc400, span / 8, 1.3, 0.4, mx + (f.x - g.x) * u, top, mz + (f.z - g.z) * u, { ry: f.ry + Math.PI / 2 }); }
+    for (const q of [f, g]) box(0x2c2422, 0.5, 7.4, 0.5, q.x, samples[i].y + 3.3, q.z);
+  }
+  for (const sd of [1, -1]) for (let k = 0; k < 3; k++) { const f = frame(lip - 3 + k * 2, sd, 0.2); box(k % 2 ? 0x2c2422 : 0xffc400, 1.3, 3, 2, f.x, samples[f.k].y + 1.5, f.z, { ry: f.ry }); }
+  const SHIRTS = [0xe8322f, 0xffd23a, 0x2f6bff, 0xffffff, 0x3fb950, 0xff7a1f];
+  const deckF = frame(1228, -1, 4), by = samples[1228].y;
+  for (let t = 0; t < 4; t++) {
+    const [tx, tz] = deckF.at(0, t * 2.2), h = by + 0.8 + t * 1.1;
+    box(0x8d9092, 2.2, h - by + 8, 30, tx, h - (h - by + 8) / 2, tz, { ry: deckF.ry });
+    for (let c = 0; c < 22; c++) { const [px, pz] = deckF.at((rand() - 0.5) * 28, t * 2.2 + (rand() - 0.5)); box(SHIRTS[(rand() * SHIRTS.length) | 0], 0.5, 0.95, 0.5, px, h + 0.47, pz); }
+  }
+
+  // ---- Obsidian spires and dead trees out on the slopes, in groups ----
+  for (let t = 0, n = 0; t < 900 && n < 54; t++) {
+    const x = minX - 20 + rand() * (maxX - minX + 40), z = minZ - 20 + rand() * (maxZ - minZ + 40);
+    if (noise(x / 42 + 4, z / 42 + 8) < 0.56 || ground.floorDist(x, z).u < 3 || riverD(x, z) < 12 || pitD(x, z) < 10 || Math.hypot(x - AX, z - AZ) < 46) continue;
+    const y = heightAt(x, z);
+    if (n % 3) { const h = 5 + rand() * 10, w = 1.2 + rand() * 1.8; b.put(SPIRE, n % 2 ? 0x3d3230 : 0x564845, x, y + h / 2 - 0.5, z, { ry: rand() * 6, rz: (rand() - 0.5) * 0.25, sx: w, sy: h, sz: w }); }
+    else {
+      box(0x4a3a30, 0.4, 4, 0.4, x, y + 2, z, { rz: (rand() - 0.5) * 0.2 });
+      for (const sd of [1, -1]) box(0x4a3a30, 0.22, 2.2, 0.22, x + sd * 0.7, y + 3.8, z, { ry: rand() * 6, rz: -sd * 0.7 });
+    }
+    n++;
+  }
+  // Lumps of sulphur and scorched rock along the rivers
+  for (const r of RIVERS) for (let i = 0; i < r.length - 1; i++) for (let k = 0; k < 7; k++) {
+    const u = rand(), x = lerp(r[i][0], r[i + 1][0], u) + (rand() - 0.5) * 20, z = lerp(r[i][1], r[i + 1][1], u) + (rand() - 0.5) * 20;
+    if (ground.floorDist(x, z).u < 1) continue;
+    b.put(LUMP, k % 3 ? 0x564845 : 0xc9a850, x, heightAt(x, z) + 0.2, z, { ry: rand() * 6, sx: 1 + rand() * 2, sy: 0.6 + rand(), sz: 1 + rand() * 2 });
+  }
+
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+
+  // ---- What moves: the plume over the crater, steam from the station, lava bombs arcing onto the cone, sparks ----
+  const PUFFS = 22, puffs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), PUFFS), STACKS = [];
+  for (const sd of [1, -1]) for (let i = -30; i < 66; i += 48) { const f = frame(i, sd, 5.5), [sx, sz] = f.at(-5, 7.5); STACKS.push([sx, f.y + 15, sz]); }
+  const pc = new THREE.Color(), col2 = (i, grey) => puffs.setColorAt(i, pc.setRGB(grey, grey * 0.98, grey * 0.96));
+  for (let i = 0; i < PUFFS; i++) col2(i, i < 14 ? 0.78 - (i % 4) * 0.05 : 0.96);
+  puffs.frustumCulled = false;
+  const BOMBS = 4, bombs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.9, 0), new THREE.MeshBasicMaterial({ color: 0xff7a1f, fog: false }), BOMBS);
+  bombs.frustumCulled = false;
+  trackRoot.add(puffs, bombs);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+  let clock = 0;
+  const place = (dt) => {
+    clock += dt;
+    lavaTex.offset.set(clock * 0.012, -clock * 0.008);
+    for (let i = 0; i < PUFFS; i++) {
+      let u, s;
+      if (i < 14) { // the plume: rises and widens, leaning with the wind
+        u = (clock * 0.05 + i / 14) % 1; s = 3 + u * 13;
+        p.set(AX + u * 34 + Math.sin(i * 2.4) * (2 + u * 6), 47 + u * 62, AZ + u * 14 + Math.cos(i * 1.7) * (2 + u * 6));
+      } else {
+        const st = STACKS[(i - 14) % STACKS.length]; u = (clock * 0.16 + (i - 14) * 0.37) % 1; s = 0.8 + u * 2.6;
+        p.set(st[0] + u * 3, st[1] + u * 8, st[2] + u);
+      }
+      puffs.setMatrixAt(i, m.compose(p, q.identity(), sc.setScalar(s)));
+    }
+    puffs.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < BOMBS; i++) { // visual only, well off the road: up from the crater and back down on the cone
+      const u = (clock * 0.24 + i * 0.27) % 1, a = i * 1.57 + Math.floor(clock * 0.24 + i * 0.27) * 2.4, reach = 6 + u * 9;
+      p.set(AX + Math.cos(a) * reach, 46 + 26 * 4 * u * (1 - u) - u * 8, AZ + Math.sin(a) * reach);
+      bombs.setMatrixAt(i, m.compose(p, q.identity(), sc.setScalar(1)));
+    }
+    bombs.instanceMatrix.needsUpdate = true;
+  };
+  place(0);
+  return { update(dt) { sky.update(); place(dt); } };
+}
+const BASALT_HEX = [0x564845, 0x4b4548, 0x5e4f4a];
 
 /** Where a prop beside the road stands: side 1 = left, `off` metres past the rail. [x, z] */
 function besideRoad({ samples, normals, wL, wR, oL, oR }, i, side, off) {
