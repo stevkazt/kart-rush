@@ -9,7 +9,21 @@
 // bones (every part follows exactly one joint), so a fully animated character is still one draw call
 // (+1 if it has glossy parts, +1 if it has glowing ones) instead of one per part (gotcha: ~28 meshes per kart
 // made the phone stutter).
-import * as THREE from 'three';
+import * as T3 from 'three';
+// Rider detail (71.4): rivals are built with fewer segments, about a quarter of the triangles (a rider was 7-37k triangles, the kart under it 312).
+// Every curved part below goes through these, so the builders stay as they are. buildRider sets riderDetail; 1 = as written.
+let riderDetail = 1;
+const seg = (n, min) => (riderDetail === 1 ? n : Math.max(min, Math.round(n * riderDetail)));
+const THREE = {
+  ...T3,
+  SphereGeometry: class extends T3.SphereGeometry { constructor(r, w = 32, h = 16, ...rest) { super(r, seg(w, 6), seg(h, 4), ...rest); } },
+  CapsuleGeometry: class extends T3.CapsuleGeometry { constructor(r, len, cap = 4, radial = 8) { super(r, len, seg(cap, 2), seg(radial, 6)); } },
+  CylinderGeometry: class extends T3.CylinderGeometry { constructor(a, b, h, radial = 32, ...rest) { super(a, b, h, seg(radial, 5), ...rest); } },
+  ConeGeometry: class extends T3.ConeGeometry { constructor(r, h, radial = 32, ...rest) { super(r, h, seg(radial, 5), ...rest); } },
+  TorusGeometry: class extends T3.TorusGeometry { constructor(r, t, radial = 12, tubular = 48, ...rest) { super(r, t, seg(radial, 4), seg(tubular, 6), ...rest); } },
+  TubeGeometry: class extends T3.TubeGeometry { constructor(c, tubular = 64, r, radial = 8, ...rest) { super(c, seg(tubular, 4), r, seg(radial, 4), ...rest); } },
+  LatheGeometry: class extends T3.LatheGeometry { constructor(pts, segs = 12, ...rest) { super(pts, seg(segs, 6), ...rest); } },
+};
 
 export const PAINT_ROLES = ['body', 'accent', 'driver', 'helmet', 'visor']; // what paintKart recolours
 
@@ -131,11 +145,13 @@ function skyEnv() {
  * update(dt, s) runs every frame with s = { speed 0..1, steer -1..1 (+ = right), drift 0..1, boost 0/1, bump 0/1,
  * fire 0/1 (used an item in the last 0.4 s) }.
  */
-export function buildRider(r, colors, y0) {
+export function buildRider(r, colors, y0, detail = 1) {
+  riderDetail = detail;
   const R = rig();
   const spec = DRIVERS[r.name] ?? FALLBACK;
   const update = spec.build(R, y0) ?? null;
   const baked = bakeRig(R, colors, !!spec.smooth, spec.gloss, spec.matte); // matte: per-driver roughness
+  riderDetail = 1;
   R.glow = baked.glow; // for the animation hook (pulses)
   return {
     name: r.name, ...baked, update,
@@ -181,9 +197,10 @@ function taperZ(g, z0, z1, to) {
   return g;
 }
 /** A tube along a smooth curve through pts, radius radius(u, v) for u 0..1 along it (v 0..1 round it). */
-export function sweep(pts, radius, tubular = 40, radial = 16) {
+export function sweep(pts, radius, tubularIn = 40, radialIn = 16) {
   const curve = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(...q)));
-  const g = new THREE.TubeGeometry(curve, tubular, 1, radial, false);
+  const g = new THREE.TubeGeometry(curve, tubularIn, 1, radialIn, false);
+  const { tubularSegments: tubular, radialSegments: radial } = g.parameters; // (a rival's rider has fewer than asked for)
   const p = g.attributes.position, c = new THREE.Vector3(), v = new THREE.Vector3();
   for (let i = 0; i <= tubular; i++) {
     curve.getPointAt(i / tubular, c);

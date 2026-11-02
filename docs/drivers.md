@@ -118,3 +118,6 @@ Moved out of CLAUDE.md (2026-10-17). Looks, the rig, every character (Nova..Hex)
   **Glow parts (build 35):** `part(..., { glow: true })` = third material group, unlit `MeshBasicMaterial`
   (`R.glow`, its colour multiplies to pulse; eyes and crescent pulse together). Rider state got `bump` (0/1, a
   kart-to-kart contact in the last 0.6 s: `k.bumpT` set in the karts' collide listener).
+
+## Rider detail (build 71.4)
+Rivals are built at `RIVAL_DETAIL` 0.5 (`buildRider(r, colors, y0, detail)`): the local `THREE` in drivers.js wraps the curved geometries so their segment counts scale with `riderDetail`, and the builders stay as they are. **A builder that indexes vertices must read the real counts from `geometry.parameters`, not the ones it asked for** (`sweep` got this wrong at first: Koda's tail collapsed). After changing a driver, check it at low detail too: a copy of the game with `full ? 1 : RIVAL_DETAIL` replaced by `RIVAL_DETAIL`, then `DRIVER=x dev/test.sh studio back,side`. Only the player's full-detail rider casts a shadow. `riderPool` key = name, plus `+` for full detail.

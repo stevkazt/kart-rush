@@ -93,6 +93,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
     vertex-coloured strip (per-segment boxes overlapped and z-fought, the "laggy rails"); colliders unchanged.
     The sun's shadow camera snaps to texels in light space (`lightQ`) so shadow edges don't crawl.
     Frame meter: tap the build label on the title screen (fps, frames > 33 ms, worst frame; `kartrush.perf`).
+    **Anything that changes a material's shader mid-race (e.g. `transparent`) must be warmed too** (`ghostMats`, 71.5). Warm-up draws everything with culling off. Race log: `fps` every 5 s, `slow` over 50 ms.
 
 13. **Cornering grip / rails (2026-10-16).** The assist's `maxLateralAccel` + yaw slacks, not the tyres, set how hard
     a kart corners; the auto-drift (full lock above 54 km/h) added most of it. At 22 / drift slack 0.4 the kart pulled
@@ -101,6 +102,8 @@ launcher repo later. The LAN server above still works for quick testing (no offl
     `applyStabilityAssist` from each kart's `collide` hits). The scrape is a share of speed: a fixed 8 m/s^2 nearly
     cancelled the engine and pinned karts to the rail. AI `cornerGrip` dropped to 20-25 to match (24-30 hit the hairpin rail).
     Menu buttons fire on pointerup (`onTap`), not click: iOS dropped some synthesised clicks (START needed 2 taps).
+
+14. **Rail seams (build 71.2).** Rails are rows of boxes: a contact normal mostly ALONG the road is the end face of the next box, not a hit (`railSnag`). Without this a glancing touch stops a kart dead. When giving the speed back, give none into the rail or karts dig in.
 
 ## Testing
 ```bash
@@ -140,6 +143,7 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
+- **State 2026-11-01 (build 72, committed and pushed):** five-track plan, track by track with the user's phone test after each (history.md 'Five-track plan'). Green Valley is approved and done (scenery left as is, user); next Canyon Run, then Frost Peak. **Scenery must stay cheap: batch it with `propBatch` (docs/tracks.md); the user wants landmarks, not more trees.**
 - **State 2026-10-18 (builds 70.1-70.20, HEAD 583ce94, UNCOMMITTED, nothing pushed since 70):** green-shell self-hit fix (bots aim like the player + a wall check, 70.4), no post-hit ghost after a banana (70.5), debug shape tracks incl. **Spiral Run** with road gaps, red pads, bank runs and a centre piece (70.2-70.20; see docs/tracks.md 'Debug shape-test tracks and track features' and history.md). The star-at-start question was answered (luck + grid bots take row 1): keep as is. Difficulty work paused (next: stronger player catch-up; leading-player blue-shell protection needs the user's OK).
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
 - **Hit motions all approved (2026-10-17, build 65.5, uncommitted):** bomb ejects the driver, `bombFire` explosion; see history.md. Bones/burn/skeleton gore and the age banner still owed.

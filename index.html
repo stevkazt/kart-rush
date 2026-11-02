@@ -83,6 +83,8 @@
 
     <!-- ===== Menu / results overlay ===== -->
     <div id="overlay">
+      <!-- Until main.js has finished booting (three.js comes from a CDN): just this, not the unlaid-out lobby -->
+      <div id="boot"><h1>KART<span>RUSH</span></h1><p>Loading&hellip;</p></div>
       <!-- Lobby: header (profile, settings), logo + START on the left, the open middle frames the player's kart
            (lobby camera, updateCamera), RACE SETUP on the right (each card opens #pick-screen) -->
       <div id="menu-screen" class="screen lobby">

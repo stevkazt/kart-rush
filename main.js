@@ -27,6 +27,8 @@ const CFG = {
     wallStride: 4,     // samples per wall segment
     roadStride: 2,     // samples per safety-net box under a road with heights (flat roads use one ground plane)
     netDepth: 0.25,    // ...that far below the surface the wheels ride on (see buildRoadBodies)
+    openEase: 28,      // a track's `openEdges` [from idx, to idx, side (1 left, -1 right), metres]: the rail stands back from the curb that far, with
+                       // grass between (flat tracks only: hilly ones have no ground beside the road), easing out and back in over this many metres
   },
 
   // Layouts. Control points are (x, z[, y height[, halfWidth]]) of a closed centripetal Catmull-Rom loop;
@@ -37,21 +39,31 @@ const CFG = {
   // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges).
   tracks: {
     meadow: {
-      name: 'Green Valley', icon: 'pine', theme: 'meadow',
+      name: 'Green Valley', icon: 'pine', theme: 'meadow', farm: true,
       // ~850 m: main straight, fast right, boost straight, a 12-13 m hairpin (several points along it: a
       // single apex point makes a cusp), flowing chicane, middle S-bends, fast sweeper, a 16 m kink on
       // the left, back to the line. >= 26 m between different parts of the loop.
       points: [
         [-20, -95], [50, -95], [95, -88], [118, -60], [126, -25], [126, 10],
-        [124.1, 35.1], [121.5, 39.6], [117.5, 43], [112.6, 44.8], [107.4, 44.8], [102.5, 43],
-        [98.5, 39.6], [95.9, 35.1], [95, 30], [92, 10], [84, -8], [62, -22],
+        // 71.1: half width 12 on the last 4 (roadWidths maps points by index share, so these cover samples ~250-330: the hairpin), for room on its outside
+        [124.1, 35.1], [121.5, 39.6], [117.5, 43], [112.6, 44.8], [107.4, 44.8], [102.5, 43, 0, 12],
+        [98.5, 39.6, 0, 12], [95.9, 35.1, 0, 12], [95, 30, 0, 12], [92, 10], [84, -8], [62, -22],
         [38, -18], [20, -2], [4, 16], [-6, 36], [-4, 56], [-2, 71.4],
         [-2.9, 78.3], [-6, 84.6], [-10.9, 89.6], [-17.1, 92.9], [-24, 94], [-60, 96],
         [-85, 88], [-105, 62], [-112, 28], [-100, -3], [-112, -35], [-102, -75],
         [-70, -93],
       ],
       boxRows: [95, 241, 450, 670],                      // sample index of each row of item boxes (4th: build 36)
-      pads: [[200, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]
+      pads: [[30, 3], [335, -2], [595, 0], [870, 2.5]], // boost pads: [sample index, lane]. 71.2: the first one was at 200 (it shot karts into the hairpin, and the auto-gas lifted right after), then 170 in 71.1 (on a bend: rail at 119 km/h a second later)
+      openEdges: [[600, 690, 1, 14], [124, 170, 1, 10], [532, 560, 1, 10], [358, 398, -1, 12]], // grass run-off on the outside of these bends (see CFG.track.openEase)
+      // 71.7 (user: remove the rails, give the track itself a theme): what the barrier looks like, per side, [from idx, to idx, kind]; anything else is a fence.
+      // Only the look: the colliders are the rails' as ever. Drawn by buildFarm; `edges` stops buildWalls drawing the rail.
+      edges: {
+        1: [[880, 917, 'boards'], [0, 60, 'boards'], [190, 255, 'stone'], [255, 335, 'tyres'], [335, 520, 'hedge'], [745, 835, 'stone']],
+        '-1': [[880, 917, 'boards'], [0, 60, 'boards'], [60, 190, 'hedge'], [190, 255, 'stone'], [255, 335, 'tyres'], [400, 470, 'hedge'], [540, 745, 'hedge'], [745, 835, 'stone']],
+      },
+      // a country road, not a circuit: warmer tarmac, softer dashes, dirt along the edges; red and white curbs only at the tight corners
+      palette: { road: [0x6a665f, 0x67635c], dash: 0xe6e0cc, shoulder: [0xa58c63, 0x9c845c], wear: 0x5e5a53 },
     },
     canyon: {
       name: 'Canyon Run', icon: 'cactus', theme: 'desert',
@@ -225,7 +237,12 @@ const CFG = {
     railClimb: 1.0,         // m/s a kart in rail contact may rise beyond the road's own slope (stops it riding up the wall)
     railFree: 7,            // m/s^2 nudge along the road when pinned on a rail with the gas held (below railFreeBelow)
     railFreeBelow: 3,       // m/s
+    railSeam: 0.7,          // a rail contact whose normal is more than this share along the road is a seam between boxes, not a hit (see railSnag)
+    railSeamOff: 1,         // ...m/s the kart eases off the rail after one
+    railPinSpeed: 12,       // m/s: below this the wheel ignores steering into the rail the kart is touching (see driveKart)
     railTurn: 8,            // rad/s^2 swinging a nose-into-the-rail kart along it (build 45: head-on hits stopped it dead / flipped it)
+    offroadSpeed: 17,       // run-off grass (`openEdges`): speed it slows the kart to (m/s; a star or a boost ignores it)...
+    offroadDrag: 0.9,       // ...share of speed lost per second until then, full 1.5 m past the curb
     wallScrape: 0.2,        // share of speed lost per second sliding along a rail (~9 m/s^2 at top speed,
                             // little when crawling off it; rails had no friction: free to lean on)
 
@@ -434,7 +451,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '71'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -515,12 +532,16 @@ function layoutMirror(w) {
   if (f) Object.assign(f.style, { left: `${mirror.rect.x}px`, top: `${mirror.rect.y}px`, width: `${mirror.rect.w}px`, height: `${mirror.rect.h}px` });
 }
 function renderMirror(bp, yaw) {
-  const fx_ = Math.sin(yaw), fz_ = Math.cos(yaw);
-  mirror.cam.position.set(bp.x - fx_ * 1.6, bp.y + 1.1, bp.z - fz_ * 1.6);
-  mirror.cam.lookAt(mirror.look.set(bp.x - fx_ * 20, bp.y + 1.0, bp.z - fz_ * 20));
-  renderer.setRenderTarget(mirror.target);
-  renderer.render(scene, mirror.cam);
-  renderer.setRenderTarget(null);
+  // 71.4: the scene is redrawn for the mirror every other frame (a third of the frame's work, for a 150 px picture); its picture is shown every frame
+  mirror.odd = !mirror.odd;
+  if (mirror.odd) {
+    const fx_ = Math.sin(yaw), fz_ = Math.cos(yaw);
+    mirror.cam.position.set(bp.x - fx_ * 1.6, bp.y + 1.1, bp.z - fz_ * 1.6);
+    mirror.cam.lookAt(mirror.look.set(bp.x - fx_ * 20, bp.y + 1.0, bp.z - fz_ * 20));
+    renderer.setRenderTarget(mirror.target);
+    renderer.render(scene, mirror.cam);
+    renderer.setRenderTarget(null);
+  }
   const r = mirror.rect, sz = renderer.getSize(new THREE.Vector2()), H = sz.y;
   renderer.autoClear = false;
   renderer.setScissorTest(true);
@@ -706,7 +727,17 @@ function buildTrack(def, th) {
     }
   }
   ice[N] = ice[0];
-  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, bank, wallH, hilly, ice, gap, levelColors: def.levelColors };
+  // Run-off (71.1): how far each sample's rail stands back from the curb, per side (see CFG.track.openEase)
+  const oL = new Float32Array(N + 1), oR = new Float32Array(N + 1), openN = Math.max(1, Math.round(T.openEase / spacing));
+  for (const [from, to, side, out] of def.openEdges || []) {
+    const o = side > 0 ? oL : oR;
+    for (let i = from - openN; i <= to + openN; i++) {
+      const v = out * smoothstep(0, 1, Math.min(1, (i - from + openN) / openN, (to + openN - i) / openN));
+      o[(i + N) % N] = Math.max(o[(i + N) % N], v);
+    }
+  }
+  oL[N] = oL[0]; oR[N] = oR[0];
+  const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, oL, oR, bank, wallH, hilly, ice, gap, levelColors: def.levelColors, edges: def.edges };
   track = data; // the road helpers below (surfaceY, roadPoint...) read the global
 
   if (hilly) {
@@ -725,17 +756,31 @@ function buildTrack(def, th) {
   }
 
   // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
-  const P = th.palette;
+  const P = { ...th.palette, ...def.palette };
   trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02,
     (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : (P.ice && ice[i] > 0.5 ? P.ice : P.road)[((i / 10) | 0) % 2])));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
   trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
   const lc = def.levelColors; // the curbs follow the rails' level colours (70.17)
+  // P.shoulder (71.7): a track with a dirt edge keeps real curbs for its tight corners only
+  const tight = new Uint8Array(N + 1);
+  if (P.shoulder) for (let i = 0; i < N; i++) if (radius[i] < 26) for (let d = -14; d <= 14; d++) tight[(i + d + N) % N] = 1;
   const curbColor = (i) => (lc && i >= lc.from && i <= lc.to
-    ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : P.curb)[((i / 3) | 0) % 2];
+    ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : P.shoulder && !tight[i] ? P.shoulder : P.curb)[((i / 3) | 0) % 2];
   trackRoot.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, curbColor));
   trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, curbColor));
 
+  if (P.shoulder) {
+    // ...a worn, uneven dirt edge past the curb, and darker tarmac where the karts' line runs through the corners
+    const worn = (i) => 0.7 + 0.5 * Math.sin(i * 0.13) + 0.3 * Math.sin(i * 0.37 + 1);
+    trackRoot.add(makeRibbon(data, (i) => wL[i] + T.curb, (i) => wL[i] + T.curb + worn(i), 0.03, (i) => P.shoulder[((i / 5) | 0) % 2]));
+    trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb - worn(i + 90), (i) => -wR[i] - T.curb, 0.03, (i) => P.shoulder[((i / 5) | 0) % 2]));
+    // (its width eases in and out through each corner: switching it on by radius per sample left a jagged, burnt-looking edge)
+    const wear = new Float32Array(N + 1), W = 12;
+    for (let i = 0; i < N; i++) { let sum = 0; for (let d = -W; d <= W; d++) sum += radius[(i + d + N) % N] < 45 ? 1 : 0; wear[i] = 1.2 * sum / (2 * W + 1); }
+    wear[N] = wear[0];
+    trackRoot.add(makeRibbon(data, (i) => line[i % N] - wear[i], (i) => line[i % N] + wear[i], 0.03, (i) => (wear[i] > 0.05 || wear[i + 1] > 0.05 ? P.wear : null)));
+  }
   buildWalls(data, P);
   buildStartLine(data, P);
   return data;
@@ -922,6 +967,10 @@ function roadWidths(def, curve, tangents, normals, N, spacing) {
 function clampLane(i, x, margin = 1.5) {
   return clamp(x, -track.wR[i] + margin, track.wL[i] - margin);
 }
+/** How far from the centre line the rail's road face is at sample i, on the side of lateral offset `lat`. */
+function railLat(i, lat) {
+  return (lat > 0 ? track.wL[i] + track.oL[i] : track.wR[i] + track.oR[i]) + CFG.track.curb;
+}
 
 /**
  * Racing line as a lateral offset per sample: the minimum-curvature path inside the road. Starting on the
@@ -985,7 +1034,7 @@ function makeRibbon({ N, samples, normals, bank, gap }, inner, outer, y, colorAt
  * z-fought: the rails flickered as the camera moved.) Rails follow the road's height and reach 0.5 m
  * below it, so no gap opens under them on slopes.
  */
-function buildWalls({ N, samples, normals, wL, wR, wallH, gap, levelColors: lc }, P) {
+function buildWalls({ N, samples, normals, wL, wR, oL, oR, wallH, gap, levelColors: lc, edges }, P) {
   const T = CFG.track;
   const th = T.wallThickness, k = T.wallStride, sink = 0.5;
   const pos = [], col = [];
@@ -996,8 +1045,8 @@ function buildWalls({ N, samples, normals, wL, wR, wallH, gap, levelColors: lc }
   const chunks = staticChunks(physMats.wall);
 
   for (const side of [1, -1]) {
-    const w = side > 0 ? wL : wR;
-    const off = (i) => w[i] + T.curb + th / 2; // wall centre line
+    const w = side > 0 ? wL : wR, o = side > 0 ? oL : oR;
+    const off = (i) => w[i] + o[i] + T.curb + th / 2; // wall centre line
     const base = (i) => surfaceY(i, off(i) * side);
     // corner points at sample i, `o` metres outward from the wall centre line (+- th/2), `y` above its base
     const edge = (i, o, y) => {
@@ -1008,13 +1057,15 @@ function buildWalls({ N, samples, normals, wL, wR, wallH, gap, levelColors: lc }
       const j = Math.min(i + k, N);
       if (gap.subarray(i, j).some((g) => g)) continue; // no rail over the cut road
       const inA = -th / 2, outA = th / 2, hi = wallH[i], hj = wallH[j];
-      quad(edge(i, inA, -sink), edge(j, inA, -sink), edge(i, inA, hi), edge(j, inA, hj));     // road-side face
-      quad(edge(i, outA, hi), edge(j, outA, hj), edge(i, outA, -sink), edge(j, outA, -sink)); // outside face
-      quad(edge(i, inA, hi), edge(j, inA, hj), edge(i, outA, hi), edge(j, outA, hj));         // top
-      // levelColors (70.16): { from, to, step, colors: [[a, b], ...] } rail colours by height (the spiral's levels)
-      c.set((lc && i >= lc.from && i <= lc.to
-        ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : P.rail)[((i / k) | 0) % 2]);
-      for (let v = 0; v < 18; v++) col.push(c.r, c.g, c.b);
+      if (!edges) { // (a track with `edges` draws its own barriers: only the colliders here)
+        quad(edge(i, inA, -sink), edge(j, inA, -sink), edge(i, inA, hi), edge(j, inA, hj));     // road-side face
+        quad(edge(i, outA, hi), edge(j, outA, hj), edge(i, outA, -sink), edge(j, outA, -sink)); // outside face
+        quad(edge(i, inA, hi), edge(j, inA, hj), edge(i, outA, hi), edge(j, outA, hj));         // top
+        // levelColors (70.16): { from, to, step, colors: [[a, b], ...] } rail colours by height (the spiral's levels)
+        c.set((lc && i >= lc.from && i <= lc.to
+          ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : o[i] > 0 && P.fence || P.rail)[((i / k) | 0) % 2]);
+        for (let v = 0; v < 18; v++) col.push(c.r, c.g, c.b);
+      }
 
       // collider: one box per segment (overlap is harmless for physics), from `sink` below to the top,
       // grouped into bodies of 16
@@ -1032,6 +1083,7 @@ function buildWalls({ N, samples, normals, wL, wR, wallH, gap, levelColors: lc }
     }
     chunks.done(); // one side's rail never shares a body with the other's
   }
+  if (edges) return;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
@@ -1105,7 +1157,7 @@ const THEMES = {
     sky: 0x8fd8ff, fog: [0x8fd8ff, 90, 330], hemi: [0xffffff, 0x5c9a3c, 1.3], sun: [0xfff4e0, 2.2], sunOffset: [40, 80, 30],
     palette: {
       road: [0x5b5e66, 0x55585f], dash: 0xf2f2f2, curb: [0xe8322f, 0xffffff],
-      rail: [0x2f6bff, 0xffffff], arch: [0xffd23a, 0xe8322f],
+      rail: [0x2f6bff, 0xffffff], arch: [0xffd23a, 0xe8322f], fence: [0x9a6b3f, 0x86592f],
     },
     build: buildMeadow,
   },
@@ -1131,9 +1183,10 @@ const THEMES = {
   },
 };
 
-function buildMeadow({ N, samples, def, tangents, normals, wL }) {
+function buildMeadow(data) {
+  const { N, samples, def, tangents, normals, wL } = data;
   const rand = seededRand(1337);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(def?.plain ? 1400 : 700, def?.plain ? 1400 : 700), lambert(0x6cc04a));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(def?.plain ? 1400 : 700, def?.plain ? 1400 : 700), lambert(0x6cc04a, { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 })); // (71.3: pushed back in depth: the road is 2 cm above it and z-fought from some camera heights, green road with grey streaks)
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   trackRoot.add(ground);
@@ -1189,6 +1242,7 @@ function buildMeadow({ N, samples, def, tangents, normals, wL }) {
       }
     }
   }
+  if (!def?.plain) buildChevrons(data); // 71.1: the other themes have them too
   if (def?.plain) return { update() {} }; // 70.8: shape-test tracks get the ground only (the ring of mountains at r 240-280 stood on the big loops' road)
 
   const distToTrack = (x, z) => {
@@ -1200,8 +1254,26 @@ function buildMeadow({ N, samples, def, tangents, normals, wL }) {
     return Math.sqrt(d);
   };
 
+  // none on the run-off (openEdges)
+  const onRunOff = (x, z) => {
+    for (let i = 0; i < N; i += 3) {
+      if (!data.oL[i] && !data.oR[i]) continue;
+      const s = samples[i], r = Math.max(wL[i] + data.oL[i], data.wR[i] + data.oR[i]) + CFG.track.curb + CFG.track.wallThickness + 2;
+      if (Math.hypot(x - s.x, z - s.z) < r) return true;
+    }
+    return false;
+  };
+
   // Trees (instanced)
-  const TREE_COUNT = 110;
+  // 71.3 (user: a bunch of trees around doesn't make the scenery): Green Valley has a few groves, set back from the road, and (71.6) an avenue
+  const groves = def?.farm ? [[0, -142], [-58, -52], [175, -60], [-160, -70], [-72, 8], [30, 118], [62, -66]] : null;
+  const land = def?.farm ? farmLand(data, rand, ground) : null;
+  const avenue = [];
+  if (def?.farm) for (let i = 826; i < 905; i += 11) for (const sd of [1, -1]) {
+    const lat = sd * (wL[i] + CFG.track.curb + CFG.track.wallThickness + 6);
+    avenue.push([samples[i].x + normals[i].x * lat, samples[i].z + normals[i].z * lat]);
+  }
+  const TREE_COUNT = groves ? 40 + avenue.length : 110;
   const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 1.6, 6), lambert(0x8a5a2b), TREE_COUNT);
   const leaves = new THREE.InstancedMesh(new THREE.ConeGeometry(1.8, 4, 7), lambert(0xffffff), TREE_COUNT);
   trunks.castShadow = leaves.castShadow = true;
@@ -1210,15 +1282,17 @@ function buildMeadow({ N, samples, def, tangents, normals, wL }) {
   const color = new THREE.Color();
   let placed = 0;
   for (let tries = 0; tries < 2000 && placed < TREE_COUNT; tries++) {
-    const x = (rand() - 0.5) * 320;
-    const z = (rand() - 0.5) * 320;
-    if (distToTrack(x, z) < CFG.track.halfWidth + 7) continue;
-    const sc = 0.8 + rand() * 0.9;
+    const a = avenue[placed], g = groves?.[tries % groves.length];
+    const x = a ? a[0] : (rand() - 0.5) * (g ? 34 : 320) + (g ? g[0] : 0);
+    const z = a ? a[1] : (rand() - 0.5) * (g ? 34 : 320) + (g ? g[1] : 0);
+    if (!a && (distToTrack(x, z) < CFG.track.halfWidth + 7 || onRunOff(x, z) || (groves && FARM_SPOTS.some(([sx, sz, r]) => Math.hypot(x - sx, z - sz) < r)))) continue;
+    const sc = a ? 1.25 : 0.8 + rand() * 0.9;
+    const gy = land ? land.heightAt(x, z) : 0;
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI);
     s.set(sc, sc, sc);
-    m.compose(p.set(x, 0.8 * sc, z), q, s);
+    m.compose(p.set(x, gy + 0.8 * sc, z), q, s);
     trunks.setMatrixAt(placed, m);
-    m.compose(p.set(x, (1.6 + 2) * sc, z), q, s);
+    m.compose(p.set(x, gy + (1.6 + 2) * sc, z), q, s);
     leaves.setMatrixAt(placed, m);
     leaves.setColorAt(placed, color.set(greens[(rand() * greens.length) | 0]));
     placed++;
@@ -1226,34 +1300,333 @@ function buildMeadow({ N, samples, def, tangents, normals, wL }) {
   trunks.count = leaves.count = placed;
   trackRoot.add(trunks, leaves);
 
-  // Distant low-poly mountains
+  // Distant low-poly mountains and clouds, instanced (71.3: 82 separate draw calls before, for those in view)
   const mountainColors = [0x7a8fb8, 0x8aa0c8, 0x6d82ad];
+  const mtns = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), lambert(0xffffff), 18); // (71.6: were 5-sided cones, plain triangles on the horizon)
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2 + rand() * 0.2;
     const r = 240 + rand() * 40;
     const h = 40 + rand() * 50;
-    const mtn = new THREE.Mesh(new THREE.ConeGeometry(30 + rand() * 30, h, 5), lambert(mountainColors[i % 3]));
-    mtn.position.set(Math.cos(a) * r, h / 2 - 1, Math.sin(a) * r);
-    mtn.rotation.y = rand() * Math.PI;
-    trackRoot.add(mtn);
+    const w = 30 + rand() * 30;
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI);
+    mtns.setMatrixAt(i, m.compose(p.set(Math.cos(a) * r, -3, Math.sin(a) * r), q, s.set(w, h * 0.8, w)));
+    mtns.setColorAt(i, color.set(mountainColors[i % 3]));
+  }
+  trackRoot.add(mtns);
+
+  const puffAt = [];
+  for (let i = 0; i < 14; i++) {
+    const puffs = 3 + ((rand() * 3) | 0), cx = (rand() - 0.5) * 400, cy = 45 + rand() * 25, cz = (rand() - 0.5) * 400;
+    for (let j = 0; j < puffs; j++) puffAt.push([cx + j * 4 - puffs * 2, cy + rand() * 2, cz + rand() * 3, 3 + rand() * 3]);
+  }
+  const clouds = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), lambert(0xffffff, { emissive: 0x777777 }), puffAt.length); // (emissive: the green ground light made their undersides murky)
+  q.identity();
+  puffAt.forEach(([x, y, z, r], i) => clouds.setMatrixAt(i, m.compose(p.set(x, y, z), q, s.set(r, r, r))));
+  trackRoot.add(clouds);
+  const farm = def?.farm ? buildFarm(data, rand, land) : null;
+  return { update(dt) { farm?.update(dt); } };
+}
+
+/** Static scenery merged into one vertex-coloured mesh: however many pieces, one draw call (and one more for its shadow). */
+function propBatch() {
+  const pos = [], col = [], c = new THREE.Color(), v = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), UP = new THREE.Vector3(), sc = new THREE.Vector3();
+  return {
+    /** Adds `geo` at (x, y, z), turned ry around Y and scaled. */
+    put(geo, color, x, y, z, { ry = 0, rz = 0, sx = 1, sy = 1, sz = 1 } = {}) {
+      const g = geo.index ? geo.toNonIndexed() : geo, a = g.attributes.position;
+      m.compose(UP.set(x, y, z), q.setFromEuler(e.set(0, ry, rz)), sc.set(sx, sy, sz));
+      c.set(color);
+      for (let i = 0; i < a.count; i++) {
+        v.fromBufferAttribute(a, i).applyMatrix4(m);
+        pos.push(v.x, v.y, v.z);
+        col.push(c.r, c.g, c.b);
+      }
+      if (g !== geo) g.dispose();
+    },
+    geometry() {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      geo.computeVertexNormals(); // non-indexed: flat, low-poly faces
+      return geo;
+    },
+  };
+}
+
+// Where Green Valley's scenery stands [x, z, radius]: the ground is flat there, and the groves keep out
+const FARM_STREAM = [[66, 46], [82, 36], [100, 22], [122, 12], [142, 10], [165, 18], [196, 14]]; // from the pond, under the road twice
+const FARM_SPOTS = [[112, 74, 8], [-152, 44, 8], [24, 46, 12], [55, 50, 17], [12, -118, 32], [20, -68, 20], [122, -106, 24], [-4, -46, 22], [-52, 58, 22], [66, 96, 18],
+  [150, -14, 34], [106, -30, 12], [-128, -28, 26], [-88, -50, 12], ...FARM_STREAM.map(([x, z]) => [x, z, 9]), [91, 29, 9], [111, 17, 9], [132, 11, 9], [153, 14, 9], [180, 16, 9]];
+
+/**
+ * Green Valley's ground (71.6, user: make it feel less empty, more integrated with the track). The road now runs along a valley floor between faceted green slopes
+ * instead of across a flat sheet. Visual only: the physics ground stays the flat plane, so it must stay at y = 0 wherever a kart can go (road, run-off), and at
+ * the FARM_SPOTS, where the props stand. Returns makeTerrain's lookups.
+ */
+function farmLand(data, rand, plain) {
+  const noise = makeNoise(rand);
+  const level = (x, z) => { // 1 on a farm spot, easing to 0 over 14 m
+    let f = 0;
+    for (const [sx, sz, r] of FARM_SPOTS) f = Math.max(f, 1 - smoothstep(r, r + 14, Math.hypot(x - sx, z - sz)));
+    return f;
+  };
+  const GREENS = [0x63b645, 0x6dc04c, 0x5aab40, 0x77c855].map((h) => new THREE.Color(h));
+  const DARK = new THREE.Color(0x4c9a3c), VERGE = new THREE.Color(0x86cf62);
+  plain.position.y = -0.6; // the old flat sheet only shows beyond the height field's edge now
+  const land = makeTerrain(data,
+    (x, z) => {
+      const k = 1 - level(x, z);
+      const walls = 16 * smoothstep(95, 180, Math.hypot(x - 8, z)); // 71.7: the outer slopes climb higher, so it reads as a valley
+      return [(2 + 15 * noise(x / 60 + 3, z / 60) + walls) * k, 3 + 8 * noise(x / 26, z / 26), 18 + 22 * noise(x / 34 + 9, z / 34), 0.7 * k];
+    },
+    (x, z, h, slope, cc) => {
+      cc.copy(GREENS[(noise(x / 11 + 2, z / 11) * 3.999) | 0]).lerp(DARK, smoothstep(0.12, 0.5, slope) * 0.75);
+      if (h < 0.25) cc.lerp(VERGE, 0.45); // the mown floor of the valley, along the road
+    },
+    { floor: 0, step: 4.5, material: { polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 } });
+  return land;
+}
+
+/**
+ * Green Valley's landmarks (71.3; the user liked the grandstand and the windmill of 71.1, not the extra trees and bushes): something to recognise in each
+ * part of the lap. Visual only, no colliders, clear of the rails. Nearly all of it is one batch: ~5 draw calls in total, less than the clouds cost alone.
+ */
+function buildFarm({ N, samples, tangents, normals, wL, wR, oL, oR, radius, edges }, rand, land) {
+  const b = propBatch(), flat = propBatch();
+  const onSpot = (x, z) => FARM_SPOTS.some(([sx, sz, r]) => Math.hypot(x - sx, z - sz) < r);
+  /** Beside the road at sample i: side 1 = left, `off` metres past the rail. */
+  const beside = (i, side, off) => {
+    const lat = side * ((side > 0 ? wL[i] + oL[i] : wR[i] + oR[i]) + CFG.track.curb + CFG.track.wallThickness + off);
+    return [samples[i].x + normals[i].x * lat, samples[i].z + normals[i].z * lat];
+  };
+  const mat = () => new THREE.MeshLambertMaterial({ vertexColors: true });
+  const BOX = new THREE.BoxGeometry(1, 1, 1), box = (color, w, h, d, x, y, z, o = {}) => b.put(BOX, color, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  const shirts = [0xe8322f, 0xffd23a, 0x2f6bff, 0xffffff, 0x3fb950, 0xff7a1f, 0x9b4dff];
+
+  // Grandstands on the main straight: seats rising away from the road (`dir` -1: towards -z), a crowd, a roof, flags
+  const grandstand = (cx, cz, dir, w, tiers, roof) => {
+    for (let t = 0; t < tiers; t++) {
+      const h = 1.2 + t * 1.2, z = cz + dir * t * 2.4;
+      box(t % 2 ? 0x8c94a3 : 0x9aa3b3, w, h, 2.4, cx, h / 2, z);
+      for (let i = 0; i < w * 0.9; i++) box(shirts[(rand() * shirts.length) | 0], 0.55, 0.95, 0.5, cx + (rand() - 0.5) * (w - 2), h + 0.47, z + (rand() - 0.5) * 0.7);
+    }
+    const back = cz + dir * (tiers - 0.5) * 2.4, top = tiers * 1.2 + 5;
+    for (let i = 0; i <= 2; i++) box(0x4a3a30, 0.4, top, 0.4, cx + (i - 1) * (w / 2), top / 2, back);
+    for (let i = 0; i < 6; i++) box(i % 2 ? roof : 0xffffff, w / 6, 0.4, tiers * 2.4 + 3, cx - w / 2 + (i + 0.5) * (w / 6), top, cz + dir * (tiers * 1.2 - 1.2));
+    for (let i = 0; i <= 2; i++) {
+      const x = cx + (i - 1) * (w / 2);
+      box(0x4a3a30, 0.15, 3, 0.15, x, top + 1.5, back);
+      box(shirts[i * 2], 2, 1.1, 0.08, x + 1, top + 2.4, back);
+    }
+  };
+  grandstand(12, -115, -1, 48, 4, 0x2f6bff);
+  grandstand(20, -74, 1, 30, 3, 0xe8322f);
+
+  // Paddock tents outside the first bend: striped roofs
+  const CONE4 = new THREE.ConeGeometry(1, 1, 4);
+  [[108, -112, 0xe8322f], [124, -108, 0xffd23a], [139, -96, 0x2f6bff]].forEach(([x, z, c]) => {
+    box(0xf4efe4, 9, 2.8, 9, x, 1.4, z, { ry: 0.5 });
+    b.put(CONE4, c, x, 4.2, z, { ry: 0.5 + Math.PI / 4, sx: 7.6, sy: 2.8, sz: 7.6 });
+  });
+
+  // A windmill: tower + cap in the batch, the blades turn. One past the hairpin (seen straight ahead on the way in), one past the sweeper's run-off.
+  const TOWER = new THREE.CylinderGeometry(2, 3.2, 13, 8), CAP = new THREE.ConeGeometry(2.7, 3, 8);
+  const bl = propBatch();
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2, sin = Math.sin(a), cos = Math.cos(a);
+    bl.put(BOX, 0xf4efe4, -sin * 5 + cos * 0.5, cos * 5 + sin * 0.5, 0, { rz: a, sx: 1.5, sy: 8, sz: 0.15 });
+    bl.put(BOX, 0x4a3a30, -sin * 4.75, cos * 4.75, 0, { rz: a, sx: 0.25, sy: 9.5, sz: 0.25 });
+  }
+  const bladeGeo = bl.geometry(), bladeMat = mat(), blades = [];
+  [[112, 74, Math.PI], [-152, 44, 0.6]].forEach(([x, z, ry]) => {
+    b.put(TOWER, 0xf4efe4, x, 6.5, z);
+    b.put(CAP, 0xc23b32, x, 14.5, z);
+    const w = new THREE.Group(), r = new THREE.Mesh(bladeGeo, bladeMat);
+    w.position.set(x, 13, z); w.rotation.y = ry; r.position.z = 3;
+    w.add(r); trackRoot.add(w); blades.push(r);
+  });
+
+  // Barn, silo, hay and a fence by the chicane
+  box(0xc23b32, 9, 5.5, 13, 24, 2.75, 46);
+  box(0xf4efe4, 9.2, 0.5, 13.2, 24, 5.4, 46);
+  b.put(CONE4, 0x4a3a30, 24, 7.3, 46, { ry: Math.PI / 4, sx: 6.5, sy: 3.4, sz: 9.2 });
+  box(0xf4efe4, 0.2, 3.6, 3.4, 19.4, 1.8, 46);
+  b.put(new THREE.CylinderGeometry(2.3, 2.3, 10, 10), 0xb9c2cc, 33, 5, 52);
+  b.put(new THREE.SphereGeometry(2.3, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2), 0xc23b32, 33, 10, 52);
+  const HAY = new THREE.CylinderGeometry(0.85, 0.85, 1.5, 9).rotateZ(Math.PI / 2);
+  [[17, 38, 0.4], [15, 41, 1.2], [18, 56, 2], [31, 37, 0.9], [34, 40, 2.6]].forEach(([x, z, ry]) => b.put(HAY, 0xe3c565, x, 0.85, z, { ry }));
+  for (let i = 0; i < 12; i++) box(0x8a5e36, 0.25, 1.3, 0.25, 12 + i * 3, 0.65, 33);
+  box(0x9a6b3f, 33, 0.18, 0.12, 28.5, 1.05, 33);
+  box(0x9a6b3f, 33, 0.18, 0.12, 28.5, 0.6, 33);
+
+  // A pond with sheep in the infield, and a flock behind the run-off fence
+  const DISC = new THREE.CircleGeometry(1, 18).rotateX(-Math.PI / 2);
+  flat.put(DISC, 0xd9c88f, 55, 0.02, 50, { sx: 15, sz: 10.8 });
+  flat.put(DISC, 0x57b7e6, 55, 0.04, 50, { sx: 13, sz: 9.4 });
+  const WOOL = new THREE.IcosahedronGeometry(1, 0);
+  [[52, 30], [78, 44], [40, 68], [-128, 82], [-134, 58]].forEach(([fx, fz]) => {
+    for (let i = 0; i < 4; i++) {
+      const x = fx + (rand() - 0.5) * 11, z = fz + (rand() - 0.5) * 9, a = rand() * 6.28;
+      const gy = land.heightAt(x, z);
+      b.put(WOOL, 0xf6f3ea, x, gy + 0.62, z, { ry: a, sx: 0.6, sy: 0.5, sz: 0.82 });
+      box(0x33302e, 0.42, 0.42, 0.55, x + Math.sin(a) * 0.9, gy + 0.62, z + Math.cos(a) * 0.9, { ry: a });
+    }
+  });
+
+  // A dirt yard and crop fields, on the level spots (flat batch; nothing here may touch the road)
+  const PLANE = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const grass = [0x63b645, 0x74c852, 0x5eae42, 0x7bcc58];
+  flat.put(DISC, 0xb99a6a, 27, 0.025, 42, { sx: 15, sz: 13 });
+  const field = (cx, cz, w, d, ry, a, c) => { // rows of crop, in two colours, with a hedge round it
+    const rows = Math.round(d / 2.4), sin = Math.sin(ry), cos = Math.cos(ry);
+    for (let i = 0; i < rows; i++) {
+      const o = (i + 0.5) * (d / rows) - d / 2;
+      flat.put(PLANE, i % 2 ? a : c, cx + sin * o, 0.03, cz + cos * o, { ry, sx: w, sz: d / rows });
+    }
+    for (const sd of [-1, 1]) box(0x3e8a3a, w + 1, 0.9, 0.9, cx + sin * sd * (d / 2 + 0.4), 0.45, cz + cos * sd * (d / 2 + 0.4), { ry });
+  };
+  field(-4, -46, 36, 22, 0.15, 0xe2c452, 0xcfae3c); // wheat
+  field(-52, 58, 30, 26, -0.35, 0x8a6a45, 0x6fa648); // ploughed + young crop
+  field(66, 96, 24, 20, 0.5, 0xc98fd6, 0xa974bd);    // lavender
+
+  // 71.6: the villages line the road (they stood on the horizon): you drive down the street, under a stone bridge
+  const cottage = (x, z, ry, wall, roof, toRoad, w = 7, d = 9) => {
+    box(wall, w, 3.6, d, x, 1.8, z, { ry });
+    b.put(CONE4, roof, x, 5, z, { ry: ry + Math.PI / 4, sx: w * 0.82, sy: 2.8, sz: d * 0.82 });
+    // the side facing the road: a door between two windows (ry is about 90 deg, so the house's depth runs along x)
+    const fx = x + toRoad * (d / 2 + 0.04);
+    box(0x6a4a30, 0.08, 2.1, 1.2, fx, 1.05, z);
+    for (const o of [-2.1, 2.1]) box(0x4f6d86, 0.08, 1.1, 1.1, fx, 2.1, z + o);
+  };
+  const church = (x, z, ry) => {
+    box(0xf4efe4, 8, 6, 14, x, 3, z, { ry });
+    b.put(CONE4, 0x9a3f2a, x, 7.6, z, { ry: ry + Math.PI / 4, sx: 6.6, sy: 3.2, sz: 11.4 });
+    box(0xf4efe4, 4.5, 13, 4.5, x - Math.sin(ry) * 8, 6.5, z - Math.cos(ry) * 8, { ry });
+    b.put(CONE4, 0x6d7f92, x - Math.sin(ry) * 8, 16, z - Math.cos(ry) * 8, { ry: ry + Math.PI / 4, sx: 3.6, sy: 6, sz: 3.6 });
+  };
+  const walls = [0xf4efe4, 0xf0dcae, 0xe8c9a0, 0xdfe6ea, 0xf2c9b0], roofs = [0xb5482f, 0x9a3f2a, 0x7a4a2a];
+  const street = [[146, -44], [146, -30], [146, -16], [146, -2], [106, -38], [106, -24], [-128, -52], [-128, -38], [-128, -24], [-128, -10], [-88, -56], [-88, -44]];
+  street.forEach(([x, z], i) => cottage(x, z, Math.PI / 2, walls[i % 5], roofs[i % 3], x === 146 || x === -88 ? -1 : 1));
+  church(158, -22, 0.1);
+  church(-140, -30, -0.15);
+  // The bridge over the street: stone piers beyond the rails, an arched deck, parapets
+  const STONE = 0xb7aa96, STONE2 = 0xa3967f, bx = 126, bz = 16, half = 15;
+  for (const sd of [-1, 1]) {
+    box(STONE, 3, 7, 6, bx + sd * half, 3.5, bz);
+    box(STONE2, 3.4, 0.6, 6.4, bx + sd * half, 7.2, bz);
+    box(STONE, 6, 1, 5, bx + sd * (half + 3.5), 3.4, bz); // the road on top carries on into the hillside
+  }
+  const SPAN = 9;
+  for (let i = 0; i < SPAN; i++) {
+    const u = (i + 0.5) / SPAN - 0.5, x = bx + u * 2 * half, y = 7.3 + (1 - (u * 2) ** 2) * 1.1, w = (2 * half) / SPAN + 0.15, tilt = -u * 0.28;
+    box(i % 2 ? STONE : STONE2, w, 1, 5.4, x, y, bz, { rz: tilt });
+    for (const sd of [-1, 1]) box(STONE2, w, 0.9, 0.5, x, y + 0.9, bz + sd * 2.6, { rz: tilt });
   }
 
-  // Clouds
-  const cloudMat = lambert(0xffffff);
-  const cloudGeo = new THREE.IcosahedronGeometry(1, 0);
-  for (let i = 0; i < 14; i++) {
-    const cloud = new THREE.Group();
-    const puffs = 3 + ((rand() * 3) | 0);
-    for (let j = 0; j < puffs; j++) {
-      const puff = new THREE.Mesh(cloudGeo, cloudMat);
-      puff.scale.setScalar(3 + rand() * 3);
-      puff.position.set(j * 4 - puffs * 2, rand() * 2, rand() * 3);
-      cloud.add(puff);
-    }
-    cloud.position.set((rand() - 0.5) * 400, 45 + rand() * 25, (rand() - 0.5) * 400);
-    trackRoot.add(cloud);
+  // Two hot-air balloons over the infield
+  const BALLOON = new THREE.SphereGeometry(1, 10, 7);
+  [[-30, 34, 8, 0xe8322f], [70, 42, -40, 0xffd23a]].forEach(([x, y, z, c]) => {
+    b.put(BALLOON, c, x, y, z, { sx: 6, sy: 7.2, sz: 6 });
+    box(0x8a5e36, 1.8, 1.4, 1.8, x, y - 9.5, z);
+  });
+
+  // Telegraph poles beside the straights: close to the road, which is what shows speed
+  for (let i = 0; i < N; i += 30) {
+    if (radius[i] < 70) continue;
+    const [x, z] = beside(i, 1, 5);
+    if (onSpot(x, z)) continue;
+    const gy = land.heightAt(x, z);
+    box(0x6f5238, 0.28, 7, 0.28, x, gy + 3.5, z);
+    box(0x6f5238, 2, 0.2, 0.2, x, gy + 6.5, z, { ry: Math.atan2(normals[i].z, -normals[i].x) });
   }
-  return { update() {} };
+
+  // 71.7: the barriers, standing on the rails' colliders with their road faces lined up. Boxes, so each piece costs little (all of it is in the one batch).
+  const STONES = [0xb7aa96, 0xa89b86, 0xc0b39e], HEDGES = [0x3e8a3a, 0x478f3c, 0x38803a], WOOD = [0x8f6a42, 0x7f5c38];
+  const BOARDS = [0xffd23a, 0xe8322f, 0x2f6bff, 0xf4efe4, 0x3fb950, 0xff7a1f];
+  const TYRE = new THREE.CylinderGeometry(0.72, 0.72, 0.55, 8);
+  const th = CFG.track.wallThickness, kinds = { 1: new Array(N).fill('fence'), '-1': new Array(N).fill('fence') };
+  for (const sd of ['1', '-1']) for (const [from, to, kind] of edges[sd]) for (let i = from; i < to && i < N; i++) kinds[sd][i] = kind;
+  const STEP = 4;
+  let tyreLast = null, tyreN = 0;
+  for (const sd of [1, -1]) {
+    tyreLast = null;
+    const at = (i, extra) => { // a point on the barrier's line: `extra` metres past the collider's road face
+      const k = i % N, lat = sd * ((sd > 0 ? wL[k] + oL[k] : wR[k] + oR[k]) + CFG.track.curb + extra);
+      return [samples[k].x + normals[k].x * lat, samples[k].z + normals[k].z * lat];
+    };
+    for (let i = 0; i < N; i += STEP) {
+      const kind = kinds[sd][i], n = (i / STEP) | 0;
+      const piece = (depth) => { // the box from this sample to the next along the barrier, `depth` thick
+        const [x0, z0] = at(i, depth / 2), [x1, z1] = at(i + STEP, depth / 2);
+        return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, len: Math.hypot(x1 - x0, z1 - z0) + 0.12, ry: Math.atan2(x1 - x0, z1 - z0) };
+      };
+      if (kind === 'fence') {
+        const f = piece(th), c = WOOD[n % 2];
+        box(c, 0.1, 0.16, f.len, f.x, 0.55, f.z, { ry: f.ry });
+        box(c, 0.1, 0.16, f.len, f.x, 1.02, f.z, { ry: f.ry });
+        if (n % 2 === 0) { const [px, pz] = at(i, th / 2); box(WOOD[1], 0.2, 1.3, 0.2, px, 0.65, pz, { ry: f.ry }); }
+      } else if (kind === 'stone') {
+        const f = piece(0.8), h = 0.95 + (n % 3) * 0.07;
+        box(STONES[n % 3], 0.8, h, f.len, f.x, h / 2, f.z, { ry: f.ry });
+      } else if (kind === 'hedge') {
+        const f = piece(1.4), h = 1.35 + (n % 4) * 0.08;
+        box(HEDGES[n % 3], 1.4, h, f.len, f.x, h / 2, f.z, { ry: f.ry });
+      } else if (kind === 'boards') {
+        const f = piece(0.25);
+        box(BOARDS[((n / 3) | 0) % BOARDS.length], 0.2, 1.15, f.len, f.x, 0.58, f.z, { ry: f.ry });
+      } else if (kind === 'tyres') {
+        // a stack every 1.5 m along the barrier itself: samples spread out round the outside of a bend, and fixed steps left gaps there
+        for (let j = 0; j < STEP; j++) {
+          const [tx, tz] = at(i + j, 0.72);
+          if (tyreLast && Math.hypot(tx - tyreLast[0], tz - tyreLast[1]) < 1.5) continue;
+          tyreLast = [tx, tz];
+          const c = (tyreN++) % 2 ? 0xe8322f : 0xf4efe4;
+          for (let t = 0; t < 2; t++) b.put(TYRE, t % 2 ? 0x2a2a2d : c, tx, 0.28 + t * 0.55, tz);
+        }
+      }
+    }
+  }
+
+  // A patched-up road: darker repairs here and there
+  for (let k = 0; k < 26; k++) {
+    const i = (rand() * N) | 0, lat = (rand() - 0.5) * 12, t = tangents[i];
+    flat.put(PLANE, k % 3 ? 0x5e5a53 : 0x726e66, samples[i].x + normals[i].x * lat, 0.03, samples[i].z + normals[i].z * lat, { ry: Math.atan2(t.x, t.z), sx: 1.5 + rand() * 2.5, sz: 2 + rand() * 4 });
+  }
+
+  // The stream: from the pond, stopping at each rail, so it reads as running under the road
+  const WATER = 0x57b7e6, BANK = 0xb9c98a;
+  for (let k = 0; k < FARM_STREAM.length - 1; k++) {
+    const [ax, az] = FARM_STREAM[k], [cx, cz] = FARM_STREAM[k + 1], STEPS = Math.ceil(Math.hypot(cx - ax, cz - az) / 3);
+    for (let j = 0; j < STEPS; j++) {
+      const x = ax + ((cx - ax) * (j + 0.5)) / STEPS, z = az + ((cz - az) * (j + 0.5)) / STEPS;
+      let inRoad = false;
+      for (let i = 0; i < N && !inRoad; i += 2) inRoad = Math.hypot(x - samples[i].x, z - samples[i].z) < Math.max(wL[i], wR[i]) + CFG.track.curb + 0.6;
+      if (inRoad) continue;
+      const ry = Math.atan2(cx - ax, cz - az), len = (Math.hypot(cx - ax, cz - az) / STEPS) + 0.3;
+      flat.put(PLANE, BANK, x, 0.03, z, { ry, sx: 7, sz: len });
+      flat.put(PLANE, WATER, x, 0.05, z, { ry, sx: 4.4, sz: len });
+    }
+  }
+
+  // Green hills between the fields and the far mountains (their own instanced mesh: they need no shadow)
+  const hills = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), lambert(0xffffff), 16);
+  const hm = new THREE.Matrix4(), hq = new THREE.Quaternion(), hp = new THREE.Vector3(), hs = new THREE.Vector3(), hc = new THREE.Color();
+  let hillN = 0;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * 6.28 + rand() * 0.25, r = 205 + rand() * 25, w = 34 + rand() * 26, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    hm.compose(hp.set(x, -3, z), hq.identity(), hs.set(w, 20 + rand() * 16, w)); // (71.6: taller, so they still show over the valley's slopes)
+    hills.setMatrixAt(hillN, hm);
+    hills.setColorAt(hillN++, hc.set(grass[i % 4]).multiplyScalar(0.86));
+  }
+  hills.count = hillN;
+  trackRoot.add(hills);
+
+  const props = new THREE.Mesh(b.geometry(), mat());
+  props.castShadow = true;
+  const ground = new THREE.Mesh(flat.geometry(), mat());
+  ground.receiveShadow = true;
+  trackRoot.add(props, ground);
+  return { update(dt) { for (const r of blades) r.rotation.z += dt * 0.9; } };
 }
 
 /** Smooth 2D value noise in [0, 1] (deterministic). */
@@ -1278,11 +1651,11 @@ const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); retu
  * so where two parts of the track are close at different heights the ground follows the lower one.
  * `colorAt(x, z, h, slope, color)` paints it. Adds the mesh to trackRoot; returns the lookups the scenery uses.
  */
-function makeTerrain(data, shape, colorAt) {
-  const { N, samples, normals, wL, wR, bank } = data;
+function makeTerrain(data, shape, colorAt, { floor = -0.35, step = 3.5, material = {} } = {}) {
+  const { N, samples, normals, wL, wR, oL, oR, bank } = data;
   const T = CFG.track;
   const flat = new Float32Array(N); // road + rails + 2.5 m of flat floor, from the centre line
-  for (let i = 0; i < N; i++) flat[i] = Math.max(wL[i], wR[i]) + T.curb + T.wallThickness + 2.5;
+  for (let i = 0; i < N; i++) flat[i] = Math.max(wL[i] + oL[i], wR[i] + oR[i]) + T.curb + T.wallThickness + 2.5;
   const CELL = 20, REACH = 70, R = Math.ceil(REACH / CELL);
   const buckets = new Map();
   const key = (cx, cz) => cx * 4096 + cz;
@@ -1312,9 +1685,9 @@ function makeTerrain(data, shape, colorAt) {
       // the road's height across from here (banking tilts it), held level beyond the rails
       const lat = clamp((x - samples[i].x) * normals[i].x + (z - samples[i].z) * normals[i].z, -flat[i], flat[i]);
       const base = samples[i].y + lat * bank[i];
-      if (base - 0.35 >= h) return;
+      if (base + floor >= h) return;
       const u = d - flat[i];
-      h = Math.min(h, base + (u <= 0 ? -0.35 : rise * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
+      h = Math.min(h, base + (u <= 0 ? floor : floor + rise * smoothstep(0, 6, u) + cliff * smoothstep(start, start + width, u)));
     });
     return h === Infinity ? maxY + 1.4 + cliff : h;
   }
@@ -1330,7 +1703,7 @@ function makeTerrain(data, shape, colorAt) {
     minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
     minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
   }
-  const STEP = 3.5, M = 90;
+  const STEP = step, M = 90;
   const x0 = minX - M, z0 = minZ - M;
   const nx = Math.ceil((maxX - minX + 2 * M) / STEP) + 1, nz = Math.ceil((maxZ - minZ + 2 * M) / STEP) + 1;
   const H = new Float32Array(nx * nz);
@@ -1356,7 +1729,7 @@ function makeTerrain(data, shape, colorAt) {
   tgeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   tgeo.setIndex(idx);
   tgeo.computeVertexNormals();
-  const terrain = new THREE.Mesh(tgeo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  const terrain = new THREE.Mesh(tgeo, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, ...material }));
   terrain.receiveShadow = true;
   trackRoot.add(terrain);
   return { heightAt, floorDist, nearby, maxY, minX, maxX, minZ, maxZ };
@@ -1397,7 +1770,7 @@ function makeSky(horizon, mid, top, glow) {
 }
 
 /** Chevron boards on the rail on the outside of the tight corners (radius < 22 m), arrows the way it turns. */
-function buildChevrons({ N, normals, tangents, wL, wR, wallH, radius }) {
+function buildChevrons({ N, normals, tangents, wL, wR, oL, oR, wallH, radius }) {
   const T = CFG.track;
   const chevTex = (() => {
     const c = document.createElement('canvas');
@@ -1424,7 +1797,7 @@ function buildChevrons({ N, normals, tangents, wL, wR, wallH, radius }) {
     for (let d = -14; d <= 14; d += 4) {
       const k = (i + d + N) % N;
       used[k] = 1;
-      const lat = leftTurn ? -(wR[k] + T.curb + T.wallThickness / 2) : wL[k] + T.curb + T.wallThickness / 2;
+      const lat = leftTurn ? -(wR[k] + oR[k] + T.curb + T.wallThickness / 2) : wL[k] + oL[k] + T.curb + T.wallThickness / 2;
       boards.push({ k, lat, leftTurn });
     }
   }
@@ -1991,16 +2364,28 @@ const SVG_ITEMS = { mushroom: icon('mushroom'), triple: icon('mushroom'), banana
 const karts = CFG.racers.slice(0, CFG.grid.karts).map((r, i) => makeRacer(r, i === 0)); // castDrivers recasts them
 const kart = karts[0];
 world.addEventListener('preStep', () => karts.forEach(applyStabilityAssist));
+// (the velocity going into the next step's solver, for a rail snag: see railSnag)
+world.addEventListener('postStep', () => { for (const k of karts) { k.preVx = k.body.velocity.x; k.preVz = k.body.velocity.z; k.preYaw = k.body.angularVelocity.y; } });
+/**
+ * 71.2: rails are rows of boxes, and a kart's nose pressed into one can touch the END face of the next box. Then the contact normal points along the
+ * road and the solver stops the kart dead: 76 km/h to 0 on a glancing touch (27 of the 48 rail stalls in the user's races, nose nearly parallel to the rail).
+ * A rail only ever faces across the road, so a normal mostly along the road is one of those seams.
+ */
+const railSnag = (k, nx, nz) => {
+  const t = track.tangents[k.trackIdx];
+  return Math.abs(nx * t.x + nz * t.z) > Math.hypot(nx, nz) * CFG.kart.railSeam;
+};
 // Rails cost speed. 'collide' fires per contact point, before the solver (true impact speed); keep the
 // hardest one and let applyStabilityAssist apply it once, right after the solver in the same step.
 for (const k of karts) {
   k.body.addEventListener('collide', (e) => {
     if (e.body.material === physMats.chassis) { k.bumpT = 0.6; return; } // kart-to-kart: riders react (Luna)
     if (e.body.material !== physMats.wall) return;
+    const sg = e.contact.bi === k.body ? -1 : 1, nx = e.contact.ni.x * sg, nz = e.contact.ni.z * sg, nl = Math.hypot(nx, nz);
+    if (nl > 0.3 && railSnag(k, nx, nz)) return; // not a real hit
     k.wallTouch = true;
     const imp = Math.abs(e.contact.getImpactVelocityAlongNormal());
     if (imp >= k.wallHit) { // the hardest hit this step: the way out of the rail (flat) and the velocity going in
-      const sg = e.contact.bi === k.body ? -1 : 1, nx = e.contact.ni.x * sg, nz = e.contact.ni.z * sg, nl = Math.hypot(nx, nz);
       if (nl > 0.3) { k.wallNx = nx / nl; k.wallNz = nz / nl; k.wallVx = k.body.velocity.x; k.wallVz = k.body.velocity.z; }
     }
     k.wallHit = Math.max(k.wallHit, imp);
@@ -2043,11 +2428,24 @@ function paintKart(k, colors) {
 
 /** Seats driver r in kart k: each driver has their own rider mesh + animation (drivers.js; others = the
  * helmeted fallback). Rebuilt only when the driver changes (the karts are reused, castDrivers recasts them). */
+// 71.2: riders are built once and kept (rebuilding them in startRace froze the START tap for 0.5-1 s even on a Mac); castDrivers repaints them
+const riderPool = new Map();
+const RIVAL_DETAIL = 0.5; // 71.4: a rival's rider, ~1/4 of the triangles (segments x 0.5), and no shadow of its own (the kart's stays): riders were most of the frame
+function poolRider(r, colors, full = false) {
+  const key = `${r.name}${full ? '+' : ''}`;
+  if (!riderPool.has(key)) {
+    const rider = buildRider(r, colors, CFG.kart.chassisYOffset - CFG.kart.look.seatDrop, full ? 1 : RIVAL_DETAIL); // snug in the small frame
+    rider.mesh.castShadow = full;
+    rider.full = full;
+    riderPool.set(key, rider);
+  }
+  return riderPool.get(key);
+}
 function setRider(k, r, colors) {
-  if (k.rider?.name === r.name) return;
-  if (k.rider) { k.rider.mesh.removeFromParent(); k.rider.dispose(); }
-  k.rider = buildRider(r, colors, CFG.kart.chassisYOffset - CFG.kart.look.seatDrop); // snug in the small frame
-  k.group.add(k.rider.mesh);
+  if (k.rider?.name === r.name && !!k.rider.full === k.isPlayer) return;
+  if (k.rider?.mesh.parent === k.group) k.rider.mesh.removeFromParent(); // (not if another kart has already taken it over)
+  k.rider = poolRider(r, colors, k.isPlayer);
+  k.group.add(k.rider.mesh); // (moves it, if it was on another kart)
   k.alpha = undefined; // re-apply the ghost look to the new materials
 }
 
@@ -2094,7 +2492,7 @@ function freshDriveState() {
     passT: false, boost: 0, flipTimer: 0, fallT: 0, airT: 0, padT: 0, stall: 0, wallTouch: false, wallHit: 0, wallNx: 0, wallNz: 0, wallVx: 0, wallVz: 0,
     item: null, itemRoll: 0, itemCount: 0, tripleT: 0, spin: 0, spinTotal: 1, burn: 0, shield: 0, star: 0, bullet: 0, bulletLane: 0,
     trackIdx: 0, lap: 1, halfway: false, progress: 0, place: 1, finished: false, finishTime: 0,
-    boxAt: -9, rowCheckIdx: undefined, bumpT: 0,
+    boxAt: -9, rowCheckIdx: undefined, bumpT: 0, popT: 0,
   };
 }
 
@@ -2691,10 +3089,14 @@ function initControls() {
       ids.add(e.pointerId);
       el.setPointerCapture(e.pointerId);
       input[key] = true;
+      if (key === 'left' || key === 'right') teleEvent('steer', kart, { key, on: true, kmh: Math.round(kart.speed * 3.6), boost: kart.boost > 0 });
       el.classList.add('pressed');
     });
     const release = (e) => {
-      ids.delete(e.pointerId);
+      const had = ids.delete(e.pointerId);
+      // 71.2 diagnostics: a button the system took away while the finger may still be on it (anything but a normal pointerup)
+      if (had && e.type !== 'pointerup') teleEvent('inputdrop', kart, { key, why: e.type, kmh: Math.round(kart.speed * 3.6), boost: kart.boost > 0 });
+      if (had && (key === 'left' || key === 'right')) teleEvent('steer', kart, { key, on: false, kmh: Math.round(kart.speed * 3.6), boost: kart.boost > 0 });
       if (ids.size === 0) { input[key] = false; el.classList.remove('pressed'); }
     };
     ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((t) => el.addEventListener(t, release));
@@ -3058,7 +3460,7 @@ function updateKartProgress(k, dt, racing) {
   // flat against a rail the kart's centre stays >= 0.8 m (its half width) inside the rail's road face, so a
   // centre within 0.2 m of that face can only be a kart riding on the rail or gone over: put it back.
   const lat = lateral(idx, k.body.position);
-  const railFace = (lat > 0 ? track.wL[idx] : track.wR[idx]) + CFG.track.curb;
+  const railFace = railLat(idx, lat);
   k.railT = Math.abs(lat) > railFace - 0.2 && k.bullet <= 0 ? (k.railT || 0) + dt : 0;
   const onRail = k.railT > 0.3;
   // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
@@ -3751,6 +4153,9 @@ function teleEvent(type, k, data = {}) {
   if (!tele.race) return;
   tele.race.events.push({ t: +state.raceTime.toFixed(2), type, kart: karts.indexOf(k), ...data });
 }
+// (user 71.1: at the start the "graphics seemed to crash": tells a lost GPU context from a long frame)
+renderer.domElement.addEventListener('webglcontextlost', () => teleEvent('gpulost', kart));
+renderer.domElement.addEventListener('webglcontextrestored', () => teleEvent('gpuback', kart));
 window.addEventListener('error', (e) => teleEvent('jserror', kart, { msg: String(e.message).slice(0, 120), line: e.lineno }));
 window.addEventListener('unhandledrejection', (e) => teleEvent('jserror', kart, { msg: String(e.reason).slice(0, 120) }));
 function teleSample() {
@@ -4265,7 +4670,7 @@ function useItem(k, flip = false) { // flip = the opposite throw: green shell ba
     if (item === 'green') {
       const ex = pos.x + dx * 14, ez = pos.z + dz * 14, ei = nearestTrackIndex({ x: ex, y: pos.y, z: ez }, k.trackIdx);
       const el = (ex - track.samples[ei].x) * track.normals[ei].x + (ez - track.samples[ei].z) * track.normals[ei].z;
-      if (Math.abs(el) > (el > 0 ? track.wL[ei] : track.wR[ei]) + CFG.track.curb - 1.2) {
+      if (Math.abs(el) > railLat(ei, el) - 1.2) {
         const t = track.tangents[k.trackIdx], tl = Math.hypot(t.x, t.z) || 1, sg = back ? -1 : 1;
         dx = (sg * t.x) / tl; dz = (sg * t.z) / tl;
       }
@@ -4366,6 +4771,7 @@ function shellExplosion(pos) {
  * Hit by a banana / shell / star / bullet / blast. A star or a bullet makes a kart immune, a shield
  * takes the hit and pops. Returns whether the kart actually spun out.
  */
+const SHIELD_POP = 0.35; // seconds a blocked shield's bubble stays on screen, swelling and fading
 function spinOut(k, by, what, time = CFG.items.spinTime, ctx = {}) {
   // finished karts are out of it (build 36: a red shell hit Luna 11 s after she had crossed the line)
   if (k.spin > 0 || k.star > 0 || k.bullet > 0 || k.ghosted || k.finished) {
@@ -4378,9 +4784,11 @@ function spinOut(k, by, what, time = CFG.items.spinTime, ctx = {}) {
   if (k.shield > 0) {
     teleEvent('blocked', k, { by: by ? karts.indexOf(by) : -1, what });
     k.shield = 0;
+    k.popT = SHIELD_POP; // 71.8: seen whole as it pops, however new it was (a rival raised one 0.04 s before the user's red hit it: no bubble seen, no hit, looked like a bug)
     shieldBurst(k);
     if (k.isPlayer) { showMessage('BLOCKED!'); sound.shieldPop(); }
-    else if (by?.isPlayer || near(k, 30)) sound.shieldPop();
+    else if (by?.isPlayer) { showMessage(`${k.name.toUpperCase()} BLOCKED IT!`); sound.shieldPop(); }
+    else if (near(k, 30)) sound.shieldPop();
     return false;
   }
   k.spin = k.spinTotal = time;
@@ -4469,7 +4877,7 @@ function stepHit(k, L, dt) {
     teleEvent('crash', k, { mode: 'blast', what: L.what, up: +L.up.toFixed(1) });
   }
   if (L.mode !== 'blast' && !L.crashed) { // into the wall before the motion ends: sparks, and the wall takes the sideways speed
-    const lat = lateral(i, b.position), lim = lat > 0 ? track.wL[i] + CFG.track.curb - 0.7 : track.wR[i] + CFG.track.curb - 0.7;
+    const lat = lateral(i, b.position), lim = railLat(i, lat) - 0.7;
     if (Math.abs(lat) > lim) {
       const n = track.normals[i], vn = v.x * n.x + v.z * n.z, side = Math.sign(lat), hs = Math.hypot(v.x, v.z);
       L.crashed = true;
@@ -5260,7 +5668,7 @@ function updateEject(dt) {
       e.vel.y -= EJECT_G * dt;
       e.pos.addScaledVector(e.vel, dt);
       e.idx = nearIdx(e.pos.x, e.pos.z, e.idx);
-      const lat = lateral(e.idx, e.pos), lim = (lat > 0 ? track.wL[e.idx] : track.wR[e.idx]) - 0.8, nn = track.normals[e.idx];
+      const lat = lateral(e.idx, e.pos), lim = railLat(e.idx, lat) - CFG.track.curb - 0.8, nn = track.normals[e.idx];
       if (Math.abs(lat) > lim) { // inside the rails
         const d = Math.abs(lat) - lim, sg = Math.sign(lat), vn = e.vel.x * nn.x + e.vel.z * nn.z;
         e.pos.x -= nn.x * d * sg; e.pos.z -= nn.z * d * sg;
@@ -5327,7 +5735,7 @@ function startWallLaunch(k, by, LC) {
   const i = k.trackIdx, lat = lateral(i, k.body.position);
   const away = by ? lat - lateral(i, by.body.position) : 0;
   const side = Math.abs(away) > 0.5 ? Math.sign(away) : Math.sign(lat) || 1;
-  const wallLat = side * ((side > 0 ? track.wL[i] : track.wR[i]) + CFG.track.curb - 0.7);
+  const wallLat = side * (railLat(i, side) - 0.7);
   const dist = Math.max(0, (wallLat - lat) * side);
   if (LC.splat && (Math.abs(away) <= LC.splatLat || dist < LC.minDist)) { // nowhere to fly: the bullet runs it over and flattens it
     k.launch = { splat: true, side, dist, away, t: 0, dur: 0, crash: LC.splat, crashed: false };
@@ -5604,7 +6012,7 @@ function updateItems(dt, racing) {
     s.idx = nearestTrackIndex(s.pos, s.idx);
     const c = samples[s.idx], n = normals[s.idx];
     const lat = (s.pos.x - c.x) * n.x + (s.pos.z - c.z) * n.z;
-    const wallLat = (lat > 0 ? track.wL[s.idx] : track.wR[s.idx]) + CFG.track.curb - 0.35;
+    const wallLat = railLat(s.idx, lat) - 0.35;
     if (Math.abs(lat) > wallLat) {
       const side = Math.sign(lat);
       s.pos.addScaledVector(n, (side * wallLat - lat) * 1.01);
@@ -5786,7 +6194,11 @@ function driveKart(k, dt, canDrive) {
   // --- Steering: the player's buttons are digital, so ramp toward lock gradually and recentre
   // quickly. Lock shrinks with speed so a held button can't ask for more grip than the tyres
   // have. Positive input = right.
-  const steerInput = ctl.steer;
+  // 71.2: slow and steering into the rail it's touching = pinned for ~3 s, nose in, until the button was let go (user: "until I lifted the finger").
+  // Going straight frees it in ~0.7 s, so the wheel ignores that one direction. Player only; on the open road nothing changes.
+  k.railSeenT = Math.max(0, (k.railSeenT || 0) - dt);
+  const intoRail = k.isPlayer && k.railSeenT > 0 && Math.abs(k.speed) < K.railPinSpeed && ctl.steer * (fwd.z * k.railOutX - fwd.x * k.railOutZ) > 0;
+  const steerInput = intoRail ? 0 : ctl.steer;
   const recentring = Math.abs(steerInput) < Math.abs(k.steerSmooth) || Math.sign(steerInput) !== Math.sign(k.steerSmooth);
   const maxDelta = (recentring ? K.steerReturn : K.steerRate) * dt;
   k.steerSmooth += clamp(steerInput - k.steerSmooth, -maxDelta, maxDelta);
@@ -5900,6 +6312,26 @@ function airLevel(k) {
   av.z += (spin.z - av.z) * K.airDamp * dt + airAxis.z * K.airLevel * dt;
 }
 
+/** Run-off (`openEdges`, 71.1): past the curb the grass slows the kart. Logs on / off for the telemetry ('offroad'). */
+function offroadDrag(k) {
+  const K = CFG.kart, i = k.trackIdx, { body } = k;
+  if (!track.oL[i] && !track.oR[i]) { if (k.offroad) offroadLog(k, false); return; }
+  const lat = lateral(i, body.position);
+  const depth = Math.abs(lat) - ((lat > 0 ? track.wL[i] : track.wR[i]) + CFG.track.curb);
+  if ((depth > 0) !== !!k.offroad) offroadLog(k, depth > 0);
+  if (depth <= 0 || k.star > 0 || k.boost > 0) return;
+  const v = Math.hypot(body.velocity.x, body.velocity.z);
+  if (v <= K.offroadSpeed) return;
+  const scale = Math.max(K.offroadSpeed / v, 1 - K.offroadDrag * clamp(depth / 1.5, 0, 1) * CFG.physicsStep);
+  body.velocity.x *= scale;
+  body.velocity.z *= scale;
+}
+function offroadLog(k, on) {
+  k.offroad = on;
+  teleEvent('offroad', k, { on, idx: k.trackIdx, kmh: Math.round(k.speed * 3.6), ...(on ? {} : { dur: +(state.raceTime - k.offroadT).toFixed(2) }) });
+  if (on) k.offroadT = state.raceTime;
+}
+
 /**
  * Stability assist, run on every kart before every physics sub-step: compare the kart's yaw rate
  * with what the front wheels ask for (bicycle model, capped by available grip) and bleed off any
@@ -5918,6 +6350,7 @@ function applyStabilityAssist(k) {
   }
   if (k.bullet > 0) { bulletGuide(k); return; }
   body.angularVelocity.y = clamp(body.angularVelocity.y, -K.maxYawRate, K.maxYawRate);
+  offroadDrag(k);
 
   if (k.railProbe && (k.railProbe.t -= CFG.physicsStep) <= 0) {
     teleEvent('railpost', k, { ...k.railProbe, v1: Math.round(Math.hypot(body.velocity.x, body.velocity.z) * 3.6), fwd: Math.round(k.speed * 3.6) });
@@ -5927,7 +6360,7 @@ function applyStabilityAssist(k) {
   // Rail contact this step: a hit costs a share of speed by how hard it was, sliding along costs a bit more
   if (k.wallTouch) {
     const hit = clamp((k.wallHit - 1.5) * K.wallHitLoss, 0, K.wallHitMax);
-    if (k.isPlayer && hit > 0.03) teleEvent('rail', k, { loss: +hit.toFixed(2), kmh: Math.round(k.speed * 3.6), idx: k.trackIdx, up: +body.quaternion.vmult(LOCAL_UP, tmpVec).y.toFixed(2), vy: +body.velocity.y.toFixed(1) });
+    if (k.isPlayer && hit > 0.03) teleEvent('rail', k, { loss: +hit.toFixed(2), kmh: Math.round(k.speed * 3.6), idx: k.trackIdx, side: lateral(k.trackIdx, body.position) > 0 ? 'L' : 'R', steer: +k.steerSmooth.toFixed(2), btn: input.right ? 'R' : input.left ? 'L' : '-', boost: k.boost > 0, up: +body.quaternion.vmult(LOCAL_UP, tmpVec).y.toFixed(2), vy: +body.velocity.y.toFixed(1) });
     const scale = (1 - hit) * (1 - K.wallScrape * CFG.physicsStep);
     body.velocity.x *= scale;
     body.velocity.z *= scale;
@@ -5954,7 +6387,7 @@ function applyStabilityAssist(k) {
 
   // No rebound: the solver's push out of a rail (worst where the wall bends: two segments or a seam
   // at once) is cut every step, along each rail contact's own normal. Sliding along the rail stays.
-  let touching = false, wallNx = 0, wallNz = 0;
+  let touching = false, wallNx = 0, wallNz = 0, snag = false;
   for (const c of world.contacts) {
     const mine = c.bi === body ? -1 : c.bj === body ? 1 : 0;
     if (!mine) continue;
@@ -5962,6 +6395,7 @@ function applyStabilityAssist(k) {
     if (other.material !== physMats.wall) continue;
     const nx = c.ni.x * mine, nz = c.ni.z * mine, nl = Math.hypot(nx, nz);
     if (nl < 0.3) continue; // floor-ish contact
+    if (railSnag(k, nx, nz)) { snag = true; continue; }
     const away = (body.velocity.x * nx + body.velocity.z * nz) / nl;
     wallNx = nx / nl; wallNz = nz / nl; // (the last rail contact's way out, for the unstick nudge)
     // Keep up to railPush m/s out of the rail: that is how the solver frees a kart that sank into it (cutting
@@ -5979,6 +6413,16 @@ function applyStabilityAssist(k) {
     }
     touching = true;
   }
+  // A seam took the speed: give back the speed along the road, but none into the rail (giving that back too dug karts into it: 34 of 39 'rail' resets
+  // came right after a seam), and ease the kart off it
+  if (snag && k.preVx !== undefined && Math.hypot(k.preVx, k.preVz) > Math.hypot(body.velocity.x, body.velocity.z) + 0.3) {
+    if (!(k.snagAt > state.raceTime - 0.5)) teleEvent('snag', k, { idx: k.trackIdx, kmh: Math.round(Math.hypot(k.preVx, k.preVz) * 3.6), left: Math.round(Math.hypot(body.velocity.x, body.velocity.z) * 3.6) });
+    k.snagAt = state.raceTime;
+    const i = k.trackIdx, t = track.tangents[i], n = track.normals[i], side = Math.sign(lateral(i, body.position)) || 1;
+    const along = k.preVx * t.x + k.preVz * t.z, across = k.preVx * n.x + k.preVz * n.z, off = across * side > 0 ? -side * K.railSeamOff : across;
+    body.velocity.x = t.x * along + n.x * off; body.velocity.z = t.z * along + n.z * off;
+    body.angularVelocity.y = k.preYaw;
+  }
   if (touching) {
     // Don't climb the rail (canyon banks / whoops: a tilted kart rode up the upright wall): cap the upward speed
     // at what the road's own slope gives, plus a little, and calm roll/pitch spin
@@ -5986,6 +6430,7 @@ function applyStabilityAssist(k) {
     const slopeVy = Math.max(0, (track.samples[i1].y - track.samples[i2].y) / (6 * track.spacing)) * Math.hypot(body.velocity.x, body.velocity.z);
     const maxVy = slopeVy + K.railClimb;
     if (body.velocity.y > maxVy) body.velocity.y = maxVy;
+    k.railSeenT = 0.15; k.railOutX = wallNx; k.railOutZ = wallNz; // (see driveKart)
     body.angularVelocity.x *= 0.85; body.angularVelocity.z *= 0.85;
     // Dead against the rail with the gas held (player only: the AIs have their own watchdog): nudge it back along
     // the road and a little off the wall, so it gets going instead of waiting for the stuck reset
@@ -6464,8 +6909,14 @@ function updateEffects(dt) {
     k.stars.visible = k.spin > 0;
     if (k.stars.visible) k.stars.rotation.y += dt * 7;
     // Shield bubble (blinks for its last 1.5 s), bullet hull, star rainbow + sparkles
-    k.bubble.visible = k.shield > 0;
-    if (k.bubble.visible) {
+    k.popT = Math.max(0, (k.popT || 0) - dt);
+    k.bubble.visible = k.shield > 0 || k.popT > 0;
+    if (k.popT > 0 && k.shield <= 0) { // popping
+      const u = k.bubble.material.uniforms, p = 1 - k.popT / SHIELD_POP;
+      k.bubble.scale.copy(BUBBLE_SCALE).multiplyScalar(1 + 0.5 * p);
+      u.time.value = itemClock;
+      u.fade.value = 1 - p * p;
+    } else if (k.bubble.visible) {
       // pops in with an elastic overshoot; flickers out over the last 1.5 s
       const age = CFG.items.shieldTime - k.shield;
       const grow = age < 0.45 ? 1 - Math.exp(-age * 9) * Math.cos(age * 18) : 1;
@@ -6686,14 +7137,23 @@ function updatePerf(ms) {
   }
 }
 
+const fpsLog = { n: 0, ms: 0, worst: 0 };
 let realDt = 0; // this frame's unscaled seconds (the gore eyeball runs on it while the world is in slow motion)
 function loop(now) {
   requestAnimationFrame(loop);
   updatePerf(now - lastTime);
   // telemetry: frames over 50 ms, with what was active on the player (build 54: fps dropped during a star)
-  if (now - lastTime > 50 && (state.phase === 'race' || state.phase === 'finished')) {
-    teleEvent('slow', kart, { ms: Math.round(now - lastTime), star: +kart.star.toFixed(1), ghost: !!kart.ghosted, shield: kart.shield > 0,
+  if (now - lastTime > 50 && (state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown')) {
+    teleEvent('slow', kart, { ms: Math.round(now - lastTime), ...(state.phase === 'countdown' && { countdown: +state.countdown.toFixed(1) }), star: +kart.star.toFixed(1), ghost: !!kart.ghosted, shield: kart.shield > 0,
       boost: kart.boost > 0, bullet: kart.bullet > 0, spin: kart.spin > 0, calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
+  }
+  // ...and the steady rate every 5 s (71.4): frames under 50 ms never show above, so a slow patch or the phone heating up was invisible
+  if (state.phase === 'race' && !state.paused) {
+    fpsLog.n++; fpsLog.ms += now - lastTime; fpsLog.worst = Math.max(fpsLog.worst, now - lastTime);
+    if (fpsLog.ms >= 5000) {
+      teleEvent('fps', kart, { fps: Math.round(fpsLog.n * 1000 / fpsLog.ms), worst: Math.round(fpsLog.worst), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, idx: kart.trackIdx });
+      Object.assign(fpsLog, { n: 0, ms: 0, worst: 0 });
+    }
   }
   const rawDt = Math.min((now - lastTime) / 1000, 0.1);
   let dt = rawDt;
@@ -6723,16 +7183,36 @@ document.addEventListener('visibilitychange', () => {
  * which froze the game for a moment the first time a shell, banana, flame or spark showed up mid-race.
  * Draw one throwaway frame with all of them in view, behind the title screen.
  */
+const ghostMats = new Map();
 function warmUpShaders() {
   const extras = [...Object.keys(itemVis.models).map((kind) => spawnModel(kind, kart.body.position)), ...goreWarmObjects().map((o) => scene.add(o) && o)];
   const shown = [...kart.sparks, ...kart.flames, kart.stars, kart.bubble, kart.hull];
   shown.forEach((o) => { o.visible = true; });
+  // the riders not on a kart right now, so no rider is new to the GPU at the next START
+  const spareRiders = CFG.racers.map((r) => poolRider(r, kartColors(r.colors, r.look)).mesh).filter((m) => !m.parent);
+  spareRiders.forEach((m) => scene.add(m));
   syncMeshes();
   updateCamera(0);
+  // 71.2: draw everything once, in view or not. compile() only builds the programs: buffers, textures and iOS's per-draw pipeline
+  // state wait for an object's first draw, which landed in the first lap as frames of 300-870 ms, each time new scenery came into view.
+  const culled = [];
+  scene.traverse((o) => { if (o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
   renderer.compile(scene, camera); // everything, even what's off screen (item boxes, pads)
   renderer.render(scene, camera);  // + the shadow-pass programs
   renderer.setRenderTarget(blurTarget); renderer.render(scene, camera); renderer.setRenderTarget(null); // blur pass programs
   renderer.render(blurPass.scene, blurPass.cam);
+  // 71.5: the see-through (ghost) versions of the kart and rider shaders. three.js compiles them the first time a material turns transparent, which froze
+  // the race for 0.4-0.9 s the first few times a kart went ghost after a hit (build 71.4: ghost on at 10.07, 14.20, 15.12 s; frames of 923, 563, 422 ms).
+  // The clones are kept: they hold those programs alive, or three.js would throw them away whenever no kart is ghost.
+  const ghostable = [...karts.flatMap((k) => [k.bodyMesh, ...k.wheelMeshes.map((w) => w.children[0])]), ...[...riderPool.values()].map((r) => r.mesh)];
+  const solid = ghostable.map((m) => m.material);
+  const ghostOf = (m) => { if (!ghostMats.has(m)) { const c = m.clone(); c.transparent = true; c.opacity = 0.5; c.depthWrite = true; ghostMats.set(m, c); } return ghostMats.get(m); };
+  ghostable.forEach((m) => { m.material = Array.isArray(m.material) ? m.material.map(ghostOf) : ghostOf(m.material); });
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(blurTarget); renderer.render(scene, camera); renderer.setRenderTarget(null);
+  ghostable.forEach((m, i) => { m.material = solid[i]; });
+  culled.forEach((o) => { o.frustumCulled = true; });
+  spareRiders.forEach((m) => scene.remove(m));
   extras.forEach((m) => scene.remove(m));
   shown.forEach((o) => { o.visible = false; });
 }
@@ -6789,6 +7269,7 @@ onResize();
 showMenu();
 initBlood();
 warmUpShaders();
+app.classList.add('booted'); // index.html shows only the loading splash until here (see #boot in style.css)
 
 // PWA: offline cache (service workers need a secure context: https or localhost)
 if ('serviceWorker' in navigator && window.isSecureContext) {
