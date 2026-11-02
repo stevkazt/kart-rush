@@ -149,6 +149,18 @@ if (mode === 'autopilot' || mode === 'trace') {
   await shot('final');
   console.log(await ev(`[...document.querySelectorAll('#standings tr')].map((t) => t.innerText.replace(/\\s+/g, ' ')).join(' | ') + ' // ' + document.getElementById('btn-again').textContent`));
   console.log('errors', await ev(`JSON.stringify(__errs)`));
+} else if (mode === 'cost') {
+  // draw calls and triangles round the lap (parked, rivals on the grid): the most and the median over a few frames at 10 spots. Several frames: the mirror redraws every other frame.
+  while ((await ev('__s.phase')) !== 'race') { await ev(`if (__s.intro > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
+  const N = await ev('__t.N'), rows = [];
+  await ev(`(() => { const r0 = __r.render.bind(__r); window.__cf = []; __r.render = (a, b) => { r0(a, b); window.__cf.push([__r.info.render.calls, __r.info.render.triangles]); }; })()`);
+  for (let i = 0; i < 10; i++) {
+    await ev(`__resetKart(__k, ${Math.round((i + 0.5) * N / 10)}, 0); __snap(); __cf.length = 0;`);
+    await sleep(1800);
+    rows.push(JSON.parse(await ev(`JSON.stringify(__cf.slice(-8))`)));
+  }
+  const all = rows.flat(), med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
+  console.log(`${process.env.TRACK || 'meadow'} calls max ${Math.max(...all.map((r) => r[0]))} med ${med(all.map((r) => r[0]))} tris max ${Math.max(...all.map((r) => r[1]))} med ${med(all.map((r) => r[1]))} programs ${await ev('__r.info.programs.length')}`);
 } else if (mode === 'menu') {
   const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}menu.png`), Buffer.from(s.data, 'base64'));
 } else if (mode === 'shots') {

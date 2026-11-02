@@ -172,7 +172,7 @@ const CFG = {
     // Temple Run (72.10): a new track, ~1320 m, a figure-8. Start along the river flats, a long climbing sweep, a crest, tight S-bends down through the palms (R ~18), the rope bridge over the gorge (y 1), up round a
     // banked corner, then the stone viaduct right over the bridge (y 10) and straight through the pyramid (a short tunnel, idx ~924-976), and a long descent home.
     jungle: {
-      name: 'Temple Run', icon: 'pine', theme: 'jungle',
+      name: 'Temple Run', icon: 'temple', theme: 'jungle',
       intro: [[470, 545, 4], [905, 985, 3.2], [1385, 1412, 6]], // over the rope bridge, through the pyramid, onto the grid
       points: [
         [0, -140, 0], [55, -140, 0], [110, -128, 0.5], [152, -98, 1.5], [172, -50, 3], [165, 0, 5], [138, 40, 6], [106, 60, 4.6], [72, 46, 3], [42, 50, 1.8],
@@ -196,6 +196,7 @@ const CFG = {
       name: 'Spiral Run', icon: 'volcano', theme: 'volcano', gaps: [43],
       intro: [[700, 800, 7], [1148, 1222, 7], [1625, 1652, 6]], // up the cone, over the lava, into the station
       bankRuns: [[294, 930, 9.5, 150, 75]], // helix start .. end + exit
+      tallWalls: [[1209, 1290]], // the landing: a kart coming in sideways at 160 km/h flew over the low walls and fell
       points: [
         [-10, -62, 0], [45, -62, 0], [92, -50, 0], [108, -14, 0], [88, 18, 0], [45, 30, 0],
         [0, 30, 0], [-20, 36, 0], [-34, 50, 0], [-39, 70, 1.25], [-33, 89, 2.5], [-19, 103, 3.75],
@@ -203,7 +204,8 @@ const CFG = {
         [0, 34, 10.0], [-18, 39, 10.0], [-31, 52, 10.0], [-35, 70, 11.25], [-30, 87, 12.5], [-17, 100, 13.75],
         [0, 104, 15.0], [17, 99, 15.0], [29, 87, 15.0], [33, 70, 16.25], [28, 54, 17.5], [16, 42, 18.75],
         [0, 38, 20.0], [-16, 43, 20.0], [-27, 54, 20.0], [-31, 70, 21.25], [-27, 85, 22.5], [-15, 96, 23.75],
-        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0], [130, 152, 25.0], [125, 186, 25.0], [95, 200, 25.0],
+        // (4th value, half width by index share, point p covers samples ~31p: these four are the landing, idx ~1190-1280)
+        [0, 100, 25.0], [45, 108, 25.0], [100, 128, 25.0, 11], [130, 152, 25.0, 11], [125, 186, 25.0, 11], [95, 200, 25.0, 11],
         [68, 200, 25.0], [40, 200, 25.0], [8, 200, 15.0], [-18, 200, 11.6], [-44, 199, 11.0], [-76, 196, 11.0],
         [-98, 164, 9], [-110, 110, 6.6], [-112, 50, 4], [-95, -18, 1.6], [-58, -58, 0.3],
       ],
@@ -211,7 +213,7 @@ const CFG = {
       pads: [[30, 0], [200, 0], [393, 0, 'wide'], [520, 0, 'wide'], [640, 0, 'wide'], [753, 0, 'wide'], [859, 0, 'wide'], [1146, 0, 'red'], [1156, 0, 'red'], [1166, 0, 'red'], [1390, 0], [1610, 0]], // red full-width boosters right before the lip (1173)
       edgeDefault: 'basalt',
       edges: { 1: [[1620, 1655, 'boards'], [0, 40, 'boards']], '-1': [[1620, 1655, 'boards'], [0, 40, 'boards']] },
-      palette: { road: [0x8e8884, 0x88827e], dash: 0xff9a3a, curb: [0xe8622a, 0xf3e2c8], shoulder: [0x7a6a62, 0x6e5f58], wear: 0x6f6965 },
+      palette: { road: [0x8e8884, 0x88827e], dash: 0xff9a3a, curb: [0xe8622a, 0xf3e2c8], shoulder: [0x7a6a62, 0x6e5f58], wear: 0x6f6965, stone: [0x6e5f58, 0x5e4f4a, 0x7a6a62] },
     },
   },
 
@@ -481,7 +483,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '72.10'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.11'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -839,6 +841,7 @@ function shapeTrack(def, samples, tangents, normals, N, spacing) {
     around(idx, 1, 2, (i, d) => { samples[i].y += rise * (1 - d / 3); });
     around(idx, -n - steps(10), steps(45), (i) => { wallH[i] = T.jumpWallHeight; });
   }
+  for (const [from, to] of def.tallWalls || []) for (let i = from; i < to; i++) wallH[i % N] = T.jumpWallHeight;
   const bank = new Float32Array(N + 1);
   for (const [idx, halfLen, deg] of def.banks || []) {
     const n = steps(halfLen);
@@ -2061,7 +2064,7 @@ function buildSnow(data) {
       if (f > 0.5) cc.copy(ICE[(noise(x / 7, z / 7 + 4) * 3) | 0]);
       else if (slope > 0.75) cc.copy(ROCK).lerp(SHADE, 0.35 * noise(x / 5, z / 5));
       else cc.copy(SNOW[(noise(x / 14 + 9, z / 14) * 3) | 0]).lerp(SHADE, smoothstep(0.3, 0.75, slope) * 0.6);
-    });
+    }, { step: 4.2 });
   const { heightAt, floorDist, minX, maxX, minZ, maxZ } = ground;
   // snow beyond the height field's edge, so there's no gap at the horizon
   const plain = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), lambert(0xe6edf5));
@@ -2128,11 +2131,11 @@ function buildSnow(data) {
     add(new THREE.CylinderGeometry(0.25, 0.35, 1.6, 6), 0x6b4a2f, 0, 0.8, 0);
     [[2.3, 3, 2.6], [1.7, 2.5, 4.2], [1.1, 2, 5.6]].forEach(([r, h, y], i) => {
       add(new THREE.ConeGeometry(r, h, 7), [0x2e6b4c, 0x347756, 0x2a6347][i], 0, y, 0);
-      add(new THREE.ConeGeometry(r * 0.62, h * 0.42, 7), 0xf2f6fa, 0, y + h * 0.3, 0);
+      add(new THREE.ConeGeometry(r * 0.62, h * 0.42, 5), 0xf2f6fa, 0, y + h * 0.3, 0);
     });
   });
   grove = true;
-  scatter(pine.geometry, pine.material, 190, 3, 44, (sc) => sc.setScalar(0.8 + rand() * 0.8));
+  scatter(pine.geometry, pine.material, 160, 3, 44, (sc) => sc.setScalar(0.8 + rand() * 0.8));
   grove = false;
   const rock = baked((add) => {
     add(new THREE.IcosahedronGeometry(1, 0), 0x7d8794, 0, 0, 0);
@@ -2140,16 +2143,15 @@ function buildSnow(data) {
   });
   scatter(rock.geometry, rock.material, 60, 0, 16, (sc) => sc.set(0.7 + rand() * 2, 0.6 + rand() * 1.2, 0.7 + rand() * 2));
   const snowman = baked((add) => {
-    add(new THREE.SphereGeometry(0.9, 10, 8), 0xf4f7fb, 0, 0.8, 0);
-    add(new THREE.SphereGeometry(0.65, 10, 8), 0xf4f7fb, 0, 2.0, 0);
-    add(new THREE.SphereGeometry(0.45, 10, 8), 0xf4f7fb, 0, 2.95, 0);
+    add(new THREE.IcosahedronGeometry(0.9, 1), 0xf4f7fb, 0, 0.8, 0);
+    add(new THREE.IcosahedronGeometry(0.65, 1), 0xf4f7fb, 0, 2.0, 0);
+    add(new THREE.IcosahedronGeometry(0.45, 1), 0xf4f7fb, 0, 2.95, 0);
     add(new THREE.ConeGeometry(0.09, 0.5, 6), 0xff8a1f, 0, 2.95, 0.6).rotation.x = Math.PI / 2;
-    add(new THREE.TorusGeometry(0.5, 0.12, 6, 12), 0xd23a3a, 0, 2.5, 0).rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 10), 0x222831, 0, 3.32, 0);
-    add(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 10), 0x222831, 0, 3.58, 0);
-    for (const x of [-0.15, 0.15]) add(new THREE.SphereGeometry(0.06, 5, 4), 0x222831, x, 3.08, 0.4);
+    add(new THREE.TorusGeometry(0.5, 0.12, 4, 8), 0xd23a3a, 0, 2.5, 0).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.42, 0.42, 0.06, 6), 0x222831, 0, 3.32, 0);
+    add(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 6), 0x222831, 0, 3.58, 0);
   });
-  scatter(snowman.geometry, snowman.material, 14, 0.5, 5, (sc) => sc.setScalar(0.9 + rand() * 0.3));
+  scatter(snowman.geometry, snowman.material, 9, 0.5, 5, (sc) => sc.setScalar(0.9 + rand() * 0.3));
 
   // ---- Far mountains: rough massifs, snow above a line, bare rock below (72.4; the user called plain cones "just triangles") ----
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
@@ -2218,7 +2220,7 @@ function buildHarbour(data) {
       else if (yard(x, z) > 0.5) cc.copy(CONCRETE[(noise(x / 9, z / 9) * 2.999) | 0]);
       else if (h < 1.5) cc.copy(PALE);
       else cc.copy(GRASS[(noise(x / 12 + 4, z / 12) * 2.999) | 0]).lerp(DRY, smoothstep(0.25, 0.7, slope));
-    });
+    }, { step: 4.5 });
   const { heightAt, floorDist, minX, maxX, minZ, maxZ } = ground;
   const sky = makeSky(0xe3f2f7, 0xa9dbf5, 0x4fa8e8, 0xfff4e0);
   buildChevrons(data);
@@ -2277,8 +2279,7 @@ function buildHarbour(data) {
     if (floorDist(x, z).u < -1.5) return; // (not on the inside of a bend, over another piece of the road)
     for (let h = 0; h < tall; h++) {
       const c = BOXES[(rand() * BOXES.length) | 0];
-      box(c, 2.5, 2.5, 6.1, x + (rand() - 0.5) * 0.3, -0.35 + 1.25 + h * 2.55, z + (rand() - 0.5) * 0.3, { ry: ry + (rand() - 0.5) * 0.03 });
-      box(0x2b2f36, 2.56, 0.1, 6.16, x, -0.35 + 2.52 + h * 2.55, z, { ry }); // (a dark seam, so a stack reads as boxes)
+      box(c, 2.5, 2.45, 6.1, x + (rand() - 0.5) * 0.3, -0.35 + 1.25 + h * 2.55, z + (rand() - 0.5) * 0.3, { ry: ry + (rand() - 0.5) * 0.03 }); // (a little short of the 2.55 spacing, so a stack reads as separate boxes)
     }
   };
   for (let i = 236; i < 440; i += 7) for (const sd of [1, -1]) {
@@ -2313,15 +2314,13 @@ function buildHarbour(data) {
 
   // ---- The old town: rows of houses both sides of the street, more climbing the hill behind ----
   const WALLS = [0xe8b54e, 0xd97f4e, 0xefd9b0, 0xc9694a, 0x7fb3b9, 0xf0e4d0, 0xd9a0a0, 0xa9b889], ROOF = [0xb9552f, 0xa84a2c, 0xc66a3a];
-  const house = (x, z, g, ry, w, h, d, c) => {
+  const house = (x, z, g, ry, w, h, d, c, toRoad = null) => { // toRoad: [x, z] of the unit vector from the house to the road; windows go on that face only (the hill's houses have none: both faces on all ~95 cost 40k triangles)
     box(WALLS[c % WALLS.length], d, h, w, x, g + h / 2, z, { ry });
     gable(b, ROOF[c % 3], x, g + h, z, d + 1, w + 1, 2.4, ry);
-    const fx = Math.sin(ry + Math.PI / 2), fz = Math.cos(ry + Math.PI / 2); // along the face's normal; the face toward the road is picked by the caller via d's side, so both faces get shutters
-    for (const face of [1, -1]) for (let f = 0; f < Math.floor(h / 3); f++) for (const a of [-w / 4, w / 4]) {
-      const wx = x + Math.sin(ry) * a + fx * face * (d / 2 + 0.02), wz = z + Math.cos(ry) * a + fz * face * (d / 2 + 0.02);
-      box(0x2e3a44, 0.08, 1.2, 0.8, wx, g + 1.8 + f * 3, wz, { ry });
-      box(0x3f8f7a, 0.1, 1.2, 0.28, wx + Math.sin(ry) * 0.5, g + 1.8 + f * 3, wz + Math.cos(ry) * 0.5, { ry });
-      box(0x3f8f7a, 0.1, 1.2, 0.28, wx - Math.sin(ry) * 0.5, g + 1.8 + f * 3, wz - Math.cos(ry) * 0.5, { ry });
+    if (toRoad) for (let f = 0; f < Math.floor(h / 3); f++) for (const a of [-w / 4, w / 4]) {
+      const wx = x + Math.sin(ry) * a + toRoad[0] * (d / 2 + 0.02), wz = z + Math.cos(ry) * a + toRoad[1] * (d / 2 + 0.02);
+      box(0x3f8f7a, 0.08, 1.2, 1.36, wx, g + 1.8 + f * 3, wz, { ry }); // the shutters, open...
+      box(0x2e3a44, 0.1, 1.2, 0.8, wx + toRoad[0] * 0.03, g + 1.8 + f * 3, wz + toRoad[1] * 0.03, { ry }); // ...and the window between them
     }
   };
   let hc = 0;
@@ -2329,7 +2328,7 @@ function buildHarbour(data) {
     if (sd < 0 && (i < 545 || i > 730)) continue;
     const f = frame(i, sd, 1.2), w = 8.5 + (hc * 5 % 3), h = 6 + (hc * 3 % 4) * 2;
     const [hx, hz] = f.at(0, 3.5);
-    if (floorDist(hx, hz).u > -4.5 + 0) house(hx, hz, f.y, f.ry, w, h, 7, hc);
+    if (floorDist(hx, hz).u > -4.5) house(hx, hz, f.y, f.ry, w, h, 7, hc, [-f.n.x * sd, -f.n.z * sd]);
     hc++;
     if (sd > 0) for (let r = 1; r <= 2; r++) {
       const [ux, uz] = f.at((r % 2) * 4, 3.5 + r * 10);
@@ -2462,7 +2461,7 @@ function buildVolcano(data) {
       else if (noise(x / 40 + 15, z / 40) > 0.72) cc.copy(SULPHUR).lerp(ASH[0], 0.4);
       else cc.copy(ASH[(noise(x / 13 + 9, z / 13) * 2.999) | 0]);
     },
-    { carve: (x, z, h) => {
+    { step: 4, carve: (x, z, h) => {
       const m = Math.max(1 - smoothstep(0, 16, pitD(x, z)), (1 - smoothstep(4, 9, riverD(x, z))));
       return m > 0 ? lerp(h, -6, m) : h;
     } });
@@ -2678,7 +2677,7 @@ function buildJungle(data) {
       else if (slope < 0.05 && noise(x / 9 + 3, z / 9) > 0.62) cc.copy(EARTH).lerp(GREENS[0], 0.35);
       else cc.copy(GREENS[(noise(x / 11 + 2, z / 11) * 3.999) | 0]).lerp(MOSS, smoothstep(0.3, 0.8, slope) * 0.5);
     },
-    { carve: (x, z, h) => { const m = 1 - smoothstep(6, 13, gorgeD(x, z)); return m > 0 ? lerp(h, -7, m) : h; } });
+    { step: 4.5, carve: (x, z, h) => { const m = 1 - smoothstep(6, 13, gorgeD(x, z)); return m > 0 ? lerp(h, -7, m) : h; } });
   const { heightAt, floorDist, minX, maxX, minZ, maxZ } = ground;
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
   const plain = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), lambert(0x4f8d3f));
@@ -2971,7 +2970,7 @@ function buildDesert(data) {
       if (slope > 0.6) cc.copy(ROCK[(((h + noise(x / 9, z / 9) * 2.5) / 2.3) | 0) % ROCK.length]);
       else if (slope > 0.22) cc.copy(TALUS).lerp(SAND[0], 0.3 * noise(x / 6, z / 6));
       else cc.copy(SAND[(noise(x / 12 + 9, z / 12) * 3) | 0]);
-    });
+    }, { step: 4 });
   const cc = new THREE.Color();
 
   const sky = makeSky(0xf1d9bb, 0xb9d8ef, 0x5f9fdc, 0xffe2b0);
@@ -4553,7 +4552,8 @@ function updateKartProgress(k, dt, racing) {
   // centre within 0.2 m of that face can only be a kart riding on the rail or gone over: put it back.
   const lat = lateral(idx, k.body.position);
   const railFace = railLat(idx, lat);
-  k.railT = Math.abs(lat) > railFace - 0.2 && k.bullet <= 0 ? (k.railT || 0) + dt : 0;
+  // (72.11: a kart leaning on a bank's low rail has its centre further out, and it is on the road: helix karts were being reset at 20-50 km/h, 4 times a race)
+  k.railT = Math.abs(lat) > railFace - 0.2 + Math.abs(track.bank[idx]) * 2 && k.bullet <= 0 ? (k.railT || 0) + dt : 0;
   const onRail = k.railT > 0.3;
   // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
   // reversing uphill barely moves: the AIs' watchdog does the same for them
