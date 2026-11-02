@@ -3,7 +3,8 @@
  *   sound.unlock()            call from a user gesture (Start button); creates/resumes the context
  *   sound.update(dt, mix)     every frame: engines, drift screech
  *   sound.<sfx>()             one-shots: beep, go, bump, boost, charged, lap, finalLap, finish, ...
- *   sound.music(mode)         'race' / 'menu' music loop, or false to stop
+ *   sound.music(mode, track)  'race' (that track's song) / 'menu' music loop, or false to stop
+ *   sound.musicTempo(rate)    the band speeds up (last lap)
  *   sound.setMuted(bool)      remembered in localStorage
  *   sound.setVolume(bus, v)   'music' | 'sfx' (effects, engines, drift squeal), 0..1 (Settings; the game remembers it)
  * ========================================================================== */
@@ -480,10 +481,10 @@ const sfx = {
 };
 
 // ---------- Music: little step-sequenced chiptune loops ----------
-// 16 steps per bar, 4 bars (C - G - Am - F). Scheduled slightly ahead with a timer.
-// 'race': driving bass, lead and drums. 'menu': slower and softer (arpeggios, light kick), for the title
-// and results screens.
-const CHORDS = [[48, 52, 55], [43, 47, 50], [45, 48, 52], [41, 45, 48]]; // MIDI roots + triads
+// 16 steps per bar. 'menu': slower and softer, for the title and results screens. Race music: one song per track (72.2), so a place sounds like itself.
+// A song: `bpm`, `chords` [root, third, fifth per bar, MIDI], `lead` (a list per bar: semitones above the bar's root + 12, -1 = rest), and its `voice(s, t, STEP, chord, opt)`:
+// the band under the lead (bass, stabs, drums). Bars loop; lead and chords may have different lengths, so an A part and a B part just extend the lists.
+const CHORDS = [[48, 52, 55], [43, 47, 50], [45, 48, 52], [41, 45, 48]]; // MIDI roots + triads: C - G - Am - F
 const LEAD = [ // scale degrees in semitones above the chord root (+12), -1 = rest
   [12, -1, 16, -1, 19, -1, 16, 19, 24, -1, 19, -1, 16, -1, 19, -1],
   [12, -1, 16, -1, 19, -1, 24, -1, 23, -1, 19, -1, 16, -1, 14, -1],
@@ -491,13 +492,121 @@ const LEAD = [ // scale degrees in semitones above the chord root (+12), -1 = re
   [12, -1, 16, -1, 19, 21, 19, -1, 16, -1, 14, -1, 12, -1, 11, -1],
 ];
 const MENU_ARP = [0, 12, 7, 12, 4, 12, 7, 12]; // offsets from the chord root, eighth notes
-const BPM = { race: 148, menu: 96 };
+const MENU_BPM = 96;
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
-let musicTimer = 0, musicStep = 0, musicNext = 0, musicMode = null;
+const _ = -1;
+const kick = (t, opt, vol = 0.8, f = 150) => tone(f, t, 0.12, { ...opt, type: 'sine', vol, slide: 0.3 });
+const snare = (t, opt, vol = 0.5, freq = 1800) => noiseHit(t, 0.12, { ...opt, freq, type: 'bandpass', vol });
+const hat = (t, opt, vol = 0.2, dur = 0.03) => noiseHit(t, dur, { ...opt, freq: 7000, type: 'highpass', vol });
 
-/** music('race' | 'menu' | false). Before the first tap (no audio yet) the wish is kept for unlock(). */
-function music(mode) {
-  musicMode = mode || null;
+const SONGS = {
+  // Green Valley: the game's original tune, bright major pop
+  meadow: {
+    bpm: 148, chords: CHORDS, lead: LEAD, leadType: 'triangle', leadVol: 0.45,
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      if (s % 2 === 0) tone(midi(root - 12 + (s % 4 === 2 ? 12 : 0)), t, STEP * 1.8, { ...opt, type: 'square', vol: 0.35 }); // driving eighths, octave jump on the off-beat
+      if (s % 4 === 2) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 0.9, { ...opt, type: 'square', vol: 0.08 })); // chord stabs
+      if (s % 4 === 0) kick(t, opt);
+      if (s % 8 === 4) snare(t, opt);
+      if (s % 2 === 0) hat(t, opt);
+    },
+  },
+  // Canyon Run: spaghetti western in A minor. A galloping bass (long, short, short), a twangy lead with long held notes, a dry clip-clop on the off-beats.
+  canyon: {
+    bpm: 132, leadType: 'sawtooth', leadVol: 0.2, leadLen: 2.6,
+    chords: [[45, 48, 52], [45, 48, 52], [43, 47, 50], [45, 48, 52], [41, 45, 48], [43, 47, 50], [40, 44, 47], [45, 48, 52]], // Am Am G Am F G E Am
+    lead: [
+      [12, _, _, _, 19, _, 17, 19, 24, _, _, _, _, _, 22, 24],
+      [27, _, 24, _, 22, _, 19, _, 24, _, _, _, _, _, _, _],
+      [12, _, _, _, 16, _, 19, _, 24, _, 21, _, 19, _, 16, _],
+      [12, _, 15, _, 19, _, 22, _, 24, _, _, _, _, _, _, _],
+      [12, _, _, _, 16, _, 19, _, 24, _, 23, _, 19, _, _, _],
+      [12, _, 14, _, 16, _, 19, _, 21, _, 19, _, 16, _, 14, _],
+      [12, _, _, _, 16, _, 19, _, 20, _, 19, _, 16, _, 15, _],
+      [12, _, _, _, _, _, _, _, 7, _, 12, _, _, _, _, _],
+    ],
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      if (s % 4 === 0) tone(midi(root - 12), t, STEP * 1.8, { ...opt, type: 'triangle', vol: 0.5 });
+      if (s % 4 === 2 || s % 4 === 3) tone(midi(root - 12 + (s % 8 === 3 ? 7 : 0)), t, STEP * 0.8, { ...opt, type: 'triangle', vol: 0.32 });
+      if (s % 8 === 4) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 3, { ...opt, type: 'triangle', vol: 0.09 })); // a strummed chord
+      if (s % 4 === 0) kick(t, opt, 0.55, 110);
+      if (s % 4 === 2) noiseHit(t, 0.05, { ...opt, freq: 1100, type: 'bandpass', vol: 0.3, q: 6 }); // clip
+      if (s % 4 === 3) noiseHit(t, 0.04, { ...opt, freq: 700, type: 'bandpass', vol: 0.22, q: 6 }); // clop
+    },
+  },
+  // Frost Peak: glassy bells in D major over a soft bass, sleigh bells instead of a hi-hat. Quick but light on its feet.
+  frost: {
+    bpm: 142, leadType: 'sine', leadVol: 0.42, leadLen: 3,
+    chords: [[50, 54, 57], [47, 50, 54], [43, 47, 50], [45, 49, 52], [50, 54, 57], [47, 50, 54], [43, 47, 50], [45, 49, 52]], // D Bm G A, twice
+    lead: [
+      [12, _, 16, _, 19, _, 24, _, 19, _, 16, _, 19, _, 24, _],
+      [15, _, 19, _, 22, _, 24, _, 27, _, 24, _, 22, _, 19, _],
+      [12, _, 16, _, 19, _, 24, _, 28, _, 26, _, 24, _, 21, _],
+      [12, _, 16, _, 19, _, 21, _, 19, _, 16, _, 14, _, 12, _],
+      [24, _, 19, _, 16, _, 19, _, 24, _, 28, _, 24, _, 19, _],
+      [27, _, 24, _, 22, _, 19, _, 15, _, 19, _, 22, _, 24, _],
+      [28, _, 26, _, 24, _, 21, _, 19, _, 21, _, 24, _, 26, _],
+      [28, _, 24, _, 19, _, 16, _, 12, _, _, _, _, _, _, _],
+    ],
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      if (s % 4 === 0) tone(midi(root - 12), t, STEP * 3, { ...opt, type: 'triangle', vol: 0.42 });
+      if (s % 2 === 1) tone(midi(s % 4 === 1 ? third + 24 : fifth + 24), t, STEP * 1.2, { ...opt, type: 'sine', vol: 0.07 }); // shimmer on the off-steps
+      if (s % 8 === 0) kick(t, opt, 0.45, 120);
+      if (s % 8 === 4) noiseHit(t, 0.1, { ...opt, freq: 3200, type: 'bandpass', vol: 0.22 });
+      noiseHit(t, 0.025, { ...opt, freq: 9000, type: 'highpass', vol: s % 4 === 0 ? 0.16 : 0.08 }); // sleigh bells on every step
+    },
+  },
+  // Harbour Run: calypso in F. A steel-drum lead (a short plucked triangle), an off-beat skank, a rolling bass.
+  tech: {
+    bpm: 156, leadType: 'triangle', leadVol: 0.42, leadLen: 1.5,
+    chords: [[53, 57, 60], [46, 50, 53], [48, 52, 55], [53, 57, 60], [53, 57, 60], [50, 53, 57], [46, 50, 53], [48, 52, 55]], // F Bb C F F Dm Bb C
+    lead: [
+      [12, _, 16, 19, _, 16, 19, _, 24, _, 19, _, 16, _, 12, _],
+      [12, _, 16, 19, _, 16, 19, _, 21, _, 19, _, 16, _, 14, _],
+      [19, _, 17, 16, _, 14, 12, _, 14, _, 16, _, 19, _, _, _],
+      [24, _, 19, 16, _, 19, 24, _, 12, _, _, _, _, _, _, _],
+      [24, _, 24, 21, _, 19, 21, _, 24, _, 21, _, 19, _, 16, _],
+      [12, _, 15, 19, _, 15, 19, _, 24, _, 22, _, 19, _, 15, _],
+      [12, _, 14, 16, _, 19, 21, _, 19, _, 16, _, 14, _, 12, _],
+      [19, _, 16, 19, _, 22, 24, _, 22, _, 19, _, 16, _, 14, _],
+    ],
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      if ([0, 3, 6, 10, 12].includes(s)) tone(midi(root - 12 + (s === 6 || s === 12 ? 7 : 0)), t, STEP * 1.6, { ...opt, type: 'triangle', vol: 0.5 });
+      if (s % 4 === 2) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 0.8, { ...opt, type: 'square', vol: 0.07 })); // the skank
+      if (s % 8 === 0) kick(t, opt, 0.6);
+      if ([3, 6, 11, 14].includes(s)) noiseHit(t, 0.05, { ...opt, freq: 2400, type: 'bandpass', vol: 0.26, q: 3 }); // a clave-like tick
+      if (s % 2 === 0) hat(t, opt, 0.12);
+    },
+  },
+  // Spiral Run (the volcano): fast and heavy in E minor. Chugging low saw, power chords, double kick, a screaming square lead on the second half.
+  spiral: {
+    bpm: 172, leadType: 'square', leadVol: 0.16, leadLen: 1.8,
+    chords: [[40, 43, 47], [40, 43, 47], [36, 40, 43], [38, 42, 45], [40, 43, 47], [40, 43, 47], [45, 48, 52], [35, 39, 42]], // Em Em C D Em Em Am B
+    lead: [
+      [12, _, _, 12, 15, _, 12, _, 19, _, 17, _, 15, _, 14, _],
+      [12, _, _, 12, 15, _, 19, _, 22, _, 24, _, 22, _, 19, _],
+      [12, _, 16, _, 19, _, 24, _, 23, _, 19, _, 16, _, 19, _],
+      [12, _, 16, _, 19, _, 24, _, 26, _, 24, _, 21, _, 19, _],
+      [24, _, 22, _, 19, _, 22, _, 24, _, 27, _, 24, _, 22, _],
+      [19, _, 15, _, 12, _, 15, _, 19, _, 22, _, 24, _, 27, _],
+      [24, _, _, 24, 27, _, 24, _, 22, _, 19, _, 15, _, 19, _],
+      [24, _, _, _, 23, _, _, _, 19, _, 16, _, 15, _, 12, _],
+    ],
+    voice(s, t, STEP, [root, , fifth], opt) {
+      if (s % 2 === 0 && s !== 6 && s !== 14) tone(midi(root), t, STEP * 1.1, { ...opt, type: 'sawtooth', vol: 0.3 }); // the chug
+      if (s === 0 || s === 6 || s === 12) [root + 12, fifth + 12].forEach((n) => tone(midi(n), t, STEP * 2.4, { ...opt, type: 'sawtooth', vol: 0.09 })); // power chord
+      if (s % 4 === 0 || s % 8 === 7) kick(t, opt, 0.75, 130);
+      if (s % 8 === 4) snare(t, opt, 0.55, 2200);
+      if (s % 2 === 0) hat(t, opt, 0.14);
+    },
+  },
+};
+let musicTimer = 0, musicStep = 0, musicNext = 0, musicMode = null, musicRate = 1;
+
+/** music('race' | 'menu' | false). Before the first tap (no audio yet) the wish is kept for unlock(). `track` picks the race song (an id in SONGS; anything else plays Green Valley's). */
+function music(mode, track = null) {
+  musicMode = mode === 'race' ? SONGS[track] || SONGS.meadow : mode || null;
+  musicRate = 1;
   if (!ctx) return;
   clearInterval(musicTimer);
   musicTimer = 0;
@@ -509,36 +618,33 @@ function music(mode) {
 
 function scheduleMusic() {
   if (ctx.state !== 'running') { musicNext = ctx.currentTime + 0.1; return; }
-  const STEP = 60 / BPM[musicMode] / 4;
+  const song = musicMode === 'menu' ? null : musicMode;
+  const STEP = 60 / (song ? song.bpm * musicRate : MENU_BPM) / 4;
   while (musicNext < ctx.currentTime + 0.12) {
-    const bar = (musicStep >> 4) % 4, s = musicStep % 16, t = musicNext;
-    const [root, third, fifth] = CHORDS[bar];
+    const bar = (musicStep >> 4), s = musicStep % 16, t = musicNext;
     const opt = { bus: musicBus };
-    if (musicMode === 'menu') {
+    if (song) {
+      const chord = song.chords[bar % song.chords.length];
+      song.voice(s, t, STEP, chord, opt);
+      const l = song.lead[bar % song.lead.length][s];
+      if (l >= 0) tone(midi(chord[0] + l + 12), t, STEP * (song.leadLen ?? 1.9), { ...opt, type: song.leadType, vol: song.leadVol });
+    } else {
       // Arpeggio on eighths, a soft bass note per half bar, the lead every other bar, a gentle kick
+      const [root, third, fifth] = CHORDS[bar % 4];
       if (s % 2 === 0) tone(midi(root + 12 + MENU_ARP[(s >> 1) % 8]), t, STEP * 1.6, { ...opt, type: 'triangle', vol: 0.22 });
       if (s % 8 === 0) tone(midi(root - 12), t, STEP * 7, { ...opt, type: 'triangle', vol: 0.4 });
-      const l = LEAD[bar][s];
+      const l = LEAD[bar % 4][s];
       if ((musicStep >> 6) % 2 === 1 && l >= 0 && s % 4 === 0) tone(midi(root + l + 12), t, STEP * 3.5, { ...opt, type: 'square', vol: 0.06 });
       if (s % 8 === 0) tone(120, t, 0.1, { ...opt, type: 'sine', vol: 0.35, slide: 0.4 });
       if (s % 8 === 4) [third, fifth].forEach((n) => tone(midi(n), t, STEP * 3, { ...opt, type: 'sine', vol: 0.12 }));
-    } else {
-      // Bass: driving eighths, octave jump on the off-beat
-      if (s % 2 === 0) tone(midi(root - 12 + (s % 4 === 2 ? 12 : 0)), t, STEP * 1.8, { ...opt, type: 'square', vol: 0.35 });
-      // Lead
-      const l = LEAD[bar][s];
-      if (l >= 0) tone(midi(root + l + 12), t, STEP * 1.9, { ...opt, type: 'triangle', vol: 0.45 });
-      // Chord stabs on the off-beats
-      if (s % 4 === 2) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 0.9, { ...opt, type: 'square', vol: 0.08 }));
-      // Drums: kick on the beat, snare on 2 and 4, hats on eighths
-      if (s % 4 === 0) tone(150, t, 0.12, { ...opt, type: 'sine', vol: 0.8, slide: 0.3 });
-      if (s % 8 === 4) noiseHit(t, 0.12, { ...opt, freq: 1800, type: 'bandpass', vol: 0.5 });
-      if (s % 2 === 0) noiseHit(t, 0.03, { ...opt, freq: 7000, type: 'highpass', vol: 0.2 });
     }
     musicNext += STEP;
     musicStep++;
   }
 }
+
+/** The last lap: the band plays a little faster until the song is stopped (rate 1 = the song's own tempo). */
+function musicTempo(rate) { musicRate = rate; }
 
 function setVolume(bus, v) {
   level[bus] = v;
@@ -563,4 +669,4 @@ document.addEventListener('visibilitychange', () => {
 /** Pause: freeze all audio (unlock() resumes it). */
 function suspend() { if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }
 
-export const sound = { unlock, suspend, update, music, setMuted, setVolume, get muted() { return muted; }, get context() { return ctx; }, ...sfx };
+export const sound = { unlock, suspend, update, music, musicTempo, setMuted, setVolume, get muted() { return muted; }, get context() { return ctx; }, ...sfx };

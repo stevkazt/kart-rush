@@ -67,28 +67,30 @@ const CFG = {
     },
     canyon: {
       name: 'Canyon Run', icon: 'cactus', theme: 'desert',
-      // ~1130 m figure-8. Start straight (y 0), banked right-hander, under the bridge through a slot
-      // canyon, climb with whoops, 12 m uphill hairpin, crest on the mesa (y 9), over the bridge (9 m
-      // above the lower road), jump on the way down, banked downhill sweeper to the line.
+      // ~1150 m figure-8. Start straight (y 0), banked right-hander, under the bridge through a slot canyon, climb with whoops, the Carousel, crest on the mesa (y 9),
+      // over the bridge (9 m above the lower road), jump on the way down, banked downhill sweeper to the line.
+      // 72.3 (user: the tight curve was "basically a copy" of Green Valley's hairpin): the Carousel, a long climbing bend round a butte that keeps tightening (R 30 -> 20, idx 513-681, banked).
+      // It costs nothing at first and catches you at the end; the road then flicks right, over the crest and under a natural arch.
       points: [
         [181, 20, 0], [180, -15, 0], [174, -50, 0], [160, -78, 0], [138, -96, 0], [110, -104, 0],
-        // 72.1, 4th value = half width (roadWidths maps it by index share: point p covers samples ~34p): the slot and the bridge narrow to 7 (they were two long
-        // empty straights). The hairpin and the sweeper stay at 9: widening them was tried and showed no gain in the bot races.
-        [80, -100, 0], [40, -55, 0], [15, -15, 0, 7], [-15, 15, 0.3, 7], [-45, 45, 1.8, 7], [-80, 75, 3.6, 7],
-        [-112, 96, 5], [-140, 103, 5.8], [-165, 104, 6.4], [-177, 99, 7], [-182, 87, 7.6], [-177, 75, 8.2],
-        [-165, 70, 8.6], [-145, 68, 9], [-128, 58, 9], [-122, 38, 9], [-122, 10, 9], [-115, -25, 9],
-        [-95, -48, 9], [-65, -55, 9], [-40, -42, 9, 7.5], [-15, -15, 9, 7.5], [15, 15, 9, 7.5], [45, 45, 8.8],
+        // 72.1, 4th value = half width (roadWidths maps it by index share: point p covers samples ~32.6p): the slot and the bridge narrow to 7 (they were two long empty straights)
+        [80, -100, 0], [40, -55, 0], [15, -15, 0, 7], [-15, 15, 0.3, 7], [-45, 45, 1.8, 7], [-80, 75, 3.4, 7],
+        [-98, 92, 4], [-115, 107, 4.5], [-137, 119, 5], [-162, 117, 5.6], [-180, 102, 6.2], [-187, 82, 6.9],
+        [-182, 64, 7.6], [-171, 54, 8.2], [-158, 51, 8.6], [-145, 50, 9], [-131, 42, 9], [-122, 24, 9],
+        [-119, 0, 9], [-110, -30, 9], [-95, -48, 9], [-65, -55, 9, 7.5], [-40, -42, 9, 7.5], [-15, -15, 9, 7.5], [15, 15, 9, 7.5], [45, 45, 8.8],
         [75, 75, 8], [105, 95, 7.2], [140, 100, 4.5], [165, 95, 1.6], [178, 78, 0.3], [181, 50, 0],
       ],
-      bumps: [[440, 14, 0.7], [457, 14, 0.7], [700, 26, 1.9]],
-      jumps: [[1074, 9, 1.1]],
-      banks: [[110, 60, 7], [1140, 45, 5]], // build 69.4: was 12 deg / 8 deg over 45 / 30 m half-lengths (uncomfortable); the chase camera now rolls with the road
-      boxRows: [230, 405, 760, 1010, 1185], // 5 rows: the longest track (405, 1185 added in build 36)
-      pads: [[40, 0], [316, 0], [480, -2], [985, 0]], // (316, under the bridge: 72.1). A 6th box row on the bridge was tried: more hits and resets in the bot races, so no
+      bumps: [[440, 14, 0.7], [457, 14, 0.7], [721, 26, 1.9]],
+      jumps: [[1094, 9, 1.1]],
+      banks: [[110, 60, 7], [1160, 45, 5]], // build 69.4: was 12 deg / 8 deg over 45 / 30 m half-lengths (uncomfortable); the chase camera now rolls with the road
+      bankRuns: [[515, 684, 6, 40, 30]], // the Carousel
+      basin: [-148, 85, 32], // the bowl it winds round: x, z, radius (buildDesert)
+      boxRows: [230, 405, 780, 1030, 1205], // 5 rows: the longest track (405, 1205 added in build 36)
+      pads: [[40, 0], [316, 0], [480, -2], [1005, 0]], // (316, under the bridge: 72.1). A 6th box row on the bridge was tried: more hits and resets in the bot races, so no
       edgeDefault: 'stone', // what the barrier looks like (see Green Valley's `edges`); buildDesert puts steel on the bridge
       edges: {
-        1: [[1180, 1218, 'boards'], [0, 50, 'boards'], [535, 655, 'tyres'], [690, 850, 'fence']],
-        '-1': [[1180, 1218, 'boards'], [0, 50, 'boards'], [535, 655, 'tyres'], [690, 850, 'fence']],
+        1: [[1200, 1238, 'boards'], [0, 50, 'boards'], [630, 700, 'tyres'], [712, 870, 'fence']],
+        '-1': [[1200, 1238, 'boards'], [0, 50, 'boards'], [630, 700, 'tyres'], [712, 870, 'fence']],
       },
       palette: { shoulder: [0xcfa679, 0xc69c6f], wear: 0x6d665f, stone: [0xd8c3a0, 0xc9b28e, 0xe0cdaa], wood: [0x8a6a48, 0x7a5c3e] },
     },
@@ -459,7 +461,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '72.1'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.3'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -1994,6 +1996,98 @@ function buildSnow(data) {
   };
 }
 
+/** Where a prop beside the road stands: side 1 = left, `off` metres past the rail. [x, z] */
+function besideRoad({ samples, normals, wL, wR, oL, oR }, i, side, off) {
+  const k = ((i % samples.length) + samples.length) % samples.length % (samples.length - 1);
+  const lat = side * ((side > 0 ? wL[k] + oL[k] : wR[k] + oR[k]) + CFG.track.curb + CFG.track.wallThickness + off);
+  return [samples[k].x + normals[k].x * lat, samples[k].z + normals[k].z * lat];
+}
+
+/** A rock arch over the road at sample i, `span` m across, `rise` m to the underside (visual only), its legs sunk in the ground. Faceted lumps, so it reads as rock, not as a gate. */
+function rockArch(b, data, i, span, rise, colors, rand) {
+  const { samples, normals } = data, n = normals[i], y0 = samples[i].y, LUMP = new THREE.IcosahedronGeometry(1, 0);
+  const STEPS = 15;
+  for (let k = 0; k <= STEPS; k++) {
+    const a = (k / STEPS) * Math.PI, lat = Math.cos(a) * span, up = Math.sin(a) * rise;
+    const thick = 2.2 + 1.6 * Math.abs(Math.cos(a)) + rand() * 0.6; // thin at the crown
+    const c = colors[(((up + rand() * 2) / 2.2) | 0) % colors.length];
+    b.put(LUMP, c, samples[i].x + n.x * lat, y0 + up + thick * 0.8, samples[i].z + n.z * lat, { ry: rand() * 6, sx: thick * 1.3, sy: thick, sz: thick * 1.5 });
+    if (k < 3 || k > STEPS - 3) b.put(LUMP, c, samples[i].x + n.x * lat * 1.05, y0 - 1, samples[i].z + n.z * lat * 1.05, { ry: rand() * 6, sx: thick * 1.6, sy: 5, sz: thick * 1.8 });
+  }
+}
+
+/** Canyon Run's places (72.3), all in one batch: the butte the Carousel winds round, hoodoos on its outside, the natural arch past the crest, a western main street along the start straight, a wind pump on the mesa. */
+function canyonLandmarks(data, heightAt) {
+  const { samples, normals } = data;
+  const b = propBatch(), rand = seededRand(99), BOX = new THREE.BoxGeometry(1, 1, 1);
+  const STRATA = [0xb4532e, 0xc8693a, 0x9c4127, 0xd88a52, 0xb85d36, 0xa84a2c];
+  // The butte: rock layers, each a little narrower and turned, on a talus cone. The Carousel's inside is ~20-30 m from here all the way round.
+  const CYL = new THREE.CylinderGeometry(1, 1.04, 1, 11), CONE = new THREE.ConeGeometry(1, 1, 11);
+  const [bx, bz] = [-148, 85], base = heightAt(bx, bz) - 3;
+  b.put(CONE, 0xc57a49, bx, base + 7, bz, { sx: 25, sy: 20, sz: 25 });
+  let y = base + 5, r = 17;
+  for (let i = 0; i < 9; i++) {
+    const h = 3.2 + rand() * 2.2;
+    b.put(CYL, STRATA[i % STRATA.length], bx + (rand() - 0.5) * 1.2, y + h / 2, bz + (rand() - 0.5) * 1.2, { ry: rand() * 6, sx: r, sy: h, sz: r * (0.88 + rand() * 0.14) });
+    y += h; r -= 0.2 + rand() * 1.1;
+  }
+  b.put(CYL, 0xd9a46c, bx, y + 0.4, bz, { sx: r - 0.5, sy: 0.8, sz: r - 0.5 }); // a sandy cap
+  // Hoodoos: thin stacked spires with a balanced stone on top, past the outer rail of the Carousel, and in pairs along the climb
+  const spire = (x, z, h, w) => {
+    const g = heightAt(x, z) - 1;
+    let yy = g, rr = w;
+    const parts = 3 + ((rand() * 3) | 0);
+    for (let i = 0; i < parts; i++) {
+      const ph = h / parts;
+      b.put(CYL, STRATA[(i * 2 + 1) % STRATA.length], x, yy + ph / 2, z, { ry: rand() * 6, sx: rr, sy: ph, sz: rr });
+      yy += ph; rr *= 0.72 + rand() * 0.14;
+    }
+    b.put(new THREE.IcosahedronGeometry(1, 0), 0x8f4a2c, x + 0.2, yy + w * 0.3, z, { ry: rand() * 6, sx: w * 1.1, sy: w * 0.6, sz: w });
+  };
+  for (const i of [530, 548, 566, 584, 602, 620, 640, 660]) {
+    const [x, z] = besideRoad(data, i, -1, 6 + rand() * 6); // (right: the inside of the bend, standing in the bowl)
+    spire(x, z, 8 + rand() * 8, 1.6 + rand());
+  }
+  for (const i of [470, 500, 760, 800]) for (const side of [1, -1]) {
+    const [x, z] = besideRoad(data, i + ((rand() * 12) | 0), side, 6 + rand() * 5);
+    spire(x, z, 8 + rand() * 7, 1.5 + rand());
+  }
+  // The natural arch on the straight after the crest (it needs a long view: the chase camera looks down, and an arch on the bend was never in frame)
+  rockArch(b, data, 762, 13.5, 8.5, STRATA, rand);
+
+  // Main street: false-fronted western buildings on both sides of the start straight
+  const PAINT = [0x9c6b45, 0xb5803f, 0x8a5a3c, 0xc9a06a, 0x7d5a44, 0xa8553a, 0x6f7f6a], TRIM = 0xe9d9b8, DARK = 0x3a2a20;
+  const front = (i, side, w, h, c) => {
+    const [x, z] = besideRoad(data, i, side, 4.2), t = data.tangents[i], ry = Math.atan2(t.x, t.z), n = normals[i], g = samples[i].y - 0.4;
+    const o = (along, out, yy, sx, sy, sz, col) => b.put(BOX, col, x + t.x * along + n.x * side * out, g + yy, z + t.z * along + n.z * side * out, { ry, sx, sy, sz }); // sx: depth away from the road, sz: along it
+    o(0, 3, h / 2, 6, h, w, c); // the body
+    o(0, -0.1, h * 0.62 + 0.3, 0.3, h * 0.76 + 0.6, w, c); // the false front
+    o(0, -0.15, h * 1.0 + 0.45, 0.4, 0.3, w + 0.4, TRIM);
+    o(0, -2, 3.2, 3.8, 0.2, w, DARK); // the porch roof and its posts
+    for (const a of [-w / 2 + 0.3, w / 2 - 0.3]) o(a, -3.7, 1.6, 0.2, 3.2, 0.2, TRIM);
+    o(0, -0.32, 1.4, 0.1, 2.5, 1.4, DARK); // door
+    for (const a of [-w / 3.2, w / 3.2]) { o(a, -0.32, 1.6, 0.1, 1.3, 1, 0x2e3a44); o(a, -0.32, h * 0.8, 0.1, 1, 1, 0x2e3a44); }
+  };
+  let c = 0;
+  for (const side of [1, -1]) for (let i = side > 0 ? 62 : 68; i >= -42; i -= 10) front((i + data.N) % data.N, side, 7 + (c * 37 % 3), 6.5 + (c * 53 % 4) * 0.8, PAINT[c++ % PAINT.length]);
+  // A water tower at the end of the street
+  const [wx, wz] = besideRoad(data, 80, 1, 7), wy = samples[80].y;
+  b.put(new THREE.CylinderGeometry(3, 3, 3.6, 10), 0x8a6a48, wx, wy + 9, wz);
+  b.put(new THREE.ConeGeometry(3.4, 1.6, 10), 0x5a4634, wx, wy + 11.6, wz);
+  for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) b.put(BOX, 0x5a4634, wx + dx, wy + 3.6, wz + dz, { sx: 0.3, sy: 7.2, sz: 0.3 });
+
+  // A wind pump and a stock tank by the ranch fence on the mesa
+  const [px, pz] = besideRoad(data, 835, 1, 5), py = samples[835].y;
+  for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.put(BOX, 0x8d8f92, px + dx * 0.7, py + 4.5, pz + dz * 0.7, { rx: -dz * 0.1, rz: dx * 0.1, sx: 0.18, sy: 9.2, sz: 0.18 });
+  for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; b.put(BOX, i % 2 ? 0xd9472b : 0xe9e4d8, px + Math.cos(a) * 1.3, py + 9.2 + Math.sin(a) * 1.3, pz, { rz: a + Math.PI / 2, sx: 0.7, sy: 2.6, sz: 0.06 }); }
+  b.put(new THREE.CylinderGeometry(2.2, 2.2, 0.9, 10), 0x7f8a8f, px + 3.5, py + 0.45, pz + 1);
+
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+}
+
 /**
  * Desert canyon on a golden afternoon. The ground is a height field: flat at road height beside the road, then a sandy
  * slope and red rock walls 13-30 m high. Each point takes the lowest of (nearby road height + rise with
@@ -2013,7 +2107,10 @@ function buildDesert(data) {
   const TALUS = new THREE.Color(0xc57a49);
   const ROCK = [0xb4532e, 0xc8693a, 0x9c4127, 0xd88a52, 0xb85d36, 0xa84a2c].map((h) => new THREE.Color(h));
   const { heightAt, floorDist, nearby, maxY, minX, maxX, minZ, maxZ } = makeTerrain(data,
-    (x, z) => [13 + 17 * noise(x / 110 + 31, z / 110 + 17), 5 + 7 * noise(x / 23, z / 23), 5 + 5 * noise(x / 15 + 50, z / 15)],
+    (x, z) => {
+      const open = data.def.basin ? 1 - smoothstep(data.def.basin[2], data.def.basin[2] + 20, Math.hypot(x - data.def.basin[0], z - data.def.basin[1])) : 0; // (a sandy bowl: the butte stands free in it)
+      return [(13 + 17 * noise(x / 110 + 31, z / 110 + 17)) * (1 - open), 5 + 7 * noise(x / 23, z / 23), 5 + 5 * noise(x / 15 + 50, z / 15), 1.4 * (1 - open)];
+    },
     (x, z, h, slope, cc) => {
       if (slope > 0.6) cc.copy(ROCK[(((h + noise(x / 9, z / 9) * 2.5) / 2.3) | 0) % ROCK.length]);
       else if (slope > 0.22) cc.copy(TALUS).lerp(SAND[0], 0.3 * noise(x / 6, z / 6));
@@ -2098,6 +2195,8 @@ function buildDesert(data) {
   const barrierMesh = new THREE.Mesh(barriers.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
   barrierMesh.castShadow = true;
   trackRoot.add(barrierMesh);
+
+  canyonLandmarks(data, heightAt);
 
   // ---- Props on the canyon floor: cacti, boulders, dry bushes ----
   const spot = (uMin, uMax, tries = 40) => {
@@ -3431,7 +3530,7 @@ function updateGameFlow(dt) {
       state.phase = 'race';
       showCountdown('GO!');
       sound.go();
-      sound.music('race');
+      sound.music('race', track.id);
       rocketStart();
     }
   }
@@ -3520,6 +3619,7 @@ function completeLap(k) {
       const final = k.lap + 1 === CFG.laps;
       showMessage(final ? 'FINAL LAP!' : `LAP ${k.lap + 1}`);
       final ? sound.finalLap() : sound.lap();
+      if (final) sound.musicTempo(1.06); // the band picks up for the last lap
     }
   }
   if (k.lap >= CFG.laps) finishKart(k);
@@ -3609,6 +3709,7 @@ function selectTrack(id) {
 function showMenu() {
   teleSend('left');
   Object.assign(state, { phase: 'menu', resultsShown: false });
+  Object.assign(idleProbe, { wait: 5, left: 45, n: 0, ms: 0 }); // (fps stays until it has a new value)
   sound.music('menu');
   clearItems();
   fx.reset();
@@ -4165,7 +4266,7 @@ function teleStart() {
   if (!tele.on) return; // debug races are logged too, flagged debug: true
   tele.nextT = 0;
   tele.race = {
-    build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id, ...(dbgActive() && { debug: true }),
+    build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id, ...(dbgActive() && { debug: true }), idleFps: idleProbe.fps,
     steering: savedSteering(), diff: effectiveDiff(), view: app.classList.contains('vertical') ? 'vertical' : 'landscape', laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
     karts: karts.map((k) => ({ name: k.name, ...(k.ai && { style: k.style, role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
       lineUse: +k.ai.lineUse.toFixed(2) }) })),
@@ -7162,10 +7263,25 @@ function updatePerf(ms) {
   }
 }
 
-const fpsLog = { n: 0, ms: 0, worst: 0 };
+const fpsLog = { n: 0, ms: 0, worst: 0, js: 0, low: 0 };
+// 72.2 (canyon held exactly 30 fps, and a flat 30 is either a cap such as iOS Low Power Mode or frames just over 16.7 ms): a moment on the menu draws nothing, so its rate is
+// the cap whatever the scene costs. Logged as `idleFps` in each race, with `js` (ms of script per frame) in the `fps` events: a slow race with a fast idle = the GPU.
+const idleProbe = { wait: 5, left: 45, n: 0, ms: 0, fps: 0 }; // (`wait`: real frames first, so the canvas has something to keep)
+let jsStart = 0, jsMs = 0;
+const jsEnd = () => { jsMs = performance.now() - jsStart; };
+// ...and if the race is the problem (the idle isn't capped, 2 windows in a row under 45 fps), draw fewer pixels: 1.75 -> 1.5 -> 1.25 at most, for the rest of the session.
+function lowerResolution() {
+  const pr = renderer.getPixelRatio(), to = Math.max(1.25, pr - 0.25);
+  if (to >= pr) return;
+  renderer.setPixelRatio(to);
+  sizeBlurTarget();
+  teleEvent('quality', kart, { from: pr, to });
+}
 let realDt = 0; // this frame's unscaled seconds (the gore eyeball runs on it while the world is in slow motion)
 function loop(now) {
   requestAnimationFrame(loop);
+  jsStart = performance.now();
+  queueMicrotask(jsEnd); // (runs when this callback has returned, whichever way it returns)
   updatePerf(now - lastTime);
   // telemetry: frames over 50 ms, with what was active on the player (build 54: fps dropped during a star)
   if (now - lastTime > 50 && (state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown')) {
@@ -7174,10 +7290,13 @@ function loop(now) {
   }
   // ...and the steady rate every 5 s (71.4): frames under 50 ms never show above, so a slow patch or the phone heating up was invisible
   if (state.phase === 'race' && !state.paused) {
-    fpsLog.n++; fpsLog.ms += now - lastTime; fpsLog.worst = Math.max(fpsLog.worst, now - lastTime);
+    fpsLog.n++; fpsLog.ms += now - lastTime; fpsLog.worst = Math.max(fpsLog.worst, now - lastTime); fpsLog.js += jsMs;
     if (fpsLog.ms >= 5000) {
-      teleEvent('fps', kart, { fps: Math.round(fpsLog.n * 1000 / fpsLog.ms), worst: Math.round(fpsLog.worst), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, idx: kart.trackIdx });
-      Object.assign(fpsLog, { n: 0, ms: 0, worst: 0 });
+      const fps = fpsLog.n * 1000 / fpsLog.ms;
+      teleEvent('fps', kart, { fps: Math.round(fps), worst: Math.round(fpsLog.worst), calls: renderer.info.render.calls, tris: renderer.info.render.triangles, idx: kart.trackIdx, js: +(fpsLog.js / fpsLog.n).toFixed(1), pr: renderer.getPixelRatio() });
+      fpsLog.low = fps < 45 && idleProbe.fps >= 50 ? fpsLog.low + 1 : 0;
+      if (fpsLog.low >= 2) { fpsLog.low = 0; lowerResolution(); }
+      Object.assign(fpsLog, { n: 0, ms: 0, worst: 0, js: 0 });
     }
   }
   const rawDt = Math.min((now - lastTime) / 1000, 0.1);
@@ -7188,6 +7307,13 @@ function loop(now) {
     if (goreFx.t >= 0) { goreFx.t += rawDt; sc = goreTimeScale(goreFx.t); if (goreFx.t > GORE_FX_END) goreFx.t = -1; }
     if (goreFx.l >= 0) { goreFx.l += rawDt; sc = Math.min(sc, goreLandScale(goreFx.l)); if (goreFx.l > GORE_LAND_END) goreFx.l = -1; }
     dt *= sc;
+  }
+  if (idleProbe.wait > 0) idleProbe.wait--;
+  else if (idleProbe.left > 0 && state.phase === 'menu' && !state.paused) { // (the canvas keeps the last frame meanwhile)
+    if (--idleProbe.left < 40) { idleProbe.n++; idleProbe.ms += now - lastTime; } // (skipping the first frames: they still carry the last draw)
+    if (!idleProbe.left) idleProbe.fps = Math.round(idleProbe.n * 1000 / idleProbe.ms);
+    lastTime = now;
+    return;
   }
   lastTime = now;
 

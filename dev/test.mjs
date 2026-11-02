@@ -3,7 +3,7 @@
 //   node test.mjs <port> trace <seconds> <probe.js> -> autopilot race plus an extra script that pushes to __log
 //   node test.mjs <port> profile <seconds>   -> autopilot race with drawing switched off; prints the
 //                                                functions using the most CPU (JS cost, not software GL)
-//   node test.mjs <port> shots <idx,idx,...>  -> screenshots with the player parked at those track samples
+//   node test.mjs <port> shots <idx,idx,...>  -> screenshots with the player parked at those track samples (cam@x/y/z/lx/ly/lz: a free camera)
 //   node test.mjs <port> studio <view,...>    -> lobby close-ups of the player's driver (views: STUDIO below)
 //   node test.mjs <port> eval <js expr>       -> prints the expression ~1 s after GO
 //   node test.mjs <port> tap <seconds>        -> on open grass at top speed, hold RIGHT for <seconds>,
@@ -115,8 +115,18 @@ if (mode === 'autopilot' || mode === 'trace') {
 } else if (mode === 'shots') {
   while ((await ev('__s.phase')) !== 'race') await sleep(200);
   for (const spec of arg.split(',')) {
+    if (spec.startsWith('cam@')) { // cam@x/y/z/lookx/looky/lookz: a free camera (aerial views), no HUD
+      const c = spec.slice(4).split('/').map(Number);
+      await ev(`(() => { window.__fc = ${JSON.stringify(c)}; if (!window.__fcOn) { window.__fcOn = 1; const r0 = __r.render.bind(__r);
+        __r.render = (sc, cam) => { if (window.__fc && cam === __cam) { const f = window.__fc; cam.clearViewOffset(); cam.position.set(f[0], f[1], f[2]); cam.up.set(0, 1, 0); cam.lookAt(f[3], f[4], f[5]); cam.updateMatrixWorld(); } r0(sc, cam); }; }
+        document.getElementById('hud')?.style.setProperty('display', 'none'); document.getElementById('controls')?.style.setProperty('display', 'none'); })()`);
+      await sleep(2500);
+      const s = await send('Page.captureScreenshot');
+      fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}cam-${c.slice(0, 3).join('_')}.png`), Buffer.from(s.data, 'base64'));
+      continue;
+    }
     const [idx, lane = 0] = spec.split(':').map(Number);
-    await ev(`__resetKart(__k, ${idx}, ${lane}); __snap()`);
+    await ev(`window.__fc = null; document.getElementById('hud')?.style.removeProperty('display'); document.getElementById('controls')?.style.removeProperty('display'); __resetKart(__k, ${idx}, ${lane}); __snap()`);
     await sleep(2500);
     // ITEMS=1: parked items on the road ahead (kart-local x, z; y = the ground under the kart) to judge their size
     if (process.env.ITEMS) await ev(`(() => { window.__parked?.forEach((m) => m.removeFromParent());
