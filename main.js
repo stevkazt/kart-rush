@@ -482,7 +482,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '72.12'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.13'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -4575,7 +4575,10 @@ function updateKartProgress(k, dt, racing) {
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     // (72.12: put back over the hole it fell again, and again: one bot was reset ~400 times. Back before the lip instead, with room for the red pads)
     let at = k.trackIdx;
-    if (track.gap[at]) { while (track.gap[at]) at = (at - 1 + track.N) % track.N; at = (at - Math.round(47 / track.spacing) + track.N) % track.N; }
+    if (track.gap[at] || (track.airZone[at] && k.lastReset === 'fell')) { // (fell short: under the landing the nearest sample is past the hole, which skipped the jump)
+      const lip = (track.def.gaps || []).length ? track.gap.indexOf(1) : at;
+      at = (lip - Math.round(47 / track.spacing) + track.N) % track.N;
+    }
     resetKart(k, at, k.ai && at !== k.trackIdx ? 0 : lane);
     if (racing) { k.ghost = CFG.kart.ghostTime; setGhost(k, true); }
     if (k.ai) Object.assign(k.ai, { resetNow: false, stuckT: 0, backT: 0, wrongT: 0, watchT: 0, resets: k.ai.resets + 1 });
