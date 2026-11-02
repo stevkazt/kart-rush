@@ -100,3 +100,9 @@ Moved out of CLAUDE.md (2026-10-17). Lobby, pickers, settings, keyboard, camera,
   both. Add future options as more `.setting` blocks on that screen.
 
 - **Vertical-view menus (build 64-65):** the overlay is laid out upright (~390 x 800); see 'Builds 64.40-65' in history.md. Default view is vertical (`savedView`). Track picker = `#track-preview` + compact card column (`.tracks`); the 3D track overview later replaces the contents of `#tp-view`. Lobby/picker kart framing in vertical uses `lobbyShiftY` / `shiftY` (view offset Y).
+
+## Opening shots, podium, Grand Prix (72.8-72.9)
+- Opening shots: `state.intro` > 0 during the countdown phase (`updateGameFlow` returns early; karts stay held). Only the first race on a track in a session (`introSeen`), never with debug on. `introCamera` flies `def.intro`; the track's song plays; a tap on `#app` skips. `#app.cine` hides the HUD and shows `#cine-title`.
+- Podium: `state.podium` > 0 after the player finishes (`startPodium`, 5.5 s, tap skips). Three steps on the road just past the line; `poseOnPodium` runs after `syncMeshes` and only moves what is drawn, so physics and the rivals still racing are untouched. Everyone else isn't drawn meanwhile. Then `showResults`.
+- Grand Prix: `#btn-cup`, `cup` = { at, pts, over }. `CUP_TRACKS` = the five planned tracks (Temple Run is not in it). `CUP_POINTS` 10, 8, 6, 4, 2, 1 by place when the player taps NEXT RACE. The field stays the same (`sitOut` only advances on the first race). `cupFinal` reuses the results screen. `kartrush.cupBest` = best overall place.
+

@@ -25,10 +25,9 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 
 ## Files
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
-- `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
 - Overlay screens: `#menu-screen` (lobby), `#pick-screen`, `#hello-screen`, `#settings-screen`, `#pause-screen`, `#results-screen`;
   `showOverlay(screen)`. Details: `docs/ui.md`.
-- Tracks (`CFG.tracks`: meadow, canyon, frost), heights, banking, themes: `docs/tracks.md`.
+- Tracks (`CFG.tracks`: meadow, canyon, frost, tech = Harbour Run, jungle = Temple Run, spiral; lab is debug only), heights, banking, themes: `docs/tracks.md`.
 - Characters (`drivers.js`, one baked SkinnedMesh per rider, `DRIVERS` registry, 8 drivers): `docs/drivers.md`.
 - Items, AI personalities, rail reset, places, sound, effects, baked kart meshes: `docs/systems.md`.
 - Feedback log, race analyses, roadmap, open ideas: `docs/history.md`.
@@ -40,7 +39,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
   (grid, countdown, laps, places, results, resets) · 3b AI DRIVERS · 3c ITEMS & BOOST PADS · 4 PHYSICS STEP
   (`driveKart` per kart + `applyStabilityAssist` per kart on `preStep`, which also applies boost + brake pushes)
   · 5 RENDERING LOOP (sync meshes <- bodies, camera, effects, item visuals, HUD, sound mix).
-- `sound.js`: all audio, synthesised with WebAudio (no assets). `sound.unlock()` runs on the Start tap (iOS needs a
+- `sound.js`: all audio, synthesised with WebAudio (no assets). `SONGS` = one race song per track id (`bpm`, `chords`, `lead`, `voice`); `sound.music('race', track.id)`. `sound.unlock()` runs on the Start tap (iOS needs a
   gesture; also sets `navigator.audioSession.type = 'playback'` so the silent switch doesn't mute it). Player engine
   + one engine voice per AI (panned, faded by distance), drift squeal, SFX one-shots, a step-sequenced chiptune
   loop during the race, and mute (Settings -> ALL SOUND, saved in localStorage).
@@ -105,6 +104,8 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 
 14. **Rail seams (build 71.2).** Rails are rows of boxes: a contact normal mostly ALONG the road is the end face of the next box, not a hit (`railSnag`). Without this a glancing touch stops a kart dead. When giving the speed back, give none into the rail or karts dig in.
 
+15. **Over a gap, the nearest sample lies (72.12).** A reset there must go back before the lip: resetting in place looped one bot ~400 times, and a kart under the landing was put past the hole. Wheels off the road in `track.airZone` are the jump, not a flip.
+
 ## Testing
 ```bash
 dev/test.sh autopilot 80        # full race with button-style autopilot; prints lap log + STUCK events
@@ -113,6 +114,10 @@ dev/test.sh eval '<js expr>'    # print a page expression ~1 s after GO, e.g. '_
 dev/test.sh trace probe.js 40   # autopilot race + your probe script pushing lines to __log (test.sh waits for Chrome's port: it once took > 2 s)
 dev/test.sh shots 300,860:3     # screenshots with the player parked at sample idx[:lane]
 dev/test.sh profile 8           # CPU profile, drawing off
+dev/test.sh cost                # draw calls + triangles at 10 spots round the lap (TRACK=...); keep the max near 320k
+dev/test.sh cine                # screenshots of the opening shots and the podium
+dev/test.sh cup                 # the whole Grand Prix with races ended on the spot: tables, points, errors
+`shots` also takes cam@x/y/z/lx/ly/lz (a free camera, for aerial views)
 OUT_DIR=x dev/test.sh film 600  # bomb hit on the player, gore on, vertical 390x844: fake clock, 1 PNG + 1 film.jsonl row per 1/30 s (camera, slow-mo, eject, eyes, lens, blood)
 python3 dev/film-report.py <dir> # fixed checks on that film (eye/skeleton on screen, phase times, landing spot, camera) + contact sheets <dir>/sheets
 TRACK=canyon dev/test.sh ...    # any mode on another track
@@ -144,7 +149,7 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
-- **START HERE: docs/history.md 'Where things stand (2026-11-02)'** lists everything pending (five-track plan, shortcuts idea, release blockers, known issues). **State (build 72.1 + `dev/sim/`, UNCOMMITTED; build 72 is pushed):** Green Valley approved and done (scenery left as is, user). Canyon Run got one race: the user had caveats they didn't get to name, and that race ran at exactly 30 fps: ask about both first. **Scenery must stay cheap: batch it with `propBatch` (docs/tracks.md); the user wants landmarks, not more trees.**
+- **START HERE: docs/history.md 'The night of 2026-11-02'** (what was built unattended, what to check on the phone) and 'Where things stand'. **State (build 72.13, committed locally, NOT pushed; sw.js still v72):** six tracks, each with its own signature corner and song (table in docs/tracks.md), opening shots, podium, Grand Prix, debug tools off on the hosted copy. **None of it has been played on a phone.** The first thing to read in the next races: `idleFps` and `js`, `pr` in `fps` events, `quality` events (Canyon's 30 fps). **Scenery must stay cheap: batch it with `propBatch` and check `dev/test.sh cost`; the user wants landmarks, not more trees.**
 - **State 2026-10-18 (builds 70.1-70.20, HEAD 583ce94, UNCOMMITTED, nothing pushed since 70):** green-shell self-hit fix (bots aim like the player + a wall check, 70.4), no post-hit ghost after a banana (70.5), debug shape tracks incl. **Spiral Run** with road gaps, red pads, bank runs and a centre piece (70.2-70.20; see docs/tracks.md 'Debug shape-test tracks and track features' and history.md). The star-at-start question was answered (luck + grid bots take row 1): keep as is. Difficulty work paused (next: stronger player catch-up; leading-player blue-shell protection needs the user's OK).
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
 - **Hit motions all approved (2026-10-17, build 65.5, uncommitted):** bomb ejects the driver, `bombFire` explosion; see history.md. Bones/burn/skeleton gore and the age banner still owed.
