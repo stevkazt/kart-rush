@@ -114,12 +114,12 @@ if (mode === 'autopilot' || mode === 'trace') {
   console.log('hit at frame', hitAt, 'end at', endAt);
 } else if (mode === 'cine') {
   const shot = async (name) => { const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}cine-${name}.png`), Buffer.from(s.data, 'base64')); };
-  for (const [n, left] of [['intro1', 3.9], ['intro2', 2.3], ['intro3', 0.8]]) {
+  for (const [n, left] of [['intro1', 5.5], ['intro2', 3.3], ['intro3', 1.1]]) {
     while (+(await ev('__s.intro')) > left) await sleep(50);
     await shot(n);
   }
   while ((await ev('__s.phase')) !== 'race') await sleep(200);
-  await ev(`__k.place = 2; __finish(__k)`);
+  await ev(`__k.place = 2; __k.boost = 3; __fx.v = 0.5; __finish(__k)`);
   while (!(+(await ev('__s.podium')) > 0)) await sleep(100);
   for (const [n, left] of [['podium1', 4.5], ['podium2', 1.5]]) {
     while (+(await ev('__s.podium')) > left) await sleep(50);
@@ -128,7 +128,7 @@ if (mode === 'autopilot' || mode === 'trace') {
   while (!(await ev('__s.resultsShown'))) await sleep(100);
   await sleep(1500);
   await shot('results');
-  console.log(await ev(`JSON.stringify({ errors: window.__errs || 0, visible: __karts.map((k) => k.group.visible) })`));
+  console.log(await ev(`JSON.stringify({ blur: __fx.v, errors: window.__errs || 0, visible: __karts.map((k) => k.group.visible) })`));
 } else if (mode === 'cup') {
   // the whole Grand Prix, each race ended on the spot: table after each, final table, no errors. Prints the points.
   const shot = async (name) => { const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}cup-${name}.png`), Buffer.from(s.data, 'base64')); };
@@ -161,6 +161,12 @@ if (mode === 'autopilot' || mode === 'trace') {
   }
   const all = rows.flat(), med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
   console.log(`${process.env.TRACK || 'meadow'} calls max ${Math.max(...all.map((r) => r[0]))} med ${med(all.map((r) => r[0]))} tris max ${Math.max(...all.map((r) => r[1]))} med ${med(all.map((r) => r[1]))} programs ${await ev('__r.info.programs.length')}`);
+} else if (mode === 'introcost') {
+  // draw calls and triangles while the opening shots run (headless can't say anything about fps)
+  await ev(`(() => { const r0 = __r.render.bind(__r); window.__cf = []; __r.render = (a, b) => { r0(a, b); if (__s.intro > 0) window.__cf.push([__r.info.render.calls, __r.info.render.triangles]); }; })()`);
+  while ((await ev('__s.phase')) !== 'race') await sleep(200);
+  const all = JSON.parse(await ev('JSON.stringify(__cf)')), med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
+  console.log(`${process.env.TRACK || 'meadow'} frames ${all.length} calls max ${Math.max(...all.map((r) => r[0]))} med ${med(all.map((r) => r[0]))} tris max ${Math.max(...all.map((r) => r[1]))} med ${med(all.map((r) => r[1]))}`);
 } else if (mode === 'menu') {
   const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}menu.png`), Buffer.from(s.data, 'base64'));
 } else if (mode === 'shots') {

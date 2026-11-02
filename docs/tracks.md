@@ -1,6 +1,6 @@
 # Kart Rush: tracks
 
-**Six tracks since the night of 2026-11-02 (build 72.x), each with its own signature corner, place and song; see 'The six tracks' at the end.**
+**Six tracks since the night of 2026-11-02 (build 72.x), each with its own signature corner, place and song; see 'The six tracks' at the end. New tracks planned and design lessons: track-plans.md.**
 
 Moved out of CLAUDE.md (2026-10-17). Layouts, heights, Canyon, Meadow. Frost Peak notes are in history.md (Build 30).
 

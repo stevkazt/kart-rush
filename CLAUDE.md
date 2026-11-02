@@ -27,6 +27,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - `index.html`: import map, HUD, touch controls, overlay. Everything sits inside `#app`.
 - Overlay screens: `#menu-screen` (lobby), `#pick-screen`, `#hello-screen`, `#settings-screen`, `#pause-screen`, `#results-screen`;
   `showOverlay(screen)`. Details: `docs/ui.md`.
+- Plans for new tracks + design lessons: `docs/track-plans.md`.
 - Tracks (`CFG.tracks`: meadow, canyon, frost, tech = Harbour Run, jungle = Temple Run, spiral; lab is debug only), heights, banking, themes: `docs/tracks.md`.
 - Characters (`drivers.js`, one baked SkinnedMesh per rider, `DRIVERS` registry, 8 drivers): `docs/drivers.md`.
 - Items, AI personalities, rail reset, places, sound, effects, baked kart meshes: `docs/systems.md`.
@@ -106,6 +107,8 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 
 15. **Over a gap, the nearest sample lies (72.12).** A reset there must go back before the lip: resetting in place looped one bot ~400 times, and a kart under the landing was put past the hole. Wheels off the road in `track.airZone` are the jump, not a flip.
 
+16. **Only the chase camera eases `speedFx` and the FOV (72.16).** Another camera (podium, shots) must clear them itself, or a boosted finish stays blurred. Scripted cameras: near race speed, position and aim on smooth curves; stepping the aim between samples and 82 m/s read as "laggy" at a steady 60 fps.
+
 ## Testing
 ```bash
 dev/test.sh autopilot 80        # full race with button-style autopilot; prints lap log + STUCK events
@@ -116,6 +119,7 @@ dev/test.sh shots 300,860:3     # screenshots with the player parked at sample i
 dev/test.sh profile 8           # CPU profile, drawing off
 dev/test.sh cost                # draw calls + triangles at 10 spots round the lap (TRACK=...); keep the max near 320k
 dev/test.sh cine                # screenshots of the opening shots and the podium
+dev/test.sh introcost           # draw calls + triangles while the opening shots run
 dev/test.sh cup                 # the whole Grand Prix with races ended on the spot: tables, points, errors
 `shots` also takes cam@x/y/z/lx/ly/lz (a free camera, for aerial views)
 OUT_DIR=x dev/test.sh film 600  # bomb hit on the player, gore on, vertical 390x844: fake clock, 1 PNG + 1 film.jsonl row per 1/30 s (camera, slow-mo, eject, eyes, lens, blood)
@@ -149,7 +153,8 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
-- **START HERE: docs/history.md 'The night of 2026-11-02'** (what was built unattended, what to check on the phone) and 'Where things stand'. **State (build 72.13, committed locally, NOT pushed; sw.js still v72):** six tracks, each with its own signature corner and song (table in docs/tracks.md), opening shots, podium, Grand Prix, debug tools off on the hosted copy. **None of it has been played on a phone.** The first thing to read in the next races: `idleFps` and `js`, `pr` in `fps` events, `quality` events (Canyon's 30 fps). **Scenery must stay cheap: batch it with `propBatch` and check `dev/test.sh cost`; the user wants landmarks, not more trees.**
+- **NEWEST, START HERE (build 72.17, UNCOMMITTED in the working tree: 72.14-72.17 + docs; commits stop at 72.13; nothing pushed since 72): docs/track-plans.md** = plans for new tracks (mine, moon base), alternative paths, design lessons, open checks, and the two answers owed by the user. Then docs/history.md 'First phone feedback on the night's builds'.
+- **Then: docs/history.md 'The night of 2026-11-02'** (what was built unattended, what to check on the phone) and 'Where things stand'. **State at the end of that night (build 72.13, committed locally, NOT pushed; sw.js still v72):** six tracks, each with its own signature corner and song (table in docs/tracks.md), opening shots, podium, Grand Prix, debug tools off on the hosted copy. The phone has since played it: about 60 fps on the five tracks logged, `idleFps` 60. In race logs read `idleFps`, the `intro` event, and `js`, `pr` in `fps` events. **Scenery must stay cheap: batch it with `propBatch` and check `dev/test.sh cost`; the user wants landmarks, not more trees.**
 - **State 2026-10-18 (builds 70.1-70.20, HEAD 583ce94, UNCOMMITTED, nothing pushed since 70):** green-shell self-hit fix (bots aim like the player + a wall check, 70.4), no post-hit ghost after a banana (70.5), debug shape tracks incl. **Spiral Run** with road gaps, red pads, bank runs and a centre piece (70.2-70.20; see docs/tracks.md 'Debug shape-test tracks and track features' and history.md). The star-at-start question was answered (luck + grid bots take row 1): keep as is. Difficulty work paused (next: stronger player catch-up; leading-player blue-shell protection needs the user's OK).
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.
 - **Hit motions all approved (2026-10-17, build 65.5, uncommitted):** bomb ejects the driver, `bombFire` explosion; see history.md. Bones/burn/skeleton gore and the age banner still owed.

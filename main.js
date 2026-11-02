@@ -482,7 +482,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '72.13'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '73'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -794,8 +794,17 @@ function buildTrack(def, th) {
 
   // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
   const P = { ...th.palette, ...def.palette };
-  trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02,
-    (i) => (ramp[i] ? [0xffd23a, 0x262222][((i / 2) | 0) % 2] : (P.ice && ice[i] > 0.5 ? P.ice : def.surfaces?.find(([from, to]) => i >= from && i < to)?.[2] || P.road)[((i / 10) | 0) % 2])));
+  // Onto the ice the road fades through packed snow (a straight cut from tarmac to ice looked like a bug): 0 tarmac, 0.5 snow, 1 ice, reaching ice where the grip has gone
+  const iceFade = (i) => (def.ice || []).reduce((v, [from, to]) => Math.max(v, Math.min(smoothstep(from - 30, from - 1, i), 1 - smoothstep(to + 1, to + 30, i))), 0);
+  const onIce = (i, band, plain) => {
+    const f = iceFade(i), c = new THREE.Color(plain[band]);
+    return f < 0.5 ? c.lerp(new THREE.Color(P.shoulder[band]), f * 2) : c.set(P.shoulder[band]).lerp(new THREE.Color(P.ice[band]), f * 2 - 1);
+  };
+  trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02, (i) => {
+    if (ramp[i]) return [0xffd23a, 0x262222][((i / 2) | 0) % 2];
+    const band = ((i / 10) | 0) % 2, plain = def.surfaces?.find(([from, to]) => i >= from && i < to)?.[2] || P.road;
+    return P.ice && iceFade(i) > 0 ? onIce(i, band, plain) : plain[band];
+  }));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
   trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
   const lc = def.levelColors; // the curbs follow the rails' level colours (70.17)
@@ -818,7 +827,7 @@ function buildTrack(def, th) {
     const wear = new Float32Array(N + 1), W = 12;
     for (let i = 0; i < N; i++) { let sum = 0; for (let d = -W; d <= W; d++) sum += radius[(i + d + N) % N] < 45 ? 1 : 0; wear[i] = 1.2 * sum / (2 * W + 1); }
     wear[N] = wear[0];
-    trackRoot.add(makeRibbon(data, (i) => line[i % N] - wear[i], (i) => line[i % N] + wear[i], 0.03, (i) => (wear[i] > 0.05 || wear[i + 1] > 0.05 ? P.wear : null)));
+    trackRoot.add(makeRibbon(data, (i) => line[i % N] - wear[i], (i) => line[i % N] + wear[i], 0.03, (i) => ((wear[i] > 0.05 || wear[i + 1] > 0.05) && !ice[i] ? P.wear : null)));
   }
   buildWalls(data, P);
   buildStartLine(data, P);
@@ -2053,7 +2062,7 @@ function buildSnow(data) {
 
   // The lake: an ellipse round the ice stretch, its shore wobbled by noise. 1 inside, 0 outside.
   const lake = (x, z) => {
-    const r = ((x - 40) / 135) ** 2 + ((z + 110) / 58) ** 2 + (noise(x / 25 + 5, z / 25) - 0.5) * 0.5;
+    const r = ((x - 44) / 100) ** 2 + ((z + 110) / 58) ** 2 + (noise(x / 25 + 5, z / 25) - 0.5) * 0.3; // (the shore meets the road where its ice starts and ends)
     return 1 - smoothstep(0.8, 1, r);
   };
   const SNOW = [0xe9eff6, 0xe2e9f2, 0xeef3f8].map((h) => new THREE.Color(h));
@@ -4345,6 +4354,10 @@ function startRace() {
 }
 
 function beginCountdown() {
+  if (introLog.n) {
+    teleEvent('intro', kart, { fps: Math.round(introLog.n * 1000 / Math.max(1, introLog.ms)), frames: introLog.n, worst: Math.round(introLog.worst), over20: introLog.over20, calls: introLog.calls, tris: introLog.tris, pr: renderer.getPixelRatio() });
+    Object.assign(introLog, { n: 0, ms: 0, worst: 0, over20: 0, calls: 0, tris: 0 });
+  }
   state.intro = 0;
   app.classList.remove('cine');
   sound.music(false);
@@ -4355,19 +4368,33 @@ function beginCountdown() {
 }
 
 // ---------- The opening shots and the podium (72.8): the camera and the HUD's job, the race itself doesn't know ----------
-const INTRO_SHOT = 1.6; // seconds per shot
+const INTRO_SHOT = 2.2, INTRO_PACE = 24; // seconds per shot; metres per second (a kart's top speed is 26: at 82 m/s the first version looked laggy at any fps)
 const introSeen = new Set();
-const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3();
-/** Flies down the road: each shot of `def.intro` is [from idx, to idx, height over the road, metres left of the centre]. */
+const introLog = { n: 0, ms: 0, worst: 0, over20: 0, calls: 0, tris: 0 }; // how the shots really ran on the phone: logged as an `intro` event
+let introPaths = null;
+/** Smooth curves for each shot of `def.intro` ([from idx, to idx, height over the road, metres left of the centre]), cut down round its middle to what INTRO_PACE covers. */
+function buildIntroPaths() {
+  const N = track.N, at = (i, lat, h) => roadPoint(((Math.round(i) % N) + N) % N, lat, h, new THREE.Vector3());
+  introPaths = { of: track, shots: track.def.intro.map(([a, c, h, lat = 0]) => {
+    let len = 0;
+    for (let i = a; i < c; i++) len += track.samples[i % N].distanceTo(track.samples[(i + 1) % N]);
+    const half = (c - a) / 2 * Math.min(1, INTRO_PACE * INTRO_SHOT / len), mid = (a + c) / 2, knots = Math.ceil(half * 2 / 8), pos = [], look = [];
+    for (let k = 0; k <= knots; k++) {
+      const i = mid - half + half * 2 * k / knots;
+      pos.push(at(i, lat, h));
+      look.push(at(i + 26, 0, h * 0.35));
+    }
+    return { pos: new THREE.CatmullRomCurve3(pos), look: new THREE.CatmullRomCurve3(look) };
+  }) };
+}
+/** Flies down the road at a steady pace. Position and aim both come off smooth curves, every frame: the aim used to hop from one road sample to the next. */
 function introCamera() {
-  const shots = track.def.intro, t = shots.length * INTRO_SHOT - state.intro;
-  const n = Math.min(shots.length - 1, Math.floor(t / INTRO_SHOT)), [a, c, h, lat = 0] = shots[n];
-  const u = smoothstep(0, 1, clamp(t / INTRO_SHOT - n, 0, 1)) * 0.35 + clamp(t / INTRO_SHOT - n, 0, 1) * 0.65, f = lerp(a, c, u), N = track.N;
-  const i = Math.floor(f) % N, j = (i + 1) % N;
-  roadPoint(i, lat, h, _p1); roadPoint(j, lat, h, _p2);
+  if (introPaths?.of !== track) buildIntroPaths();
+  const shots = introPaths.shots, t = shots.length * INTRO_SHOT - state.intro;
+  const n = clamp(Math.floor(t / INTRO_SHOT), 0, shots.length - 1), u = clamp(t / INTRO_SHOT - n, 0, 1);
+  shots[n].pos.getPoint(u, camera.position);
+  shots[n].look.getPoint(u, camState.look);
   camera.up.set(0, 1, 0);
-  camera.position.lerpVectors(_p1, _p2, f - Math.floor(f));
-  roadPoint((i + 26) % N, 0, h * 0.35, camState.look);
   camera.lookAt(camState.look);
 }
 
@@ -4380,7 +4407,7 @@ function buildPodium() {
     x.fillStyle = '#ffffff'; x.font = 'bold 96px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(n, 64, 70);
     return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false });
   };
-  [[0xffc93a, 2.1, 0], [0xc6ced6, 1.5, 3.4], [0xc9803f, 1, -3.4]].forEach(([c, h, x], i) => {
+  [[0xffc93a, 2.1, 0], [0xc6ced6, 1.5, -3.4], [0xc9803f, 1, 3.4]].forEach(([c, h, x], i) => {
     const step = new THREE.Mesh(new THREE.BoxGeometry(3.4, h, 3.4), new THREE.MeshLambertMaterial({ color: c }));
     step.position.set(x, h / 2, 0);
     step.castShadow = step.receiveShadow = true;
@@ -4401,6 +4428,9 @@ function startPodium() {
   PODIUM.mesh.visible = true;
   PODIUM.q.setFromEuler(new THREE.Euler(0, Math.atan2(-t.x, -t.z), 0));
   PODIUM.top = [...karts].sort((a, c) => a.place - c.place).slice(0, 3);
+  for (const k of PODIUM.top) Object.assign(k, { boost: 0, star: 0, bullet: 0, rocketT: 0 }); // no flames on the steps
+  speedFx.v = 0; // (only the chase camera eases these back: the blur and the wide view of a boosted finish stayed on)
+  camera.fov = viewFov; camera.updateProjectionMatrix();
   state.podium = PODIUM.time;
   app.classList.add('cine');
   const w = PODIUM.top[0];
@@ -4731,7 +4761,9 @@ function cupFinal() {
 /** Title screen. The karts sit on the grid behind it. */
 function showMenu() {
   teleSend('left');
-  Object.assign(state, { phase: 'menu', resultsShown: false });
+  Object.assign(state, { phase: 'menu', resultsShown: false, intro: 0, podium: 0 }); // (quitting from a pause during the shots: they'd have gone on to a countdown over the menu)
+  introLog.n = 0;
+  app.classList.remove('cine');
   Object.assign(idleProbe, { wait: 5, left: 45, n: 0, ms: 0 }); // (fps stays until it has a new value)
   sound.music('menu');
   clearItems();
@@ -6976,16 +7008,15 @@ function blueBlast(s, at) {
 
 const blueA = new THREE.Vector3(), blueB = new THREE.Vector3();
 /**
- * Blue shell: flies over the middle of the road at blueSpeed (through everything) until its target is
- * within blueHome m ahead, then dives at it. Returns true when it's done.
+ * Blue shell: flies over the middle of the road at blueSpeed (through everything) until the current leader is
+ * within blueHome m ahead, then dives at them. Returns true when it's done.
  */
 function updateBlue(s, dt) {
   const I = CFG.items, { N, spacing } = track;
   if (s.target?.finished) return true; // the target crossed the line: the shell is dropped, not passed on
-  if (!s.target) {
-    s.target = blueTarget(s.owner);
-    if (s.target) s.dir = (s.target.trackIdx - s.idx + N) % N < N / 2 ? 1 : -1;
-  }
+  const lead = blueTarget(s.owner); // whoever leads right now: a new leader takes over the shell
+  if (lead && lead !== s.target && ((s.idx - lead.trackIdx) * s.dir + N) % N < N / 4) s.dir = -s.dir; // the new leader is just behind it: turn round, don't fly the whole lap
+  s.target = lead;
   const tgt = s.target;
   if (!tgt || s.life <= 0) return true;
   const tp = tgt.body.position;
@@ -8323,6 +8354,11 @@ function loop(now) {
   if (now - lastTime > 50 && (state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown')) {
     teleEvent('slow', kart, { ms: Math.round(now - lastTime), ...(state.phase === 'countdown' && { countdown: +state.countdown.toFixed(1) }), star: +kart.star.toFixed(1), ghost: !!kart.ghosted, shield: kart.shield > 0,
       boost: kart.boost > 0, bullet: kart.bullet > 0, spin: kart.spin > 0, calls: renderer.info.render.calls, tris: renderer.info.render.triangles });
+  }
+  if (state.intro > 0 && !state.paused && now > lastTime) {
+    const ms = now - lastTime;
+    if (introLog.n++) { introLog.ms += ms; introLog.worst = Math.max(introLog.worst, ms); if (ms > 20) introLog.over20++; } // (the first frame's gap is the time on the menu)
+    introLog.calls = Math.max(introLog.calls, renderer.info.render.calls); introLog.tris = Math.max(introLog.tris, renderer.info.render.triangles);
   }
   // ...and the steady rate every 5 s (71.4): frames under 50 ms never show above, so a slow patch or the phone heating up was invisible
   if (state.phase === 'race' && !state.paused) {

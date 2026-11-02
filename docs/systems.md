@@ -36,7 +36,7 @@ Moved out of CLAUDE.md (2026-10-17). Rocket start, effects, sound, items, karts,
   speed and play a different sound", not phone-tested), **triple** (3 mushrooms,
   `k.itemCount`, `tripleGap`, `k.orbit` meshes circle the kart, x3 badge = `data-count` on the item button),
   **blue** (one at a time: `rollItem` zeroes it while one is out or held; flies over the road centre at
-  `blueSpeed` 55 to the leader (`blueTarget`, never its owner), dives within `blueHome`, `blueBlast` 5 m blast,
+  `blueSpeed` 55 to the leader (`blueTarget`, never its owner; re-picked every frame, so a new leader takes over the shell, build 72.17; it still fizzles if its target finishes), dives within `blueHome`, `blueBlast` 5 m blast,
   `blueSpin` 1.9 s; thrown from 1st it flies backwards to 2nd (`s.dir`)), **bullet** (`k.bullet` 4 s: on rails,
   `bulletGuide` in preStep steers the velocity to 38 m/s along the road, `collisionResponse` off until nobody
   overlaps, hull mesh `k.hull`, wheels hidden). Star/bullet karts spin out anyone within `bumpRadius` and shove

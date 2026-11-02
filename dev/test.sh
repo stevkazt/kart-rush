@@ -32,7 +32,7 @@ if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
 fi
 cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/ui-icons.js "$GAME_DIR"/drivers.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__finish=finishKart;window.__fx=speedFx;window.__G=()=>({goreFx,eye1,eye2,lens,blood,dots,goreSkel,camFocus,camState,kart,camera,fx,goreSplats});#' \
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__introCam=introCamera;window.__introShot=()=>INTRO_SHOT;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__finish=finishKart;window.__fx=speedFx;window.__G=()=>({goreFx,eye1,eye2,lens,blood,dots,goreSkel,camFocus,camState,kart,camera,fx,goreSplats});#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -56,6 +56,8 @@ run() {
 
 if [ "$MODE" = "trace" ]; then
   run trace "${2:-40}" "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+elif [ "$MODE" = "introcost" ]; then
+  run introcost x
 elif [ "$MODE" = "cine" ]; then
   run cine x
 elif [ "$MODE" = "cup" ]; then
