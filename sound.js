@@ -578,6 +578,28 @@ const SONGS = {
       if (s % 2 === 0) hat(t, opt, 0.12);
     },
   },
+  // Temple Run: hand drums and a wooden marimba in G pentatonic minor, circling, not resolving.
+  jungle: {
+    bpm: 138, leadType: 'triangle', leadVol: 0.4, leadLen: 1.3,
+    chords: [[43, 46, 50], [43, 46, 50], [41, 45, 48], [43, 46, 50], [46, 50, 53], [41, 45, 48], [43, 46, 50], [38, 41, 45]], // Gm Gm F Gm Bb F Gm Dm
+    lead: [
+      [12, _, 15, _, 17, 19, _, 17, 15, _, 12, _, 10, _, 12, _],
+      [12, _, 15, _, 17, 19, _, 22, 24, _, 22, _, 19, _, 17, _],
+      [14, _, 17, _, 19, 21, _, 19, 17, _, 14, _, 12, _, 14, _],
+      [24, _, 22, _, 19, 17, _, 19, 15, _, 17, _, 12, _, _, _],
+      [12, _, 16, _, 19, _, 24, 21, 19, _, 16, _, 14, _, 12, _],
+      [14, _, 17, _, 19, 21, _, 24, 21, _, 19, _, 17, _, 14, _],
+      [12, _, 15, 17, 19, _, 22, _, 19, 17, 15, _, 12, _, 10, _],
+      [17, _, 15, _, 12, _, 10, _, 12, _, 15, _, 17, _, 22, _],
+    ],
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      if ([0, 3, 8, 11].includes(s)) tone(midi(root - 12), t, STEP * 2, { ...opt, type: 'sine', vol: 0.55 });
+      if (s % 8 === 6) [third, fifth].forEach((n) => tone(midi(n + 12), t, STEP * 1.2, { ...opt, type: 'triangle', vol: 0.09 }));
+      if ([0, 6, 10].includes(s)) tone(95, t, 0.16, { ...opt, type: 'sine', vol: 0.7, slide: 0.55 }); // low drum
+      if ([3, 7, 12, 14, 15].includes(s)) tone(s === 15 ? 330 : 240, t, 0.08, { ...opt, type: 'sine', vol: 0.34, slide: 0.7 }); // high hand drums
+      if (s % 2 === 1) noiseHit(t, 0.03, { ...opt, freq: 5000, type: 'highpass', vol: 0.09 }); // a shaker
+    },
+  },
   // Spiral Run (the volcano): fast and heavy in E minor. Chugging low saw, power chords, double kick, a screaming square lead on the second half.
   spiral: {
     bpm: 172, leadType: 'square', leadVol: 0.16, leadLen: 1.8,

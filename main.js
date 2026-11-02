@@ -169,6 +169,29 @@ const CFG = {
     // three levels 10 m apart, climbing in steps: 2 plateaus + 2 ramps per turn, +5 m per ramp) to y 25, one long bank run, a wide turn on the ridge, a 70 m straight ending in 3 RED full-width pads, then the road is
     // CUT (`gaps`: control point 43 = the lip, idx ~1173, to the foot at ~1209): a 32 m hole over the lava, 10 m down to the receiving edge (y 15), a ~15% landing ramp to y 11 (a flat landing killed ~130 km/h),
     // a landing run and one gentle descent, over a lava river. A kart arriving at >= 32 m/s (boosted) clears the edge; an unboosted one (26) does not, and everyone can reach a pad.
+    // Temple Run (72.10): a new track, ~1320 m, a figure-8. Start along the river flats, a long climbing sweep, a crest, tight S-bends down through the palms (R ~18), the rope bridge over the gorge (y 1), up round a
+    // banked corner, then the stone viaduct right over the bridge (y 10) and straight through the pyramid (a short tunnel, idx ~924-976), and a long descent home.
+    jungle: {
+      name: 'Temple Run', icon: 'pine', theme: 'jungle',
+      intro: [[470, 545, 4], [905, 985, 3.2], [1385, 1412, 6]], // over the rope bridge, through the pyramid, onto the grid
+      points: [
+        [0, -140, 0], [55, -140, 0], [110, -128, 0.5], [152, -98, 1.5], [172, -50, 3], [165, 0, 5], [138, 40, 6], [106, 60, 4.6], [72, 46, 3], [42, 50, 1.8],
+        [22, 76, 1, 7], [14, 112, 1, 7], [22, 150, 1.6], [52, 180, 3.6], [95, 186, 6.5], [128, 170, 9], [138, 140, 10], [112, 116, 10], [70, 112, 10], [30, 112, 10],
+        [-10, 112, 10], [-50, 112, 10], [-90, 112, 10], [-125, 102, 8.5], [-155, 74, 6], [-170, 30, 3.8], [-162, -20, 2], [-132, -70, 0.8], [-95, -115, 0.2], [-50, -138, 0],
+      ],
+      bumps: [[340, 24, 1.2]],
+      banks: [[741, 24, 6]],
+      boxRows: [90, 300, 620, 800, 1040, 1260],
+      pads: [[30, 0], [460, 0], [795, 0], [1070, 0]],
+      temple: [929, 981], ropePosts: [490, 530], // where buildJungle puts the pyramid and the bridge's portals
+      surfaces: [[490, 532, [0x8a6a48, 0x7d5f40]], [915, 995, [0xb7aa8e, 0xada085]]], // planks on the bridge, flagstones through the temple
+      edgeDefault: 'hedge',
+      edges: {
+        1: [[1385, 1422, 'boards'], [0, 40, 'boards'], [488, 534, 'fence'], [840, 1010, 'stone']],
+        '-1': [[1385, 1422, 'boards'], [0, 40, 'boards'], [488, 534, 'fence'], [840, 1010, 'stone']],
+      },
+      palette: { road: [0xa8765a, 0xa06f54], dash: 0xf4e8c8, shoulder: [0x8a9a55, 0x7f8f4e], wear: 0x8f6650, stone: [0xa7ad90, 0x9aa184, 0xb3b89c], wood: [0x6b4a2f, 0x5c3f28] },
+    },
     spiral: {
       name: 'Spiral Run', icon: 'volcano', theme: 'volcano', gaps: [43],
       intro: [[700, 800, 7], [1148, 1222, 7], [1625, 1652, 6]], // up the cone, over the lava, into the station
@@ -458,7 +481,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '72.9'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.10'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -1207,6 +1230,15 @@ const THEMES = {
       rail: [0x4b4548, 0xe8622a], arch: [0x2c2422, 0xe8622a],
     },
     build: buildVolcano,
+  },
+  jungle: {
+    // midday in the green: high sun, a clear sky, no gloom under the trees
+    sky: 0xa6dcf2, fog: [0xdcefdc, 120, 480], hemi: [0xffffff, 0x8aa86a, 1.4], sun: [0xfff6e0, 2.3], sunOffset: [30, 120, 40],
+    palette: {
+      road: [0xa8765a, 0xa06f54], dash: 0xf4e8c8, curb: [0xd9472b, 0xf3ead8],
+      rail: [0x6b4a2f, 0xe2b72e], arch: [0x6b4a2f, 0xe2b72e],
+    },
+    build: buildJungle,
   },
 };
 
@@ -2191,22 +2223,8 @@ function buildHarbour(data) {
   const sky = makeSky(0xe3f2f7, 0xa9dbf5, 0x4fa8e8, 0xfff4e0);
   buildChevrons(data);
 
-  // The water: a plane, a tiled texture of soft glints, drifting
-  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
-  const g2 = cv.getContext('2d');
-  g2.fillStyle = '#3aa6c9'; g2.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 90; i++) {
-    g2.fillStyle = i % 3 ? 'rgba(120,214,232,0.5)' : 'rgba(235,250,255,0.55)';
-    g2.fillRect(rand() * 128, rand() * 128, 6 + rand() * 18, 1 + rand() * 1.5);
-    g2.fillStyle = 'rgba(30,120,160,0.4)';
-    g2.fillRect(rand() * 128, rand() * 128, 8 + rand() * 16, 2);
-  }
-  const wTex = new THREE.CanvasTexture(cv);
-  wTex.wrapS = wTex.wrapT = THREE.RepeatWrapping; wTex.repeat.set(70, 70); wTex.colorSpace = THREE.SRGBColorSpace;
-  const waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), new THREE.MeshBasicMaterial({ map: wTex }));
-  waterMesh.rotation.x = -Math.PI / 2;
-  waterMesh.position.set((minX + maxX) / 2, -1.2, (minZ + maxZ) / 2);
-  trackRoot.add(waterMesh);
+  const water2 = movingWater(rand, '#3aa6c9', 'rgba(120,214,232,0.5)', 'rgba(30,120,160,0.4)', 70, 1800, 1800);
+  water2.mesh.position.set((minX + maxX) / 2, -1.2, (minZ + maxZ) / 2);
 
   farMassifs(rand, noise, 9, () => [(minX + maxX) / 2, (minZ + maxZ) / 2], (y, n) => (y + n * 0.2 > 0.62 ? 0xa8b39a : y > 0.28 ? 0x7f9a66 : 0x6e8f5a), { arc: [0.25, Math.PI - 0.25], r: [290, 340], h: [55, 110], w: [70, 110] });
 
@@ -2396,7 +2414,7 @@ function buildHarbour(data) {
   let clock = 0;
   const place = (dt) => {
     clock += dt;
-    wTex.offset.set(clock * 0.006, clock * 0.0035);
+    water2.update(clock);
     boats.forEach((o, i) => {
       if (o.orbit) {
         const [ox, oz, rx, rz, w] = o.orbit, a = clock * w + i;
@@ -2472,51 +2490,7 @@ function buildVolcano(data) {
   const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
   buildBarriers(data, b);
 
-  // ---- Where the road stands off the ground: a deck under it, a rusty face along its edge, basalt columns under the outside ----
-  const deck = [], rimColor = 0x7d5240;
-  const lat = (i, sd, extra) => sd * ((sd > 0 ? wL[i] : wR[i]) + T.curb + T.wallThickness + extra);
-  const groundBelow = (i, sd) => { const p = roadPoint(i, lat(i, sd, 1.2), 0); return { p, g: heightAt(p.x, p.z) }; };
-  const raised = new Uint8Array(N + 1);
-  for (let i = 0; i < N; i++) {
-    if (gap[i]) continue;
-    const a = groundBelow(i, 1), c = groundBelow(i, -1);
-    if (a.p.y - a.g > 1.4 || c.p.y - c.g > 1.4) raised[i] = 1;
-  }
-  for (let i = 0; i < N; i += 2) {
-    const j = Math.min(i + 2, N);
-    if (!(raised[i] || raised[j % N]) || gap[i] || gap[j % N]) continue;
-    const a0 = roadPoint(i, lat(i, -1, 1.5), -0.55), a1 = roadPoint(i, lat(i, 1, 1.5), -0.55), b0 = roadPoint(j, lat(j, -1, 1.5), -0.55), b1 = roadPoint(j, lat(j, 1, 1.5), -0.55);
-    deck.push(...a0.toArray(), ...a1.toArray(), ...b0.toArray(), ...b0.toArray(), ...a1.toArray(), ...b1.toArray());
-    for (const [p, q, s] of [[a0, b0, 1], [a1, b1, -1]]) { // the faces, 1.5 m deep
-      const pu = p.clone(), qu = q.clone(), pd = p.clone().setY(p.y - 1.5), qd = q.clone().setY(q.y - 1.5), v = s > 0 ? [pu, qu, pd, pd, qu, qd] : [pu, pd, qu, qu, pd, qd];
-      for (const w of v) deck.push(w.x, w.y, w.z);
-    }
-  }
-  if (deck.length) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(deck, 3));
-    g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: rimColor, side: THREE.DoubleSide }));
-    trackRoot.add(m);
-  }
-  for (const sd of [1, -1]) for (let i = 2; i < N; i += 11) {
-    if (!raised[i] || gap[i]) continue;
-    const p = roadPoint(i, lat(i, sd, 1.1), -1);
-    // down to the ground, or to whatever part of the road passes under here
-    let foot = heightAt(p.x, p.z) - 0.5, onRoad = false;
-    nearby(p.x, p.z, (j, d) => {
-      if (d > 16 || samples[j].y > p.y - 3) return;
-      const off = Math.abs(lateral(j, p));
-      if (off < Math.max(wL[j], wR[j]) + T.curb + 0.6) onRoad = true; // (a column standing in a lane of the road below: no)
-      else if (off < Math.max(wL[j], wR[j]) + 3.5) foot = Math.max(foot, samples[j].y + 0.2); // ...on the rail beside it: fine
-    });
-    const h = p.y - foot;
-    if (onRoad || h < 0.8) continue;
-    for (let k = 0; k < 3; k++) { // a cluster: the columns basalt really forms
-      const a = rand() * 6.3, o = k ? 0.9 : 0, w = 0.9 + rand() * 0.35, tall = h * (k ? 0.92 : 1);
-      b.put(HEX, BASALT_HEX[((i >> 2) + k) % 3], p.x + Math.cos(a) * o, foot + tall / 2, p.z + Math.sin(a) * o, { ry: rand() * 3, sx: w, sy: tall, sz: w });
-    }
-  }
+  roadOnStilts(data, b, ground, rand, HEX, BASALT_HEX, 0x7d5240);
 
   // ---- The cone: rings of faceted rock inside the coils, a lava streak on its faces, a crater ----
   const rOf = (y) => (y < 25 ? 26.5 - 0.36 * y : 17.5 - 0.42 * (y - 25));
@@ -2638,6 +2612,245 @@ function buildVolcano(data) {
   return { update(dt) { sky.update(); place(dt); } };
 }
 const BASALT_HEX = [0x564845, 0x4b4548, 0x5e4f4a];
+
+/** Where the road stands off the ground: a deck under it, a face along its edge, clusters of columns under the outside (not in a lane of any road below). `column` = geometry, drawn in batch `b`. */
+function roadOnStilts(data, b, { heightAt, nearby }, rand, column, colors, deckColor) {
+  const { N, samples, wL, wR, gap } = data, T = CFG.track, deck = [];
+  const lat = (i, sd, extra) => sd * ((sd > 0 ? wL[i] : wR[i]) + T.curb + T.wallThickness + extra);
+  const raised = new Uint8Array(N + 1);
+  for (let i = 0; i < N; i++) {
+    if (gap[i]) continue;
+    for (const sd of [1, -1]) { const p = roadPoint(i, lat(i, sd, 1.2), 0); if (p.y - heightAt(p.x, p.z) > 1.4) raised[i] = 1; }
+  }
+  for (let i = 0; i < N; i += 2) {
+    const j = Math.min(i + 2, N);
+    if (!(raised[i] || raised[j % N]) || gap[i] || gap[j % N]) continue;
+    const a0 = roadPoint(i, lat(i, -1, 1.5), -0.55), a1 = roadPoint(i, lat(i, 1, 1.5), -0.55), b0 = roadPoint(j, lat(j, -1, 1.5), -0.55), b1 = roadPoint(j, lat(j, 1, 1.5), -0.55);
+    deck.push(...a0.toArray(), ...a1.toArray(), ...b0.toArray(), ...b0.toArray(), ...a1.toArray(), ...b1.toArray());
+    for (const [p, q, s] of [[a0, b0, 1], [a1, b1, -1]]) { // the faces, 1.5 m deep
+      const pu = p.clone(), qu = q.clone(), pd = p.clone().setY(p.y - 1.5), qd = q.clone().setY(q.y - 1.5), v = s > 0 ? [pu, qu, pd, pd, qu, qd] : [pu, pd, qu, qu, pd, qd];
+      for (const w of v) deck.push(w.x, w.y, w.z);
+    }
+  }
+  if (deck.length) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(deck, 3));
+    g.computeVertexNormals();
+    trackRoot.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: deckColor, side: THREE.DoubleSide })));
+  }
+  for (const sd of [1, -1]) for (let i = 2; i < N; i += 11) {
+    if (!raised[i] || gap[i]) continue;
+    const p = roadPoint(i, lat(i, sd, 1.1), -1);
+    // down to the ground, or to whatever part of the road passes under here
+    let foot = heightAt(p.x, p.z) - 0.5, onRoad = false;
+    nearby(p.x, p.z, (j, d) => {
+      if (d > 16 || samples[j].y > p.y - 3) return;
+      const off = Math.abs(lateral(j, p));
+      if (off < Math.max(wL[j], wR[j]) + T.curb + 0.6) onRoad = true; // (a column standing in a lane of the road below: no)
+      else if (off < Math.max(wL[j], wR[j]) + 3.5) foot = Math.max(foot, samples[j].y + 0.2); // ...on the rail beside it: fine
+    });
+    const h = p.y - foot;
+    if (onRoad || h < 0.8) continue;
+    for (let k = 0; k < 3; k++) { // a cluster
+      const a = rand() * 6.3, o = k ? 0.9 : 0, w = 0.9 + rand() * 0.35, tall = h * (k ? 0.92 : 1);
+      b.put(column, colors[((i >> 2) + k) % colors.length], p.x + Math.cos(a) * o, foot + tall / 2, p.z + Math.sin(a) * o, { ry: rand() * 3, sx: w, sy: tall, sz: w });
+    }
+  }
+}
+
+/**
+ * The jungle (72.10): a laterite road through green hills at midday, a figure-8. Stone viaduct over the rope bridge, the road straight through a stepped pyramid (a short tunnel, torches inside),
+ * a river gorge with a waterfall, palms in woods. Bright all the way: the only shade is the tunnel.
+ */
+function buildJungle(data) {
+  const { N, samples, tangents, normals, wL, wR, def } = data, T = CFG.track;
+  const rand = seededRand(808), noise = makeNoise(rand);
+  const segDist = (x, z, a, c) => { const dx = c[0] - a[0], dz = c[1] - a[1], u = clamp(((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz), 0, 1); return Math.hypot(x - a[0] - dx * u, z - a[1] - dz * u); };
+  const GORGE = [[-52, 84], [16, 94], [66, 104]];
+  const gorgeD = (x, z) => Math.min(segDist(x, z, GORGE[0], GORGE[1]), segDist(x, z, GORGE[1], GORGE[2])) + (noise(x / 12 + 7, z / 12) - 0.5) * 6;
+  const GREENS = [0x5fa648, 0x6fb551, 0x549a42, 0x7cbf5c].map((h) => new THREE.Color(h));
+  const EARTH = new THREE.Color(0xa8765a), ROCK = [0x8a8574, 0x7c7867].map((h) => new THREE.Color(h)), MOSS = new THREE.Color(0x4f8d3f);
+  const ground = makeTerrain(data,
+    (x, z) => [10 + 20 * noise(x / 70 + 21, z / 70 + 3), 6 + 8 * noise(x / 22, z / 22), 12 + 16 * noise(x / 26 + 5, z / 26)],
+    (x, z, h, slope, cc) => {
+      if (gorgeD(x, z) < 13) cc.copy(ROCK[(noise(x / 4, z / 4) * 1.999) | 0]).lerp(MOSS, 0.3 * noise(x / 7, z / 7));
+      else if (slope > 0.85) cc.copy(ROCK[(h / 3 | 0) % 2]).lerp(MOSS, 0.4);
+      else if (slope < 0.05 && noise(x / 9 + 3, z / 9) > 0.62) cc.copy(EARTH).lerp(GREENS[0], 0.35);
+      else cc.copy(GREENS[(noise(x / 11 + 2, z / 11) * 3.999) | 0]).lerp(MOSS, smoothstep(0.3, 0.8, slope) * 0.5);
+    },
+    { carve: (x, z, h) => { const m = 1 - smoothstep(6, 13, gorgeD(x, z)); return m > 0 ? lerp(h, -7, m) : h; } });
+  const { heightAt, floorDist, minX, maxX, minZ, maxZ } = ground;
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+  const plain = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), lambert(0x4f8d3f));
+  plain.rotation.x = -Math.PI / 2; plain.position.set(cx, -5, cz);
+  trackRoot.add(plain);
+  const water = movingWater(rand, '#3e9fb0', 'rgba(150,226,230,0.5)', 'rgba(30,110,130,0.4)', 18, maxX - minX + 150, maxZ - minZ + 150);
+  water.mesh.position.set(cx, -3, cz);
+  const sky = makeSky(0xe6f3e8, 0xa6dcf2, 0x4fa8e8, 0xfff4e0);
+  buildChevrons(data);
+  farMassifs(rand, noise, 16, () => [cx, cz], (y, n) => (y + n * 0.25 > 0.66 ? 0x7f9a66 : y > 0.3 ? 0x5f9150 : 0x558a48), { r: [330, 400], h: [60, 130] });
+
+  const b = propBatch(), BOX = new THREE.BoxGeometry(1, 1, 1), LUMP = new THREE.IcosahedronGeometry(1, 0);
+  const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  buildBarriers(data, b);
+  roadOnStilts(data, b, ground, rand, BOX, [0xa7a58f, 0x9a9882, 0xb0ae98], 0x8d8b76);
+  const STONE = [0xb7aa8e, 0xada085, 0xc2b598], DARK = 0x77705e, GOLD = 0xe2b72e;
+
+  // ---- The pyramid: 7 tiers across the road, split below the tunnel's roof. Straight road, so `n` and `t` hold for all of it. ----
+  const [t0, t1] = def.temple, tc = Math.round((t0 + t1) / 2), C = samples[tc], tt = tangents[tc], nn = normals[tc], ry = Math.atan2(tt.x, tt.z), halfRoad = Math.max(wL[tc], wR[tc]) + T.curb + T.wallThickness + 0.2, ROOF = 6.8;
+  const tier = (c, along, across, y0, y1, off = 0) => box(c, across, y1 - y0, along, C.x + nn.x * off, (y0 + y1) / 2, C.z + nn.z * off, { ry });
+  for (let k = 0, y = C.y - 8; k < 8; k++) {
+    const along = 48 - k * 6, across = 66 - k * 7, y1 = k === 0 ? C.y + 1.6 : y + 4.2;
+    if (y1 <= C.y + ROOF) { // beside the road only
+      const w = (across / 2 - halfRoad);
+      if (w > 0) for (const sd of [1, -1]) tier(STONE[k % 3], along, w, y, y1, sd * (halfRoad + w / 2));
+    } else {
+      const w = (across / 2 - halfRoad);
+      for (const sd of [1, -1]) tier(STONE[k % 3], along, w, y, C.y + ROOF, sd * (halfRoad + w / 2));
+      tier(STONE[(k + 1) % 3], along, across, C.y + ROOF, y1);
+    }
+    y = y1;
+    for (const sd of [1, -1]) box(DARK, 0.5, 0.5, along * 0.9, C.x + nn.x * sd * (across / 2 + 0.05), y - 0.3, C.z + nn.z * sd * (across / 2 + 0.05), { ry }); // a dark band
+  }
+  const top = C.y - 8 + 1.6 + 8 + 7 * 4.2 - 6.4;
+  box(STONE[2], 8, 5, 8, C.x, top + 2.4, C.z, { ry });
+  box(DARK, 3, 3.2, 8.2, C.x, top + 1.8, C.z, { ry });
+  box(GOLD, 9, 0.8, 9, C.x, top + 5.3, C.z, { ry });
+  // ...the portals: a gold lintel and a carved face over each end, and torches down the tunnel's walls (orange: they read as lit)
+  for (const e of [-1, 1]) {
+    const a = e * 24.1, px = C.x + tt.x * a, pz = C.z + tt.z * a;
+    box(GOLD, halfRoad * 2 + 2, 1, 0.6, px, C.y + ROOF + 0.3, pz, { ry });
+    box(DARK, 5, 3.2, 0.5, px, C.y + ROOF + 2.5, pz, { ry });
+    for (const dx of [-1.3, 1.3]) box(0x4ad0c0, 0.9, 0.9, 0.7, px + nn.x * dx, C.y + ROOF + 3, pz + nn.z * dx, { ry });
+    box(GOLD, 2.6, 0.4, 0.7, px, C.y + ROOF + 1.6, pz, { ry });
+  }
+  for (let a = -20; a <= 20; a += 8) for (const sd of [1, -1]) {
+    const px = C.x + tt.x * a + nn.x * sd * (halfRoad - 0.05), pz = C.z + tt.z * a + nn.z * sd * (halfRoad - 0.05);
+    box(0x5c3f28, 0.2, 0.9, 0.2, px, C.y + 2.8, pz);
+    b.put(new THREE.ConeGeometry(0.28, 0.8, 5), 0xffa62a, px, C.y + 3.6, pz);
+  }
+
+  // ---- Stone heads and broken columns down the approach, both sides ----
+  const frame = (i, sd, off) => { const k = ((i % N) + N) % N, [x, z] = besideRoad(data, k, sd, off), tn = tangents[k], n = normals[k]; return { k, x, z, ry: Math.atan2(tn.x, tn.z), y: samples[k].y, at: (a, o) => [x + tn.x * a + n.x * sd * o, z + tn.z * a + n.z * sd * o] }; };
+  const COLUMN = new THREE.CylinderGeometry(1, 1.1, 1, 8);
+  [860, 885, 908, 1000, 1022].forEach((i, n) => { for (const sd of [1, -1]) {
+    const f = frame(i, sd, 1.6);
+    if (floorDist(f.x, f.z).u < -3) continue;
+    if (n % 2 === 0) { // a head: block face, heavy brow, eyes, long nose
+      const dir = f.ry + (sd > 0 ? -Math.PI / 2 : Math.PI / 2), fx = Math.sin(dir), fz = Math.cos(dir);
+      box(STONE[n % 3], 3.2, 5, 3.2, f.x, f.y + 2.3, f.z, { ry: f.ry });
+      box(DARK, 3.4, 0.5, 3.4, f.x, f.y + 3.7, f.z, { ry: f.ry });
+      box(STONE[1], 0.7, 1.6, 0.7, f.x + fx * 1.7, f.y + 2.8, f.z + fz * 1.7, { ry: f.ry });
+      for (const a of [-0.8, 0.8]) box(0xf4efe4, 0.5, 0.4, 0.5, f.x + fx * 1.6 + Math.sin(f.ry) * a, f.y + 3.2, f.z + fz * 1.6 + Math.cos(f.ry) * a, { ry: f.ry });
+    } else {
+      const h = 4 + (i % 5);
+      b.put(COLUMN, STONE[n % 3], f.x, f.y + h / 2 - 0.3, f.z, { sx: 1.1, sy: h, sz: 1.1 });
+      b.put(LUMP, STONE[1], f.x, f.y + h, f.z, { ry: i, sx: 1.2, sy: 0.6, sz: 1.2 });
+    }
+  } });
+
+  // ---- The rope bridge's gantries: two timber portals, ropes up over the road ----
+  for (const i of def.ropePosts) for (const sd of [1, -1]) {
+    const f = frame(i, sd, -0.15);
+    box(0x5c3f28, 0.5, 6, 0.5, f.x, f.y + 3, f.z);
+    if (sd > 0) { const g = frame(i, -1, -0.15), span = Math.hypot(f.x - g.x, f.z - g.z); box(0x5c3f28, 0.4, 0.5, span + 0.6, (f.x + g.x) / 2, f.y + 6, (f.z + g.z) / 2, { ry: Math.atan2(f.x - g.x, f.z - g.z) }); }
+  }
+
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+
+  // ---- Palms and broad bushes, in woods (instanced) ----
+  const pb = propBatch();
+  for (let k = 0; k < 4; k++) pb.put(BOX, k % 2 ? 0x8a6a48 : 0x7a5c3e, k * 0.14, 1 + k * 1.75, 0, { sx: 0.5 - k * 0.05, sy: 1.9, sz: 0.5 - k * 0.05, rz: -0.05 });
+  const FROND = new THREE.ConeGeometry(0.75, 4.4, 4);
+  for (let k = 0; k < 7; k++) { const a = (k / 7) * 6.283; pb.put(FROND, k % 2 ? 0x4e9a3e : 0x3f8f3a, 0.42 + Math.cos(a) * 1.9, 7.4 - 0.35, Math.sin(a) * 1.9, { ry: -a + Math.PI / 2, rx: 1.15, sy: 1, sz: 0.28 }); }
+  const bushB = propBatch();
+  bushB.put(LUMP, 0x3f8f3a, 0, 0.8, 0, { sx: 1.8, sy: 1.1, sz: 1.8 });
+  bushB.put(LUMP, 0x4e9a3e, 0.7, 1.2, 0.3, { sx: 1.1, sy: 0.9, sz: 1.2 });
+  const scatter = (geo, count, uMin, uMax, scale) => {
+    const inst = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), count), m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    let n = 0;
+    for (let t = 0; t < count * 14 && n < count; t++) {
+      const x = minX - 60 + rand() * (maxX - minX + 120), z = minZ - 60 + rand() * (maxZ - minZ + 120);
+      if (noise(x / 34 + 13, z / 34 + 2) < 0.46 || gorgeD(x, z) < 15) continue;
+      const u = floorDist(x, z).u;
+      if (u < uMin || u > uMax || (Math.abs(x - C.x) < 44 && Math.abs(z - C.z) < 44)) continue;
+      const y = heightAt(x, z);
+      if (Math.abs(heightAt(x + 1.5, z) - y) > 1.1) continue;
+      inst.setMatrixAt(n++, m.compose(p.set(x, y - 0.1, z), q.setFromAxisAngle(_up, rand() * 6.3), sc.setScalar(scale())));
+    }
+    inst.count = n;
+    inst.castShadow = true;
+    trackRoot.add(inst);
+  };
+  scatter(pb.geometry(), 170, 1.5, 46, () => 0.85 + rand() * 0.7);
+  scatter(bushB.geometry(), 110, 0.6, 26, () => 0.7 + rand() * 0.8);
+
+  // ---- The waterfall at the head of the gorge: a sheet with a moving texture, mist at its foot ----
+  const wc = document.createElement('canvas'); wc.width = 64; wc.height = 128;
+  const wg = wc.getContext('2d');
+  wg.fillStyle = '#bfeef3'; wg.fillRect(0, 0, 64, 128);
+  for (let i = 0; i < 36; i++) { wg.fillStyle = i % 2 ? 'rgba(255,255,255,0.9)' : 'rgba(120,200,215,0.7)'; wg.fillRect(rand() * 64, rand() * 128, 2 + rand() * 4, 18 + rand() * 40); }
+  const fallTex = new THREE.CanvasTexture(wc);
+  fallTex.wrapS = fallTex.wrapT = THREE.RepeatWrapping; fallTex.repeat.set(3, 1.5); fallTex.colorSpace = THREE.SRGBColorSpace;
+  const [fx, fz] = GORGE[2], fy = heightAt(fx + 9, fz + 2);
+  const fall = new THREE.Mesh(new THREE.PlaneGeometry(20, Math.max(10, fy + 3)), new THREE.MeshBasicMaterial({ map: fallTex }));
+  fall.position.set(fx + 3, Math.max(10, fy + 3) / 2 - 3, fz + 0.5);
+  fall.rotation.y = -Math.PI / 2 + 0.17;
+  trackRoot.add(fall);
+  const mist = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), 8);
+  mist.frustumCulled = false;
+  const pa = propBatch();
+  pa.put(BOX, 0xffffff, 0, 0, 0, { sx: 1.1, sy: 0.06, sz: 0.36 });
+  pa.put(BOX, 0xffffff, 0, 0, 0.1, { sx: 0.2, sy: 0.2, sz: 0.8 });
+  const BIRDS = 9, birds = new THREE.InstancedMesh(pa.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), BIRDS), bc = [0xe8322f, 0x2f6bff, 0xffc93a, 0x3fb950], col = new THREE.Color();
+  for (let i = 0; i < BIRDS; i++) birds.setColorAt(i, col.set(bc[i % bc.length]));
+  birds.frustumCulled = false;
+  trackRoot.add(mist, birds);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+  let clock = 0;
+  const place = (dt) => {
+    clock += dt;
+    water.update(clock);
+    fallTex.offset.y = clock * 0.55;
+    for (let i = 0; i < 8; i++) {
+      const u = (clock * 0.3 + i / 8) % 1;
+      p.set(fx - 1 - u * 7 + Math.sin(i * 2.1) * 5, -2.5 + u * 5, fz - 2 + Math.cos(i * 1.7) * 7);
+      mist.setMatrixAt(i, m.compose(p, q.identity(), sc.setScalar(1 + u * 2.4)));
+    }
+    mist.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < BIRDS; i++) {
+      const a = clock * (0.3 + (i % 3) * 0.08) + i * 2.3, r = 22 + (i % 4) * 10, ccx = i % 2 ? C.x : 22, ccz = i % 2 ? C.z : 130;
+      p.set(ccx + Math.cos(a) * r, C.y + 18 + (i % 5) * 2 + Math.sin(clock + i) * 1.3, ccz + Math.sin(a) * r);
+      e.set(0, -a, Math.sin(clock * 7 + i) * 0.5);
+      birds.setMatrixAt(i, m.compose(p, q.setFromEuler(e), sc.setScalar(1)));
+    }
+    birds.instanceMatrix.needsUpdate = true;
+  };
+  place(0);
+  return { update(dt) { sky.update(); place(dt); } };
+}
+
+/** One flat sheet of water, seen only where the ground is cut below it: a tiled texture of glints, drifting. `update(clock)`. */
+function movingWater(rand, base, glint, shade, repeat, w, h) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  g.fillStyle = base; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = i % 3 ? glint : 'rgba(235,250,255,0.55)';
+    g.fillRect(rand() * 128, rand() * 128, 6 + rand() * 18, 1 + rand() * 1.5);
+    g.fillStyle = shade;
+    g.fillRect(rand() * 128, rand() * 128, 8 + rand() * 16, 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(repeat, repeat); tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+  mesh.rotation.x = -Math.PI / 2;
+  trackRoot.add(mesh);
+  return { mesh, update(clock) { tex.offset.set(clock * 0.006, clock * 0.0035); } };
+}
 
 /** Where a prop beside the road stands: side 1 = left, `off` metres past the rail. [x, z] */
 function besideRoad({ samples, normals, wL, wR, oL, oR }, i, side, off) {
@@ -4353,7 +4566,7 @@ function updateKartProgress(k, dt, racing) {
   if (wantsReset && state.phase !== 'menu') {
     k.lastReset = k.ai?.resetNow || (onRail ? 'rail' : k.fallT > 0.6 ? 'fell' : k.flipTimer > 1.5 ? `flip up=${up.y.toFixed(2)} wheels=${wheelsDown}` : rescue ? 'stuck' : 'button');
     k.stuckT = 0;
-    if (state.phase !== 'countdown') teleEvent('reset', k, { why: k.lastReset });
+    if (state.phase !== 'countdown') teleEvent('reset', k, { why: k.lastReset, lat: +lat.toFixed(2), face: +railFace.toFixed(2), h: +(k.body.position.y - surfaceY(idx, clampLane(idx, lat, 0))).toFixed(2), kmh: Math.round(k.speed * 3.6) });
     const lane = k.ai ? clampLane(k.trackIdx, track.line[k.trackIdx] * k.ai.lineUse + k.ai.lane) : 0;
     resetKart(k, k.trackIdx, lane);
     if (racing) { k.ghost = CFG.kart.ghostTime; setGhost(k, true); }
