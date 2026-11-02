@@ -96,22 +96,31 @@ const CFG = {
     },
     frost: {
       name: 'Frost Peak', icon: 'snowflake', theme: 'snow',
-      // ~930 m. Start straight beside the frozen lake (y 0), banked left sweeper, climbing S-bends through
-      // the pines, a 13 m hairpin at the top (y 10.5), back along the ridge, a fast downhill with a crest,
-      // then across the lake on ice: a gentle S (tightest ~32 m) on two thirds of the grip, back to the line.
+      // ~1010 m, a ski resort. Start along the village street (y 0), banked left sweeper, climbing S-bends through the pines, the Summit: two separate 90 degree bends with a short
+      // straight between (72.4, it was a 13 m hairpin, one more copy of Green Valley's; R 21 and 26, idx 355-450, round the lift's top station), back along the ridge, through the
+      // snow gallery, a fast downhill with a crest, then across the lake on ice: a gentle S (tightest ~32 m) on two thirds of the grip, back to the line.
       points: [
         [150, -15, 0], [150, 20, 0], [145, 55, 0.3], [128, 82, 0.8], [100, 98, 1.5], [70, 100, 2.5],
-        [45, 112, 4], [20, 118, 5.5], [-5, 108, 7], [-30, 112, 8.5], [-55, 115, 9.5], [-70, 112, 10],
-        [-80, 104, 10.3], [-84, 94, 10.5], [-81, 84, 10.5], [-73, 77, 10.5], [-62, 74, 10.4], [-35, 74, 10],
-        [-10, 72, 9.5], [8, 62, 9], [15, 40, 8], [10, 15, 6.5], [-5, -10, 5], [-30, -35, 3.5],
+        [45, 112, 4], [20, 118, 5.5], [-5, 110, 7], [-30, 114, 8.5], [-58, 120, 9.8], [-85, 120, 10.6],
+        [-105, 112, 11], [-114, 95, 11.2], [-111, 76, 11.2], [-98, 62, 11], [-78, 58, 10.7], [-52, 66, 10.2],
+        [-25, 74, 9.8], [-3, 72, 9.4], [10, 60, 9], [15, 40, 8], [10, 15, 6.5], [-5, -10, 5], [-30, -35, 3.5],
         [-55, -55, 2], [-70, -78, 1], [-62, -100, 0.3], [-35, -112, 0], [0, -114, 0], [35, -106, 0],
         [70, -114, 0], [105, -112, 0], [130, -100, 0], [146, -82, 0], [150, -55, 0],
       ],
-      bumps: [[600, 20, 0.9]],
+      bumps: [[685, 20, 0.9]],
       banks: [[162, 25, 8]],
-      ice: [[712, 905]],
-      boxRows: [60, 298, 420, 760],                 // 298 added in build 36
-      pads: [[30, -3], [430, 0], [585, 2], [955, 0]],
+      bankRuns: [[352, 452, 5, 25, 25]], // the Summit
+      ice: [[797, 990]],
+      boxRows: [60, 297, 504, 845],                 // (297 added in build 36)
+      pads: [[30, -3], [513, 0], [670, 2], [1040, 0]],
+      gallery: [588, 632],                          // the roofed stretch on the way down (frostLandmarks)
+      edgeDefault: 'snow',
+      edges: {
+        1: [[1045, 1087, 'boards'], [0, 50, 'boards'], [345, 460, 'net'], [465, 585, 'fence'], [797, 990, 'ice']],
+        '-1': [[1045, 1087, 'boards'], [0, 50, 'boards'], [345, 460, 'net'], [465, 585, 'fence'], [797, 990, 'ice']],
+      },
+      // packed snow on the road, not tarmac, and snow instead of a shoulder
+      palette: { road: [0x7d8794, 0x838d9a], dash: 0xff8a2a, shoulder: [0xe6edf5, 0xdbe4ee], wear: 0x6d7681, wood: [0x6b4a2f, 0x5c3f28] },
     },
     // Test Lab (debug builds only, http): flat 669 m loop to test walls, boosts and items. South straight
     // (bump, pads), banked left sweeper (R31), north straight on ice, 90deg R13 corner, S chicane (R12),
@@ -461,7 +470,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on everywhere for now, the hosted copy too, so testers can use them.
 // Set to `location.protocol === 'http:'` to keep them to the LAN server. Races played with them on skip the race log.
 const DEBUG = true;
-const VERSION_N = '72.3'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '72.4'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -1408,6 +1417,8 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, edges,
   const STONES = P.stone || [0xb7aa96, 0xa89b86, 0xc0b39e], HEDGES = [0x3e8a3a, 0x478f3c, 0x38803a], WOOD = P.wood || [0x8f6a42, 0x7f5c38], STEEL = [0xa3402a, 0x8f3824];
   const BOARDS = [0xffd23a, 0xe8322f, 0x2f6bff, 0xf4efe4, 0x3fb950, 0xff7a1f];
   const TYRE = new THREE.CylinderGeometry(0.72, 0.72, 0.55, 8);
+  const LUMP = new THREE.IcosahedronGeometry(1, 0), NET = [0xff6a1f, 0xff8a2a], BOLLARD = new THREE.CylinderGeometry(0.22, 0.26, 1.1, 7);
+  const LUMPS = { snow: [0xf1f5fa, 0xe6edf5, 0xdde6f0], ice: [0xbfe2f1, 0xa9d6ea, 0xd3edf7], basalt: [0x3f3a3d, 0x4b4548, 0x342f32] };
   const th = CFG.track.wallThickness, kinds = { 1: new Array(N).fill(edgeDefault), '-1': new Array(N).fill(edgeDefault) };
   for (const sd of ['1', '-1']) for (const [from, to, kind] of edges[sd]) for (let i = from; i < to && i < N; i++) kinds[sd][i] = kind;
   const STEP = 4;
@@ -1436,6 +1447,26 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, edges,
         if (n % 2 === 0) { const [px, pz, py] = at(i, th / 2); b.put(BOX, c1, px, py + 0.65 - SINK / 2, pz, { ry: f.ry, sx: 0.2, sy: 1.3 + SINK, sz: 0.2 }); }
       } else if (kind === 'stone') wall(STONES[n % 3], 0.8, 0.95 + (n % 3) * 0.07);
       else if (kind === 'hedge') wall(HEDGES[n % 3], 1.4, 1.35 + (n % 4) * 0.08);
+      else if (kind === 'snow' || kind === 'ice' || kind === 'basalt') { // a bank of lumps: its road face stays on the collider's, within a few cm
+        const [x, z, y] = at(i + 2, kind === 'basalt' ? 1 : 1.15), big = 1.05 + 0.25 * ((n * 7) % 5) / 4;
+        b.put(LUMP, LUMPS[kind][n % 3], x, y + (kind === 'ice' ? 0.35 : 0.2), z, { ry: n * 1.7, sx: kind === 'basalt' ? 1.15 : 1.25, sy: kind === 'ice' ? 0.95 * big : 0.85 * big, sz: 2.3 });
+      }
+      else if (kind === 'net') { // ski-race netting between poles
+        const f = piece(0.12);
+        b.put(BOX, NET[n % 2], f.x, f.y + 0.75, f.z, { ry: f.ry, rx: f.rx, sx: 0.06, sy: 1.2, sz: f.len });
+        if (n % 2 === 0) { const [px, pz, py] = at(i, 0.06); b.put(BOX, 0x2f6bff, px, py + 0.75, pz, { sx: 0.12, sy: 2.1, sz: 0.12 }); }
+      }
+      else if (kind === 'concrete') { // a quay's crash barrier, a painted band along it
+        const f = piece(0.7);
+        b.put(BOX, n % 8 < 2 ? 0xe2b72e : 0xb5b7b2, f.x, f.y + 0.2, f.z, { ry: f.ry, rx: f.rx, sx: 0.8, sy: 1.2 + 0.4, sz: f.len });
+        b.put(BOX, 0xc9cbc6, f.x, f.y + 1.05, f.z, { ry: f.ry, rx: f.rx, sx: 0.5, sy: 0.3, sz: f.len });
+      }
+      else if (kind === 'quay') { // the edge of the quay: bollards with a rope between them, over the water
+        const f = piece(th);
+        b.put(BOX, 0x8b8e8f, f.x, f.y + 0.1, f.z, { ry: f.ry, rx: f.rx, sx: 0.5, sy: 0.5, sz: f.len });
+        b.put(BOX, 0xe9e4d8, f.x, f.y + 0.82, f.z, { ry: f.ry, rx: f.rx, sx: 0.07, sy: 0.07, sz: f.len });
+        if (n % 2 === 0) { const [px, pz, py] = at(i, th / 2); b.put(BOLLARD, 0x2b3a4a, px, py + 0.55, pz); b.put(BOLLARD, 0xe2b72e, px, py + 1.02, pz, { sy: 0.18, sx: 1.2, sz: 1.2 }); }
+      }
       else if (kind === 'boards') wall(BOARDS[((n / 3) | 0) % BOARDS.length], 0.2, 1.15);
       else if (kind === 'tyres') {
         // a stack every 1.5 m along the barrier itself: samples spread out round the outside of a bend, and fixed steps left gaps there
@@ -1835,6 +1866,158 @@ function buildChevrons({ N, normals, tangents, wL, wR, oL, oR, wallH, radius }) 
   }
 }
 
+const PRISM = new THREE.CylinderGeometry(1, 1, 1, 3);
+/** A gable roof (a prism with its ridge along the local z of `ry`), resting on height y, `w` wide across, `len` long, `h` tall. */
+function gable(b, color, x, y, z, w, len, h, ry = 0) {
+  b.put(PRISM, color, x, y + h / 3, z, { ry, rx: -Math.PI / 2, sx: w / 1.732, sy: len, sz: h / 1.5 });
+}
+
+/**
+ * Frost Peak's places (72.4): the village along the start straight, a chairlift from there to the Summit (crossing over the road, its chairs moving), a roofed snow gallery, a ski jump
+ * past the lake, a rink and fishing huts on the ice, with skaters going round. One batch + one instanced mesh per moving kind. Returns update(dt).
+ */
+function frostLandmarks(data, { heightAt }, rand, lake) {
+  const { samples, tangents, normals, wL, wR, N, def } = data;
+  const b = propBatch(), BOX = new THREE.BoxGeometry(1, 1, 1), T = CFG.track;
+  const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  const SNOW = 0xf1f5fa, WOOD = [0x7a5230, 0x6b4a2f, 0x8a5e36, 0x5c3f28], STONE = 0x8d949c, GLOW = 0xffd98a, TRIM = [0xd23a3a, 0x2f6bff, 0x3f8f57, 0xe2b72e];
+
+  // A chalet, its long side on the road: stone base, timber walls, a snowy roof, lit windows (it's a bright day, but they read as warm spots), a balcony
+  const chalet = (i, side, off, w, floors, c) => {
+    const [x, z] = besideRoad(data, i, side, off), t = tangents[i], n = normals[i], g = samples[i].y - 0.4, ry = Math.atan2(t.x, t.z), s = side;
+    const at = (a, o) => [x + t.x * a + n.x * s * o, z + t.z * a + n.z * s * o];
+    const piece = (color, a, o, y, sa, sy, so) => { const [px, pz] = at(a, o); b.put(BOX, color, px, g + y, pz, { ry, sx: so, sy, sz: sa }); };
+    const H = 2.8 * floors, D = 8;
+    piece(STONE, 0, D / 2, 0.75, w, 1.5, D);
+    piece(WOOD[c % 4], 0, D / 2, 1.5 + H / 2, w, H, D);
+    for (let f = 0; f < floors; f++) for (const a of [-w / 3, 0, w / 3]) {
+      piece(GLOW, a, -0.05, 2.5 + f * 2.8, 1.1, 1.2, 0.12);
+      piece(0xf4efe4, a, -0.09, 2.5 + f * 2.8, 0.14, 1.3, 0.1);
+    }
+    if (floors > 1) { piece(TRIM[c % 4], 0, -0.7, 3.1, w * 0.9, 0.5, 0.15); piece(0x4a3a30, 0, -0.35, 2.85, w * 0.92, 0.12, 0.8); }
+    const [rx, rz] = at(0, D / 2);
+    gable(b, SNOW, rx, g + 1.5 + H, rz, D + 1.8, w + 1.2, 3.8, ry);
+    const [cx, cz] = at(w / 3, D / 2);
+    box(STONE, 0.9, 3, 0.9, cx, g + H + 3.2, cz);
+  };
+  let c = 0;
+  for (const side of [1, -1]) for (let i = side > 0 ? 44 : 50; i >= -46; i -= 16) chalet((i + N) % N, side, 3.6, 10 + (c * 7 % 4), 1 + (c % 3 > 0 ? 1 : 0), c++);
+  // Bunting across the street, and a banner gantry past the line
+  for (const i of [30, 8, N - 16]) {
+    for (let k = -4; k <= 4; k++) {
+      const lat = (k / 4) * (Math.max(wL[i], wR[i]) + 1.5), n = normals[i];
+      box(TRIM[(k + 4) % 4], 0.08, 0.7, 0.7, samples[i].x + n.x * lat, samples[i].y + 6.4 - Math.abs(k) * -0.1 - 0.06 * (16 - k * k) * 0.5, samples[i].z + n.z * lat, { ry: Math.atan2(n.x, n.z) + Math.PI / 2 });
+    }
+  }
+
+  // The snow gallery: timber frames and a slatted roof over the road, on the way down
+  if (def.gallery) for (let i = def.gallery[0], k = 0; i < def.gallery[1]; i += 4, k++) {
+    const lat = (sd) => sd * ((sd > 0 ? wL[i] : wR[i]) + T.curb + T.wallThickness + 0.3), t = tangents[i], ry = Math.atan2(t.x, t.z), n = normals[i], H = 6;
+    if (k % 2 === 0) for (const sd of [1, -1]) {
+      const l = lat(sd), p = roadPoint(i, l, 0), q = roadPoint(i, l + sd * 2.4, 0);
+      box(WOOD[1], 0.5, H + 1, 0.5, p.x, p.y + H / 2 - 0.5, p.z, { ry });
+      box(WOOD[3], 0.3, 4.2, 0.3, q.x, p.y + H - 2, q.z, { ry, rx: 0, rz: -sd * 0.6 }); // the brace against the slope
+    }
+    const mid = roadPoint(i, 0, H), span = lat(1) - lat(-1) + 1;
+    box(WOOD[k % 4], span, 0.4, 1.4, mid.x + n.x * (lat(1) + lat(-1)) / 2, mid.y, mid.z + n.z * (lat(1) + lat(-1)) / 2, { ry });
+    box(SNOW, span + 0.2, 0.5, 1.5, mid.x + n.x * (lat(1) + lat(-1)) / 2, mid.y + 0.42, mid.z + n.z * (lat(1) + lat(-1)) / 2, { ry });
+    if (k % 2 === 0) for (const sd of [1, -1]) { const p = roadPoint(i, lat(sd), H - 0.5), s = 3.7 * 2; box(WOOD[0], 0.3, 0.35, s, p.x, p.y, p.z, { ry }); }
+  }
+
+  // The chairlift: bottom station by the village, top station inside the Summit's two bends, pylons between. It crosses over the road on the way up.
+  const A = new THREE.Vector3(118, 0, -26), B = new THREE.Vector3(-90, 0, 90), SPANS = 7, tops = [];
+  for (let k = 0; k <= SPANS; k++) {
+    const p = A.clone().lerp(B, k / SPANS);
+    let road = -Infinity; // stay clear of the road below, wherever the line crosses it
+    for (let i = 0; i < N; i += 4) if (Math.hypot(samples[i].x - p.x, samples[i].z - p.z) < 24) road = Math.max(road, samples[i].y);
+    const g = heightAt(p.x, p.z);
+    p.y = Math.max(g + 9, road + 10.5);
+    tops.push(p);
+    if (k === 0 || k === SPANS) continue;
+    box(0x5e6670, 0.7, p.y - g + 1, 0.7, p.x, (p.y + g) / 2, p.z);
+    box(0x5e6670, 5.4, 0.35, 0.35, p.x, p.y, p.z, { ry: Math.atan2(B.z - A.z, -(B.x - A.x)) + Math.PI / 2 });
+  }
+  const dir = B.clone().sub(A).setY(0).normalize(), side = new THREE.Vector3(-dir.z, 0, dir.x), lineRy = Math.atan2(dir.x, dir.z);
+  for (let k = 0; k < SPANS; k++) for (const sd of [-1, 1]) {
+    const a = tops[k].clone().addScaledVector(side, sd * 2.5), e = tops[k + 1].clone().addScaledVector(side, sd * 2.5), len = a.distanceTo(e);
+    box(0x2b2f36, 0.09, 0.09, len, (a.x + e.x) / 2, (a.y + e.y) / 2, (a.z + e.z) / 2, { ry: lineRy, rx: -Math.asin((e.y - a.y) / len) });
+  }
+  for (const [p, c2] of [[tops[0], 0xd23a3a], [tops[SPANS], 0x2f6bff]]) { // the stations
+    const g = heightAt(p.x, p.z), h = p.y - g + 1.5;
+    box(WOOD[1], 9, h, 7, p.x, g + h / 2, p.z, { ry: lineRy });
+    gable(b, SNOW, p.x, g + h, p.z, 11, 9, 3, lineRy + Math.PI / 2);
+    box(c2, 9.2, 0.7, 7.2, p.x, g + h - 1, p.z, { ry: lineRy });
+  }
+
+  // The ski jump, seen ahead across the lake: a tower, the inrun, a judges' box. It stands on land past the far shore.
+  const J = [206, -128], jg = heightAt(J[0], J[1]), jr = -Math.PI / 2;
+  box(0xdde6f0, 5, 34, 5, J[0], jg + 17, J[1]);
+  box(0xd23a3a, 7, 3.2, 7, J[0], jg + 35, J[1]);
+  gable(b, SNOW, J[0], jg + 36.6, J[1], 8, 8, 2.4, jr);
+  box(0xeaf0f6, 6, 0.8, 58, J[0] - 26 * 1, jg + 19, J[1], { ry: Math.PI / 2, rx: 0.62 }); // the inrun, down to the west
+  for (const k of [10, 22, 34]) box(0x7a8794, 0.8, jg + 36 - k * 0.72 - jg, 0.8, J[0] - k, jg + (36 - k * 0.72) / 2, J[1]);
+  box(0xd23a3a, 6.4, 0.5, 0.5, J[0] - 49, jg + 2.9, J[1]);
+  box(0x2f6bff, 4, 3, 3, J[0] - 42, jg + 7, J[1] + 9);
+
+  // On the ice: a rink with boards and painted lines, fishing huts with a stove pipe
+  const RINK = [52, -142], RW = 32, RD = 16;
+  box(0xdff1f9, RW, 0.1, RD, RINK[0], 0.02, RINK[1]);
+  for (const [dx, dz, w, d] of [[0, -RD / 2, RW, 0.3], [0, RD / 2, RW, 0.3], [-RW / 2, 0, 0.3, RD], [RW / 2, 0, 0.3, RD]]) box(0xf4efe4, w, 1.1, d, RINK[0] + dx, 0.55, RINK[1] + dz);
+  for (const [dx, dz, w, d, cl] of [[0, -RD / 2, RW, 0.15, 0xd23a3a], [-RW / 2, 0, 0.15, RD, 0x2f6bff], [RW / 2, 0, 0.15, RD, 0x2f6bff]]) box(cl, w, 0.25, d, RINK[0] + dx, 1.05, RINK[1] + dz);
+  box(0xd23a3a, 0.3, 0.12, RD, RINK[0], 0.09, RINK[1]);
+  box(0x2f6bff, 0.3, 0.12, RD, RINK[0] - 8, 0.09, RINK[1]);
+  box(0x2f6bff, 0.3, 0.12, RD, RINK[0] + 8, 0.09, RINK[1]);
+  [[-14, -146, 0xd23a3a], [-4, -158, 0x3f8f57], [96, -150, 0xe2b72e], [112, -146, 0x2f6bff], [120, -64, 0xd23a3a], [84, -70, 0x3f8f57]].forEach(([x, z, cl], k) => {
+    if (lake(x, z) < 0.5) return;
+    box(cl, 3.2, 2.3, 3.2, x, 1.15, z, { ry: k });
+    gable(b, SNOW, x, 2.3, z, 4, 4, 1.2, k);
+    box(0x2b2f36, 0.22, 1.8, 0.22, x + 0.8, 3, z + 0.8);
+  });
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+
+  // ---- What moves: chairs on the cable, skaters on the rink ----
+  const chairB = propBatch();
+  chairB.put(BOX, 0x2f6bff, 0, -3, 0, { sx: 1.8, sy: 0.14, sz: 0.7 });
+  chairB.put(BOX, 0x2f6bff, 0, -2.55, -0.33, { sx: 1.8, sy: 0.8, sz: 0.12 });
+  chairB.put(BOX, 0x2b2f36, 0, -1.4, -0.2, { sx: 0.08, sy: 2.8, sz: 0.08 });
+  const CHAIRS = 24, chairs = new THREE.InstancedMesh(chairB.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), CHAIRS);
+  chairs.frustumCulled = false;
+  const skB = propBatch();
+  skB.put(BOX, 0xffffff, 0, 0.75, 0, { sx: 0.42, sy: 0.9, sz: 0.28 });
+  skB.put(BOX, 0x2b3a4a, 0, 0.2, 0, { sx: 0.34, sy: 0.5, sz: 0.24 });
+  skB.put(BOX, 0xf2c9a0, 0, 1.32, 0, { sx: 0.26, sy: 0.26, sz: 0.26 });
+  const SKATERS = 10, skaters = new THREE.InstancedMesh(skB.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }), SKATERS), skCols = [0xd23a3a, 0x2f6bff, 0xe2b72e, 0x3f8f57, 0xff7a1f];
+  const col = new THREE.Color();
+  for (let i = 0; i < SKATERS; i++) skaters.setColorAt(i, col.set(skCols[i % skCols.length]));
+  skaters.frustumCulled = false;
+  trackRoot.add(chairs, skaters);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+  let clock = rand() * 10;
+  const update = (dt) => {
+    clock += dt;
+    for (let i = 0; i < CHAIRS; i++) {
+      // up one cable, down the other: u runs 0..2 along the loop
+      const u = ((clock * 0.024 + (i / CHAIRS) * 2) % 2), up = u < 1, f = (up ? u : 2 - u) * SPANS, k = Math.min(SPANS - 1, f | 0);
+      p.copy(tops[k]).lerp(tops[k + 1], f - k).addScaledVector(side, up ? 2.5 : -2.5);
+      q.setFromAxisAngle(_up, lineRy + (up ? Math.PI : 0));
+      chairs.setMatrixAt(i, m.compose(p, q, sc));
+    }
+    chairs.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < SKATERS; i++) {
+      const a = clock * (0.45 + (i % 3) * 0.12) + (i * Math.PI * 2) / SKATERS, rx = 6 + (i % 3) * 3.5, rz = 2 + (i % 3) * 1.8;
+      p.set(RINK[0] + Math.cos(a) * rx, 0.05, RINK[1] + Math.sin(a) * rz);
+      q.setFromAxisAngle(_up, -a);
+      skaters.setMatrixAt(i, m.compose(p, q, sc));
+    }
+    skaters.instanceMatrix.needsUpdate = true;
+  };
+  update(0);
+  return update;
+}
+
 /**
  * Snowy mountain on a clear day. Height-field ground (makeTerrain): soft snowy hills, grey rock where it's
  * steep, and a frozen lake (flat, a little below the road, icy blue) around the ice stretch. Snow-capped
@@ -1874,12 +2057,22 @@ function buildSnow(data) {
   const sky = makeSky(0xe8f0f8, 0xb5d6f2, 0x5a9be0, 0xfff4e0);
   buildChevrons(data);
 
+  // 72.4: snowbanks, ski netting and ice blocks instead of rails (`edges`)
+  const barriers = propBatch();
+  buildBarriers(data, barriers);
+  const barrierMesh = new THREE.Mesh(barriers.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  barrierMesh.castShadow = true;
+  trackRoot.add(barrierMesh);
+  const places = frostLandmarks(data, ground, rand, lake);
+
   // ---- Props: pines, rocks, snowmen (instanced, on spots off the road, not on the lake) ----
   const cc = new THREE.Color();
-  const spot = (uMin, uMax, tries = 40) => {
+  let grove = false;
+  const spot = (uMin, uMax, tries = 60) => {
     for (let t = 0; t < tries; t++) {
       const x = minX - 60 + rand() * (maxX - minX + 120), z = minZ - 60 + rand() * (maxZ - minZ + 120);
       if (lake(x, z) > 0.1) continue;
+      if (grove && noise(x / 38 + 21, z / 38 + 4) < 0.52) continue; // (72.4: pines stand in woods, with clearings between, not one by one along the road)
       const { u } = floorDist(x, z);
       if (u < uMin || u > uMax) continue;
       const y = heightAt(x, z);
@@ -1923,7 +2116,9 @@ function buildSnow(data) {
       add(new THREE.ConeGeometry(r * 0.62, h * 0.42, 7), 0xf2f6fa, 0, y + h * 0.3, 0);
     });
   });
-  scatter(pine.geometry, pine.material, 190, 1, 40, (sc) => sc.setScalar(0.8 + rand() * 0.8));
+  grove = true;
+  scatter(pine.geometry, pine.material, 190, 3, 44, (sc) => sc.setScalar(0.8 + rand() * 0.8));
+  grove = false;
   const rock = baked((add) => {
     add(new THREE.IcosahedronGeometry(1, 0), 0x7d8794, 0, 0, 0);
     add(new THREE.IcosahedronGeometry(0.75, 0), 0xf0f4f8, 0, 0.45, 0).scale.set(1.15, 0.5, 1.15);
@@ -1941,20 +2136,28 @@ function buildSnow(data) {
   });
   scatter(snowman.geometry, snowman.material, 14, 0.5, 5, (sc) => sc.setScalar(0.9 + rand() * 0.3));
 
-  // ---- Far mountains with snow caps ----
-  const peaks = baked((add) => {
-    add(new THREE.ConeGeometry(1, 1, 6), 0x8fa3bd, 0, 0.5, 0);
-    // cap is a touch wider and taller than the cone it sits on: an exact fit made its faces coplanar with
-    // the rock and they z-fought (flickered) at 300+ m
-    add(new THREE.ConeGeometry(0.46, 0.44, 6), 0xf2f6fa, 0, 0.80, 0);
-  });
-  const peakMesh = new THREE.InstancedMesh(peaks.geometry, peaks.material, 18);
+  // ---- Far mountains: rough massifs, snow above a line, bare rock below (72.4; the user called plain cones "just triangles") ----
+  const massif = new THREE.IcosahedronGeometry(1, 2), mPos = massif.attributes.position, mCol = new Float32Array(mPos.count * 3), mv = new THREE.Vector3();
+  // (non-indexed: faces stay flat. A vertex shared by several faces must move the same way, so the bump comes from its position, not a counter)
+  for (let i = 0; i < mPos.count; i++) {
+    mv.fromBufferAttribute(mPos, i);
+    const k = 0.72 + 0.56 * noise(mv.x * 2.1 + 40, mv.z * 2.1 + mv.y * 3.1 + 40);
+    mPos.setXYZ(i, mv.x * k, Math.max(mv.y, 0) * k, mv.z * k);
+  }
+  for (let f = 0; f < mPos.count; f += 3) { // a face is snow or rock as a whole
+    const y = (mPos.getY(f) + mPos.getY(f + 1) + mPos.getY(f + 2)) / 3;
+    cc.set(y + noise(mPos.getX(f) * 5 + 3, mPos.getZ(f) * 5) * 0.28 > 0.5 ? 0xf2f6fa : y > 0.3 ? 0xa9b6c6 : 0x8fa3bd);
+    for (let v = 0; v < 3; v++) mCol.set([cc.r, cc.g, cc.b], (f + v) * 3);
+  }
+  massif.setAttribute('color', new THREE.BufferAttribute(mCol, 3));
+  massif.computeVertexNormals();
+  const peakMesh = new THREE.InstancedMesh(massif, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), 18);
   const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), ps = new THREE.Vector3(), pp = new THREE.Vector3();
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * Math.PI * 2 + rand() * 0.2, r = 330 + rand() * 50, h = 70 + rand() * 60;
-    pq.setFromAxisAngle(_up, rand() * Math.PI);
-    peakMesh.setMatrixAt(i, pm.compose(pp.set(cx + Math.cos(a) * r, -2, cz + Math.sin(a) * r), pq, ps.set(45 + rand() * 35, h, 45 + rand() * 35)));
+    pq.setFromAxisAngle(_up, rand() * Math.PI * 2);
+    peakMesh.setMatrixAt(i, pm.compose(pp.set(cx + Math.cos(a) * r, -2, cz + Math.sin(a) * r), pq, ps.set(60 + rand() * 40, h, 60 + rand() * 40)));
   }
   trackRoot.add(peakMesh);
 
@@ -1984,6 +2187,7 @@ function buildSnow(data) {
     update(dt) {
       clock += dt;
       sky.update();
+      places(dt);
       const c = camera.position;
       for (let i = 0; i < FLAKES; i++) {
         const o = i * 3;
