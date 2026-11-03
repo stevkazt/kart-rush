@@ -525,7 +525,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '76.8'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '77'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -5302,6 +5302,7 @@ function showMode() {
   $('btn-start').textContent = on ? 'START GRAND PRIX' : 'START RACE';
   document.querySelector('.setup [data-pick="track"]').hidden = on;
   $('setup-cup').hidden = !on;
+  $('setup-cup').querySelector('b').textContent = `${CUP_TRACKS.length} races`;
   if (on) $('cup-maps').innerHTML = CUP_TRACKS.map((id) => `<span class="cup-map" data-theme="${CFG.tracks[id].theme}">${trackShape(id).svg}</span>`).join('');
   requestAnimationFrame(layoutLobby);
 }
@@ -5316,8 +5317,8 @@ function nextTrack() {
   startRace();
 }
 
-// ---------- Grand Prix (72.9): all five tracks in a row, points per race, the same field throughout ----------
-const CUP_TRACKS = ['meadow', 'canyon', 'frost', 'tech', 'spiral'], CUP_POINTS = [10, 8, 6, 4, 2, 1], CUP_KEY = 'kartrush.cupBest';
+// ---------- Grand Prix (72.9): the tracks in a row, points per race, the same field throughout ----------
+const CUP_TRACKS = ['meadow', 'canyon', 'frost', 'tech', 'jungle', 'mine'], CUP_POINTS = [10, 8, 6, 4, 2, 1], CUP_KEY = 'kartrush.cupBest';
 let cup = null; // { at: index in CUP_TRACKS, pts: { racer: points }, over: the final standings are showing }
 const cupId = (k) => (k.isPlayer ? 'me' : k.name);
 const cupRaceScore = (k) => CUP_POINTS[k.place - 1] || 0;
@@ -5614,7 +5615,7 @@ function openPicker(kind) {
         castDrivers();
         placeOnGrid();
       },
-      label: r.name, html: driverSvg(r), // art only: name + tag show with the 3D driver (user: all text there)
+      label: r.name, html: `${driverSvg(r)}<b>${r.name}</b>`, // the name under the art (user 76.9); the tag still shows with the 3D driver
     })),
     kart: () => (kartTab === 'body' ? KART_BODIES.map((B) => ({
       on: () => picks.body === B.name,

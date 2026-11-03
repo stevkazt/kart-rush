@@ -974,10 +974,10 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
   mask-image: none;
 }
 #pick-screen.staged .pick-grid { grid-auto-flow: row; grid-template-rows: none; grid-auto-columns: auto; width: 100%; box-sizing: border-box; }
-/* art-only cards (user: all the text goes with the 3D view): 3 per row */
+/* driver cards: art + name; paint and body cards: art only (the rest of the text goes with the 3D view); 3 per row */
 #pick-screen.staged .pick-driver .pick-grid,
 #pick-screen.staged .pick-kart .pick-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-#pick-screen.staged .pick-driver .pick-card { justify-content: center; padding: 6px; }
+#pick-screen.staged .pick-driver .pick-card { flex-direction: column; justify-content: center; gap: 2px; padding: 6px; text-align: center; }
 #pick-screen.staged .pick-driver .driver-art { width: clamp(52px, calc(var(--app-h) * 0.18), 76px); }
 #pick-screen.staged .pick-kart .kart-art { width: clamp(70px, calc(var(--app-h) * 0.22), 100px); }
 #pick-screen.staged .pick-card b { font-size: 14px; }
@@ -1218,7 +1218,7 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 #app.vertical #pick-screen.staged { flex-direction: column; }
 #app.vertical #pick-screen.staged .pick-stage { flex: 0 0 38%; padding-top: 4px; }
 #app.vertical #pick-screen.staged .pick-panel { flex: 1 1 0; width: 100%; }
-#app.vertical #pick-screen.staged .pick-driver .driver-art { width: 76px; }
+#app.vertical #pick-screen.staged .pick-driver .driver-art { width: 70px; }
 #app.vertical #pick-screen.staged .pick-kart .kart-art { width: 84px; }
 /* Track picker: preview on top, compact cards below (see the shared .tracks rules above) */
 #app.vertical #pick-screen.tracks { flex-direction: column; }

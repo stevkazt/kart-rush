@@ -65,7 +65,7 @@ Frost's lake suits it because the ice already supplies the danger and the shortc
 
 **Performance**
 - Read the log before optimising. On 72.13 the phone held about 60 fps at up to 368k triangles, with `idleFps` 60. The old 30 fps on Canyon was very probably a cap (Low Power Mode), not load; it's unproven because older races have no `idleFps`.
-- Keep measuring with `dev/test.sh cost` (keep the worst near 320k) and batch scenery with `propBatch`. House shutters alone cost 40k on Harbour.
+- Use `dev/test.sh cost` to catch sudden jumps (no triangle limit: logged `fps` on the phone is the check) and batch scenery with `propBatch`. House shutters alone cost 40k on Harbour.
 
 **Music**
 - The user judges songs on drive and character: Canyon's first song was "too chill and generic". Give each track an unmistakable style, not just a different chord list.
