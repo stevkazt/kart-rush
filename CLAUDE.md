@@ -28,7 +28,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - Overlay screens: `#menu-screen` (lobby), `#pick-screen`, `#hello-screen`, `#settings-screen`, `#pause-screen`, `#results-screen`;
   `showOverlay(screen)`. Details: `docs/ui.md`.
 - Plans for new tracks + design lessons: `docs/track-plans.md`.
-- Tracks (`CFG.tracks`: meadow, canyon, frost, tech = Harbour Run, jungle = Temple Run, spiral; lab is debug only), heights, banking, themes: `docs/tracks.md`.
+- Tracks (`CFG.tracks`: meadow, canyon, frost, tech = Harbour Run, jungle = Temple Run, mine = Deep Shaft, spiral; lab is debug only), heights, banking, themes: `docs/tracks.md`.
 - Characters (`drivers.js`, one baked SkinnedMesh per rider, `DRIVERS` registry, 8 drivers): `docs/drivers.md`.
 - Items, AI personalities, rail reset, places, sound, effects, baked kart meshes: `docs/systems.md`.
 - Feedback log, race analyses, roadmap, open ideas: `docs/history.md`.
@@ -153,7 +153,7 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
-- **NEWEST, START HERE (build 72.17, UNCOMMITTED in the working tree: 72.14-72.17 + docs; commits stop at 72.13; nothing pushed since 72): docs/track-plans.md** = plans for new tracks (mine, moon base), alternative paths, design lessons, open checks, and the two answers owed by the user. Then docs/history.md 'First phone feedback on the night's builds'.
+- **NEWEST: build 74 is pushed, with Deep Shaft, the mine (docs/tracks.md); darkness and shape approved, the no-fade look and the song not judged yet.** Then **docs/track-plans.md** = plans for new tracks (mine, moon base), alternative paths, design lessons, open checks, and the two answers owed by the user. Then docs/history.md 'First phone feedback on the night's builds'.
 - **Then: docs/history.md 'The night of 2026-11-02'** (what was built unattended, what to check on the phone) and 'Where things stand'. **State at the end of that night (build 72.13, committed locally, NOT pushed; sw.js still v72):** six tracks, each with its own signature corner and song (table in docs/tracks.md), opening shots, podium, Grand Prix, debug tools off on the hosted copy. The phone has since played it: about 60 fps on the five tracks logged, `idleFps` 60. In race logs read `idleFps`, the `intro` event, and `js`, `pr` in `fps` events. **Scenery must stay cheap: batch it with `propBatch` and check `dev/test.sh cost`; the user wants landmarks, not more trees.**
 - **State 2026-10-18 (builds 70.1-70.20, HEAD 583ce94, UNCOMMITTED, nothing pushed since 70):** green-shell self-hit fix (bots aim like the player + a wall check, 70.4), no post-hit ghost after a banana (70.5), debug shape tracks incl. **Spiral Run** with road gaps, red pads, bank runs and a centre piece (70.2-70.20; see docs/tracks.md 'Debug shape-test tracks and track features' and history.md). The star-at-start question was answered (luck + grid bots take row 1): keep as is. Difficulty work paused (next: stronger player catch-up; leading-player blue-shell protection needs the user's OK).
 - **Version label (user 2026-10-17):** the title screen shows `build <VERSION_N>` (main.js). Main number = sw.js VERSION; **bump the sub-build (`64.1` -> `64.2`...) with every change you make**, so the user can confirm which version their phone runs. Race logs carry it too.

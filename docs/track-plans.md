@@ -10,13 +10,13 @@ Plans for what comes next, and what the night of 2026-11-02 and the first phone 
 
 ## Waiting on the user
 1. **Where the first shortcut goes.** Recommended: Frost's frozen lake. Second choice: Harbour's container yard.
-2. **Which new track comes first.** Recommended: the mine.
+2. ~~Which new track comes first~~: the mine, built.
 
-Neither has been answered, and nothing below is approved or started. The layouts are proposals.
+The shortcut hasn't been answered, and the moon base is neither approved nor started. The layouts are proposals.
 
-## New track: the mine or cave (proposal)
+## New track: the mine or cave (BUILT as Deep Shaft, 73.1: tracks.md; these were the notes)
 Low ceilings, lamps, rail bridges over deep drops, and bursts into daylight.
-- **Keep it bright.** The user dislikes dark scenes that strain the eyes, so light it warmly, with pale rock and plenty of lamps. It must not be a dark track.
+- **Dark, but readable (user, overrides the first note):** "the enclosed track calls for darkness but include enough light to be able to see the track and avoid forcing sight too much".
 - **Alternate inside and out.** Temple's pyramid and Frost's gallery show short covered stretches work. Daylight bursts also give landmarks somewhere to be seen.
 - **Check the chase camera first.** It sits above and behind the kart, so test the ceiling height with it before building scenery. Jumps must fit under the ceiling too.
 - **Walls don't save fps by themselves.** three.js only culls what's outside the view, not what's behind a wall. Scenery beyond the rock is still drawn, so build less of it and check `dev/test.sh cost`.
@@ -44,6 +44,7 @@ Frost's lake suits it because the ice already supplies the danger and the shortc
 
 ## Design lessons
 **Tracks**
+- **Vary the outline (user):** "most of them look like a circle with some disturbances". Check the shape on the minimap before anything else; don't draw another ring. The moon base needs its own outline too.
 - Every track gets one signature corner nobody else has. The user spots copies: Canyon's hairpin was "basically a copy" of Green Valley's, and Frost's was too.
 - Landmarks over quantity. Theme the barriers and the road surface, shape the land around the road, and put buildings along the street. Random extra trees get rejected.
 - Harbour and Temple are the ones the user praised most. Both have a strong sense of place plus layout features no other track has (causeway and container zigzag; figure-8, rope bridge and pyramid). That's the bar for the next ones.

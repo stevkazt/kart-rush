@@ -609,6 +609,29 @@ const SONGS = {
       if (s % 2 === 1) noiseHit(t, 0.03, { ...opt, freq: 5000, type: 'highpass', vol: 0.09 }); // a shaker
     },
   },
+  // Deep Shaft: a work song for the mine in D minor. Hammer on steel on the off beats, a pounding low-string riff, a lone harmonica-like square up top, the whole thing marching at a run.
+  mine: {
+    bpm: 158, leadType: 'square', leadVol: 0.14, leadLen: 1.5,
+    chords: [[38, 41, 45], [38, 41, 45], [34, 38, 41], [36, 40, 43], [38, 41, 45], [41, 45, 48], [36, 40, 43], [33, 37, 40]], // Dm Dm Bb C Dm F C A
+    lead: [
+      [14, _, _, 17, _, 19, 17, _, 14, _, 12, _, 14, _, _, _],
+      [14, _, _, 17, _, 19, 21, _, 24, _, 21, _, 19, _, 17, _],
+      [10, _, _, 14, _, 17, 19, _, 17, _, 14, _, 10, _, _, _],
+      [12, _, _, 16, _, 19, 22, _, 19, _, 16, _, 12, _, 14, _],
+      [26, _, 24, _, 21, _, 19, _, 21, _, 24, _, 26, _, _, _],
+      [29, _, 26, _, 24, _, 21, _, 24, _, 26, _, 29, _, _, _],
+      [28, _, 24, _, 22, _, 19, _, 16, _, 19, _, 22, _, 24, _],
+      [25, _, _, 25, 24, _, 21, _, 19, _, 16, _, 13, _, _, _],
+    ],
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      if ([0, 2, 3, 6, 8, 10, 11, 14].includes(s)) tone(midi(root), t, STEP * 0.9, { ...opt, type: 'sawtooth', vol: 0.26 }); // the riff
+      if (s === 0 || s === 8) [third + 12, fifth + 12].forEach((n) => tone(midi(n), t, STEP * 3, { ...opt, type: 'sawtooth', vol: 0.06 }));
+      if (s % 4 === 0) kick(t, opt, 0.8, 120);
+      if ([4, 12].includes(s)) snare(t, opt, 0.5, 1800);
+      if ([2, 6, 7, 10, 14].includes(s)) { tone(1760, t, 0.09, { ...opt, type: 'square', vol: 0.05, slide: 0.97 }); noiseHit(t, 0.03, { ...opt, freq: 3800, type: 'bandpass', vol: 0.2, q: 8 }); } // hammer on steel
+      if (s % 2 === 1) hat(t, opt, 0.08);
+    },
+  },
   // Spiral Run (the volcano): fast and heavy in E minor. Chugging low saw, power chords, double kick, a screaming square lead on the second half.
   spiral: {
     bpm: 172, leadType: 'square', leadVol: 0.16, leadLen: 1.8,

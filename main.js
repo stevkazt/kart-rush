@@ -192,6 +192,31 @@ const CFG = {
       },
       palette: { road: [0xa8765a, 0xa06f54], dash: 0xf4e8c8, shoulder: [0x8a9a55, 0x7f8f4e], wear: 0x8f6650, stone: [0xa7ad90, 0x9aa184, 0xb3b89c], wood: [0x6b4a2f, 0x5c3f28] },
     },
+    // Deep Shaft (73.1): the shape is the mine's levels, an S folded into a rectangle (user: most tracks look like a circle with disturbances). Surface camp, down the Chute (14%) into the banked Sump,
+    // the trestle across the cavern, the drill's bend, the crystal gallery, out into the open pit, then one long shaft back up. `dark` = underground stretches: lamps baked into the rock and road, lights eased in buildMine.
+    mine: {
+      name: 'Deep Shaft', icon: 'pick', theme: 'mine',
+      intro: [[385, 465, 4.5], [742, 857, 6], [1628, 1655, 6]], // into the Chute, over the trestle, onto the grid
+      points: [
+        [-100, -175, 24], [-40, -175, 24], [20, -175, 24], [80, -175, 24], [120, -175, 24], [144, -164, 24], [153, -141, 24], [144, -118, 24], [120, -108, 24],
+        [80, -105, 23], [40, -104, 19], [0, -103, 13.5], [-40, -102, 8], [-70, -101, 3.5], [-96, -99, 1.2], [-120, -88, 0.5], [-130, -64, 0.5], [-120, -40, 0.6], [-96, -29, 1],
+        [-60, -28, 2], [-25, -28, 3, 7], [15, -28, 4, 7], [55, -28, 5, 7], [98, -27, 6], [124, -16, 7], [135, 10, 7.5], [124, 36, 8], [98, 47, 8.5],
+        [55, 44, 9], [22, 54, 9], [-12, 46, 9], [-42, 56, 9.5], [-72, 54, 10], [-105, 62, 11], [-135, 85, 12], [-165, 78, 13.5], [-178, 50, 15],
+        [-180, 10, 17], [-178, -40, 19.5], [-176, -90, 22], [-172, -135, 24], [-150, -168, 24],
+      ],
+      dark: [[385, 1218], [1398, 1573]],
+      cavern: [737, 865], sump: [582, 697], drill: [915, 1020], grotto: [1063, 1208], cartRails: [[400, 585], [1408, 1563]],
+      bankRuns: [[235, 350, 5, 22, 22], [572, 708, 8, 28, 28], [903, 1032, 7, 26, 26]],
+      boxRows: [120, 430, 712, 1040, 1293, 1483],
+      pads: [[40, 0], [440, 0], [902, 0], [1243, 0], [1503, 0]],
+      surfaces: [[749, 855, [0x8a6a48, 0x7d5f40]]], // planks on the trestle
+      edgeDefault: 'concrete',
+      edges: {
+        1: [[1628, 1661, 'boards'], [0, 40, 'boards'], [40, 380, 'steel'], [1573, 1628, 'steel'], [1218, 1398, 'stone'], [745, 859, 'steel']],
+        '-1': [[1628, 1661, 'boards'], [0, 40, 'boards'], [40, 380, 'steel'], [1573, 1628, 'steel'], [1218, 1398, 'stone'], [745, 859, 'steel']],
+      },
+      palette: { road: [0x8a7c6c, 0x827466], stone: [0x9a8c7a, 0x8d806f, 0xa4968a] },
+    },
     spiral: {
       name: 'Spiral Run', icon: 'volcano', theme: 'volcano', gaps: [43],
       intro: [[700, 800, 7], [1148, 1222, 7], [1625, 1652, 6]], // up the cone, over the lava, into the station
@@ -482,7 +507,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '73'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '74'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -794,27 +819,30 @@ function buildTrack(def, th) {
 
   // Road surface, centre dashes and curbs (left edge at +wL[i], right edge at -wR[i])
   const P = { ...th.palette, ...def.palette };
+  // Underground (`dark`, 73.1): the darkness and the lamps' pools are baked into the road's colours; the lights never change (73.7).
+  if (def.dark) Object.assign(data, darkZones(def, N));
+  const toned = (fn, least = 0) => (!data.tone ? fn : (i) => { const col = fn(i); return col === null ? null : new THREE.Color(col).multiplyScalar(Math.max(data.tone[i], least * lerp(1, UNDER_DIM, data.dark[i]))); });
   // Onto the ice the road fades through packed snow (a straight cut from tarmac to ice looked like a bug): 0 tarmac, 0.5 snow, 1 ice, reaching ice where the grip has gone
   const iceFade = (i) => (def.ice || []).reduce((v, [from, to]) => Math.max(v, Math.min(smoothstep(from - 30, from - 1, i), 1 - smoothstep(to + 1, to + 30, i))), 0);
   const onIce = (i, band, plain) => {
     const f = iceFade(i), c = new THREE.Color(plain[band]);
     return f < 0.5 ? c.lerp(new THREE.Color(P.shoulder[band]), f * 2) : c.set(P.shoulder[band]).lerp(new THREE.Color(P.ice[band]), f * 2 - 1);
   };
-  trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02, (i) => {
+  trackRoot.add(makeRibbon(data, (i) => -wR[i], (i) => wL[i], 0.02, toned((i) => {
     if (ramp[i]) return [0xffd23a, 0x262222][((i / 2) | 0) % 2];
     const band = ((i / 10) | 0) % 2, plain = def.surfaces?.find(([from, to]) => i >= from && i < to)?.[2] || P.road;
     return P.ice && iceFade(i) > 0 ? onIce(i, band, plain) : plain[band];
-  }));
+  })));
   // Flat layers sit >= 2 cm apart (road 0.02, curbs 0.04, dashes 0.06, pads 0.08, start line 0.10)
-  trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, (i) => (i % 12 < 6 ? P.dash : null)));
+  trackRoot.add(makeRibbon(data, -0.18, 0.18, 0.06, toned((i) => (i % 12 < 6 ? P.dash : null), 1)));
   const lc = def.levelColors; // the curbs follow the rails' level colours (70.17)
   // P.shoulder (71.7): a track with a dirt edge keeps real curbs for its tight corners only
   const tight = new Uint8Array(N + 1);
   if (P.shoulder) for (let i = 0; i < N; i++) if (radius[i] < 26) for (let d = -14; d <= 14; d++) tight[(i + d + N) % N] = 1;
   const curbColor = (i) => (lc && i >= lc.from && i <= lc.to
     ? lc.colors[clamp(Math.floor((samples[i].y + 1) / lc.step), 0, lc.colors.length - 1)] : P.shoulder && !tight[i] ? P.shoulder : P.curb)[((i / 3) | 0) % 2];
-  trackRoot.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, curbColor));
-  trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, curbColor));
+  trackRoot.add(makeRibbon(data, (i) => wL[i], (i) => wL[i] + T.curb, 0.04, toned(curbColor, 0.9)));
+  trackRoot.add(makeRibbon(data, (i) => -wR[i] - T.curb, (i) => -wR[i], 0.04, toned(curbColor, 0.9)));
 
   if (P.shoulder) {
     // ...a worn, uneven dirt edge past the curb, and darker tarmac where the karts' line runs through the corners
@@ -832,6 +860,26 @@ function buildTrack(def, th) {
   buildWalls(data, P);
   buildStartLine(data, P);
   return data;
+}
+
+/**
+ * Underground stretches: `dark[i]` 1 inside, 0 in daylight, with a clean edge at the mouths; `pool[i]`, the lamps' light on the road, a pool under each lamp and a dim gap between them; `tone[i]`, the road's colour under the
+ * track's constant daylight (UNDER_DIM = what the old dimmed lights gave). `lamps` = the lamps' sample indices.
+ */
+const UNDER_DIM = 0.25;
+function darkZones(def, N) {
+  const dark = new Float32Array(N + 1), pool = new Float32Array(N + 1), tone = new Float32Array(N + 1), lamps = [], STEP = 24;
+  for (const [from, to] of def.dark) {
+    for (let i = from + 8; i < to - 4; i += STEP) lamps.push(i);
+    for (let i = from - 2; i <= to + 2; i++) dark[(i + N) % N] = Math.max(dark[(i + N) % N], Math.min(smoothstep(from - 2, from + 2, i), 1 - smoothstep(to - 2, to + 2, i)));
+  }
+  for (let i = 0; i <= N; i++) {
+    let near = Infinity;
+    for (const l of lamps) near = Math.min(near, Math.abs(l - i));
+    pool[i] = 0.5 + 1.2 * Math.exp(-((near / 8) ** 2));
+    tone[i] = lerp(1, pool[i] * UNDER_DIM, dark[i]);
+  }
+  return { dark, pool, tone, lamps };
 }
 
 /**
@@ -1256,6 +1304,16 @@ const THEMES = {
       rail: [0x6b4a2f, 0xe2b72e], arch: [0x6b4a2f, 0xe2b72e],
     },
     build: buildJungle,
+  },
+  mine: {
+    // a high-country afternoon, the same for the whole lap: the tunnels' darkness is painted into their colours (the user: a fade of the lights in and out of the tunnels didn't fit the game's look).
+    // Fog this far out does nothing: road inside a long tunnel would turn pale with distance.
+    sky: 0xb4d2e6, fog: [0xd9cdb8, 400, 1000], hemi: [0xfff4e4, 0xa08c72, 1.35], sun: [0xfff0da, 2.3], sunOffset: [70, 110, -40],
+    palette: {
+      road: [0x8a7c6c, 0x827466], dash: 0xf2c12e, curb: [0xf2c12e, 0x2a2622],
+      rail: [0x6a5a48, 0xf2c12e], arch: [0x3a2f26, 0xf2c12e], wood: [0x6b4a2f, 0x5c3f28],
+    },
+    build: buildMine,
   },
 };
 
@@ -2841,6 +2899,315 @@ function buildJungle(data) {
       birds.setMatrixAt(i, m.compose(p, q.setFromEuler(e), sc.setScalar(1)));
     }
     birds.instanceMatrix.needsUpdate = true;
+  };
+  place(0);
+  return { update(dt) { sky.update(); place(dt); } };
+}
+
+/**
+ * Deep Shaft (73.1). The tunnels are a closed tube of rock round the road, drawn from inside only (the chase camera can't be blocked by it), unlit and with the lamps baked into its colours: cheap, and it stays dark seen from the
+ * daylight. The lights never change; the road's colours (`tone`) and the barriers underground (unlit) carry the darkness, and the karts stay bright. A flat mountain top surrounds the tubes; terrain inside one's footprint is pushed below it.
+ */
+function buildMine(data) {
+  const { N, samples, tangents, normals, wL, wR, radius, def, dark, pool, lamps } = data, T = CFG.track;
+  const rand = seededRand(4242), noise = makeNoise(rand);
+  const inRun = ([a, b], i) => smoothstep(a - 24, a + 12, i) * (1 - smoothstep(b - 12, b + 24, i));
+  const roomAt = (i) => { // [half width, roof, depth under the road]
+    const c = inRun(def.cavern, i), s = inRun(def.sump, i), d = inRun(def.drill, i), g = inRun(def.grotto, i);
+    return [14 + 30 * c + 11 * s + 9 * d + 4 * g, 9 + 21 * c + 6 * s + 5 * d + 2 * g, 0.75 + 18 * c];
+  };
+  const sideOf = (i) => { const a = normals[(i - 6 + N) % N], t = tangents[(i + 6) % N]; return t.x * a.x + t.z * a.z > 0 ? 1 : -1; }; // the way the road bends: 1 left
+
+  // ---- The ground: a mountain top, benches cut down to the road wherever it runs in daylight (the camp's shelf, the open pit) ----
+  const day = [];
+  for (let i = 0; i < N; i += 3) if (!def.dark.some(([from, to]) => i >= from && i <= to)) day.push(samples[i]);
+  const under = []; // the tubes themselves
+  for (const [from, to] of def.dark) for (let i = from - 8; i <= to + 8; i += 4) under.push((i + N) % N);
+  const TOP = 39, ROCKS = [0x9a8872, 0x8c7a66, 0xa89680, 0x7f6f5e].map((h) => new THREE.Color(h)), BENCH = new THREE.Color(0xb7a68c), DIRT = new THREE.Color(0x927f68);
+  makeTerrain(data, () => [0, 1, 1, 0], (x, z, h, slope, cc) => {
+    cc.copy(ROCKS[(((h + 200) / 5) | 0) % 4]).lerp(BENCH, slope < 0.15 ? 0.45 : 0);
+    if (h < 26 && slope < 0.05) cc.lerp(DIRT, 0.6);
+  }, { step: 4.5, carve: (x, z) => {
+    let u = Infinity, y = TOP;
+    for (const p of day) { const d = (x - p.x) ** 2 + (z - p.z) ** 2; if (d < u) { u = d; y = p.y; } }
+    u = Math.sqrt(u) - 26; // road, rails and room for the sheds and the machines
+    const benches = u <= 0 ? y - 0.35 : y + Math.floor(u / 8) * 5 + 5 * smoothstep(0.55, 1, (u / 8) % 1) + (noise(x / 9, z / 9) - 0.5) * 1.2;
+    const h = Math.min(benches, TOP + 5 * noise(x / 30 + 3, z / 30));
+    for (const i of under) { // always below a tunnel, never above its roof: a height field can't overhang, so going from under it to over it along the road stretched a wall right across the tunnel
+      const p = samples[i], w = roomAt(i)[0];
+      if ((x - p.x) ** 2 + (z - p.z) ** 2 < (w + 2) ** 2) return p.y - 30;
+    }
+    return h;
+  } });
+  const sky = makeSky(0xe9dfca, 0xb4d2e6, 0x62a6dc, 0xfff0d0);
+  buildChevrons(data);
+
+  const b = propBatch(), BOX = new THREE.BoxGeometry(1, 1, 1), LUMP = new THREE.IcosahedronGeometry(1, 0), CYL = new THREE.CylinderGeometry(1, 1, 1, 10), CONE = new THREE.ConeGeometry(1, 1, 7), CRYSTAL = new THREE.OctahedronGeometry(1, 0);
+  const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  const frame = (i, sd, off) => { const k = ((i % N) + N) % N, [x, z] = besideRoad(data, k, sd, off), tn = tangents[k]; return { k, x, z, ry: Math.atan2(tn.x, tn.z), y: samples[k].y }; };
+  const halfOf = (i) => Math.max(wL[i], wR[i]) + T.curb + T.wallThickness;
+
+  // ---- Underground: `u` = unlit props, `g` = what shines through the dark (no fog: a chain of lights shows where the road goes), halos = additive fans ----
+  const u = propBatch(), g = propBatch(), hp = [], hc = [], cc = new THREE.Color();
+  const lit = (hex, i, k = 1) => new THREE.Color(hex).multiplyScalar(k * clamp(pool[i], 0.2, 1.5) * 0.62);
+  // Barriers: in daylight with the rest, underground unlit and as dark as the road beside them
+  buildBarriers(data, { put(geo, color, x, y, z, o) {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < N; i += 4) { const p = samples[i], d = (x - p.x) ** 2 + (z - p.z) ** 2 + (y - p.y) ** 2; if (d < bd) { bd = d; best = i; } }
+    if (dark[best] > 0.5) u.put(geo, new THREE.Color(color).multiplyScalar(pool[best] * UNDER_DIM), x, y, z, o);
+    else b.put(geo, color, x, y, z, o);
+  } });
+  const ub = (c, w, h, d, x, y, z, o = {}) => u.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  const halo = (x, y, z, r, hex, ry, power = 0.5) => {
+    cc.set(hex).multiplyScalar(power);
+    const sn = Math.sin(ry), cs = Math.cos(ry);
+    for (let a = 0; a < 8; a++) {
+      const a0 = (a / 8) * 6.283, a1 = ((a + 1) / 8) * 6.283;
+      const at = (a, k) => [x + Math.cos(a) * r * k * cs, y + Math.sin(a) * r * k, z - Math.cos(a) * r * k * sn], M = 0.13; // (a fan straight to black showed a hard rim: the screen's gamma lifts the faint end)
+      hp.push(x, y, z, ...at(a0, 0.35), ...at(a1, 0.35), ...at(a0, 0.35), ...at(a0, 1), ...at(a1, 0.35), ...at(a1, 0.35), ...at(a0, 1), ...at(a1, 1));
+      hc.push(cc.r, cc.g, cc.b, cc.r * M, cc.g * M, cc.b * M, cc.r * M, cc.g * M, cc.b * M, cc.r * M, cc.g * M, cc.b * M, 0, 0, 0, cc.r * M, cc.g * M, cc.b * M, cc.r * M, cc.g * M, cc.b * M, 0, 0, 0, 0, 0, 0);
+    }
+  };
+
+  // ---- The tube: one closed ring of rock every 3 samples, a facet at a time, each with its own tint ----
+  const RING = 14, tubeP = [], tubeC = [], c0 = new THREE.Color();
+  const ROCK = [0x7d6c5a, 0x6f5f4f, 0x887664, 0x655649].map((h) => new THREE.Color(h)), TEAL = new THREE.Color(0x4fb7c4), RIVER = new THREE.Color(0x3f8ea6), EMBER = new THREE.Color(0xc98a4c);
+  const ringOf = (i) => {
+    const [w, roof, depth] = roomAt(i), s = sideOf(i), inner = Math.max(halfOf(i) + 2.2, Math.min(w, radius[i] * 0.8)), p = samples[i], n = normals[i], pts = [];
+    for (let k = 0; k < RING; k++) {
+      const a = (k / RING) * 6.283 - Math.PI / 2, ca = Math.cos(a), sa = Math.sin(a), left = ca > 0;
+      const wide = (left ? s > 0 : s < 0) ? inner : w; // the inside of a bend stays tight
+      const rough = 1 + (noise(i * 0.05 + k * 3.1, k * 1.7) - 0.5) * 0.28;
+      const lat = Math.sign(ca) * Math.abs(ca) ** 0.6 * Math.max(wide * rough, halfOf(i) + 1.8);
+      const y = sa < 0 ? -depth : sa ** 0.65 * roof * (sa > 0.6 ? rough : 1);
+      pts.push(new THREE.Vector3(p.x + n.x * lat, p.y + y, p.z + n.z * lat));
+    }
+    return pts;
+  };
+  const CENTRE = new THREE.Vector3(), ab = new THREE.Vector3(), ac = new THREE.Vector3(), nrm = new THREE.Vector3();
+  const tri = (A, B, C, col, cen) => {
+    ab.subVectors(B, A); ac.subVectors(C, A); nrm.crossVectors(ab, ac);
+    const inward = nrm.dot(CENTRE.copy(cen).sub(A)) > 0, [q, w] = inward ? [B, C] : [C, B];
+    tubeP.push(A.x, A.y, A.z, q.x, q.y, q.z, w.x, w.y, w.z);
+    for (let k = 0; k < 3; k++) tubeC.push(col.r, col.g, col.b);
+  };
+  for (const [from, to] of def.dark) {
+    let prev = null;
+    for (let i = from - 10; i <= to + 10; i += 3) {
+      const k = (i + N) % N, ring = ringOf(k);
+      if (prev) {
+        const cen = samples[k].clone().setY(samples[k].y + roomAt(k)[1] * 0.35);
+        for (let a = 0; a < RING; a++) {
+          const n1 = (a + 1) % RING, height = Math.sin((a / RING) * 6.283 - Math.PI / 2); // -1 floor .. 1 roof
+          c0.copy(ROCK[(((noise(i * 0.09, a * 2.3) * 3.999) | 0))]);
+          // the light on this facet: strong on the walls at lamp height near a lamp, dim on the roof, the cavern lit from its river, the grotto by its crystals
+          let l = 0.1 + 0.2 * Math.exp(-(((Math.min(...lamps.map((m) => Math.abs(m - k)))) / 9) ** 2));
+          l *= 0.75 + 0.5 * (1 - Math.abs(height));
+          const cav = inRun(def.cavern, k), gro = inRun(def.grotto, k);
+          if (cav > 0) { c0.lerp(RIVER, cav * smoothstep(0.1, -0.8, height) * 0.8); l = lerp(l, 0.32 - 0.14 * height, cav); }
+          if (gro > 0) { c0.lerp(a % 3 ? TEAL : new THREE.Color(0x8a5ac8), gro * 0.45); l = lerp(l, 0.34, gro); }
+          if (inRun(def.sump, k) > 0) c0.lerp(EMBER, 0.3 * inRun(def.sump, k));
+          c0.multiplyScalar(l * 1.05);
+          tri(prev[a], ring[a], prev[n1], c0, cen);
+          tri(prev[n1], ring[a], ring[n1], c0, cen);
+        }
+      }
+      prev = ring;
+    }
+    // ---- The mouths: a face of rock over the road (only its hole is open), a timber frame, hazard bars, a lamp ----
+    for (const [i, dirn] of [[from, 1], [to, -1]]) {
+      const h = halfOf(i) + 2.4, tn = tangents[i], n = normals[i], p = samples[i], ry = Math.atan2(tn.x, tn.z), R = 10.5;
+      for (const sd of [1, -1]) {
+        box(0x7f6f5e, 26, 26, 3, p.x + n.x * sd * (h + 13), p.y + 9, p.z + n.z * sd * (h + 13), { ry });
+        for (let k = 0; k < 7; k++) b.put(LUMP, [0x8c7a66, 0x9a8872, 0x7f6f5e][k % 3], p.x + n.x * sd * (h + 2 + k * 3.5) - tn.x * dirn * 3, p.y + 1 + k * 2.6, p.z + n.z * sd * (h + 2 + k * 3.5) - tn.z * dirn * 3, { ry: k * 1.3, sx: 4.2, sy: 3.4, sz: 3.2 });
+        box(0x5c3f28, 1.1, R + 0.6, 1.1, p.x + n.x * sd * h, p.y + R / 2 - 0.2, p.z + n.z * sd * h, { ry });
+      }
+      box(0x7f6f5e, h * 2 + 8, 18, 3, p.x, p.y + R + 9, p.z, { ry });
+      box(0x5c3f28, h * 2 + 3, 1.3, 1.3, p.x, p.y + R, p.z, { ry });
+      for (let k = -4; k <= 4; k++) box(k % 2 ? 0xf2c12e : 0x2a2622, 2, 0.8, 0.3, p.x + n.x * k * 2 - tn.x * dirn * 0.8, p.y + R, p.z + n.z * k * 2 - tn.z * dirn * 0.8, { ry });
+    }
+  }
+  const tubeG = new THREE.BufferGeometry();
+  tubeG.setAttribute('position', new THREE.Float32BufferAttribute(tubeP, 3));
+  tubeG.setAttribute('color', new THREE.Float32BufferAttribute(tubeC, 3));
+  trackRoot.add(new THREE.Mesh(tubeG, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }))); // (no fog: seen from the surface, the daylight haze would tint it)
+
+  // ---- Lamps on timber sets: posts, a cap across the roof, one caged lamp each side (the road narrows the set on the trestle: none there) ----
+  for (const i of lamps) {
+    if (inRun(def.cavern, i) > 0.4) continue;
+    const big = inRun(def.sump, i) > 0.5 || inRun(def.drill, i) > 0.5, gro = inRun(def.grotto, i) > 0.5, tn = tangents[i], ry = Math.atan2(tn.x, tn.z), face = ry + Math.PI;
+    const [w, roof] = roomAt(i), post = Math.min(halfOf(i) + 1.1, w - 0.6), H = Math.min(roof - 1.4, 7.6), p = samples[i], n = normals[i];
+    if (!big && !gro) {
+      for (const sd of [1, -1]) ub(lit(0x6b4a2f, i), 0.55, H + 1, 0.55, p.x + n.x * sd * post, p.y + H / 2 - 0.5, p.z + n.z * sd * post, { ry });
+      ub(lit(0x5c3f28, i), post * 2 + 1, 0.6, 0.6, p.x, p.y + H, p.z, { ry });
+    }
+    const colour = gro ? 0x7fe6e0 : 0xffc46a;
+    for (const sd of [1, -1]) {
+      const lat = post - 0.5, x = p.x + n.x * sd * lat, z = p.z + n.z * sd * lat, y = p.y + (big || gro ? 4.2 : H - 0.8);
+      if (big || gro) ub(lit(0x4a3a2c, i), 0.3, 4.4, 0.3, x + n.x * sd * 0.2, p.y + 2.1, z + n.z * sd * 0.2);
+      g.put(BOX, colour, x, y, z, { sx: 0.42, sy: 0.55, sz: 0.42 });
+      halo(x, y, z, 1.7, colour, face, 0.24);
+    }
+  }
+  // ...reflectors on the barriers: amber left, white right, every 7 samples; in the dark they draw the road's edge
+  const PATCH = new THREE.PlaneGeometry(0.34, 0.34);
+  for (let i = 0; i < N; i += 7) {
+    if (dark[i] < 0.5) continue;
+    const tn = tangents[i], ry = Math.atan2(-tn.x, -tn.z);
+    for (const sd of [1, -1]) { const q = roadPoint(i, sd * ((sd > 0 ? wL[i] : wR[i]) + T.curb - 0.02), 0.85); g.put(PATCH, sd > 0 ? 0xffb030 : 0xf2f2f2, q.x, q.y, q.z, { ry }); }
+  }
+
+  // ---- The cavern: the trestle's bents down to the river, stalactites, a string of lights along the deck ----
+  const [c0i, c1i] = def.cavern, riverY = samples[Math.round((c0i + c1i) / 2)].y - 15;
+  for (let i = c0i + 4; i < c1i; i += 13) {
+    const p = samples[i], n = normals[i], tn = tangents[i], ry = Math.atan2(tn.x, tn.z), hw = halfOf(i) + 0.6, hgt = p.y - riverY;
+    for (const sd of [1, -1]) {
+      ub(lit(0x6b4a2f, 760, 0.8), 0.8, hgt, 0.8, p.x + n.x * sd * hw, riverY + hgt / 2, p.z + n.z * sd * hw, { ry, rz: sd * 0.06 });
+      ub(lit(0x5c3f28, 760, 0.7), 0.35, hgt * 0.72, 0.35, p.x + n.x * sd * (hw - 0.2) + tn.x * 5, p.y - hgt * 0.42, p.z + n.z * sd * (hw - 0.2) + tn.z * 5, { ry, rx: sd * 0.5 });
+    }
+    for (const dn of [4, 9, 14]) ub(lit(0x5c3f28, 760, 0.75), hw * 2 + 0.6, 0.45, 0.45, p.x, p.y - dn, p.z, { ry });
+    if ((i - c0i) % 26 === 4) for (const sd of [1, -1]) {
+      const x = p.x + n.x * sd * (hw - 0.2), z = p.z + n.z * sd * (hw - 0.2);
+      ub(lit(0x4a3a2c, 760), 0.22, 4.2, 0.22, x, p.y + 2, z);
+      g.put(BOX, 0xffc46a, x, p.y + 4.2, z, { sx: 0.4, sy: 0.4, sz: 0.4 });
+      halo(x, p.y + 4.2, z, 2, 0xffc46a, ry + Math.PI, 0.28);
+    }
+  }
+  for (let k = 0; k < 46; k++) {
+    const i = c0i + Math.floor(rand() * (c1i - c0i)), sd = rand() < 0.5 ? 1 : -1, lat = sd * (13 + rand() * 24), q = samples[i], n = normals[i], [, roof] = roomAt(i), len = 3 + rand() * 7, x = q.x + n.x * lat, z = q.z + n.z * lat;
+    u.put(CONE, lit(0x7d6c5a, 760, 1.1), x, q.y + roof * (0.92 - 0.12 * Math.abs(lat) / 37) - len / 2, z, { rx: Math.PI, sx: 1 + len * 0.16, sy: len, sz: 1 + len * 0.16 });
+    if (k % 2) u.put(CONE, new THREE.Color(0x3f8ea6).multiplyScalar(0.6), x + 3, riverY + len * 0.4, z + 2, { sx: 1.1 + len * 0.2, sy: len, sz: 1.1 + len * 0.2 });
+  }
+  const river = movingWater(rand, '#2e8fa6', 'rgba(150,240,240,0.6)', 'rgba(10,70,100,0.5)', 10, 110, 150);
+  const rc = samples[Math.round((c0i + c1i) / 2)];
+  river.mesh.position.set(rc.x, riverY, rc.z);
+  river.mesh.material.fog = false; // it lights the cavern from below, so it stays visible through the dark
+
+  // ---- The Sump: the bottom of the mine, a pump house on the outside of the bend ----
+  { const i = 625, sd = -sideOf(i), f = frame(i, sd, 4), c = lit(0x8a3a24, i, 1.5);
+    ub(c, 7, 6, 11, f.x, f.y + 3, f.z, { ry: f.ry });
+    ub(lit(0x2a2622, i, 2), 7.4, 0.8, 11.4, f.x, f.y + 6.3, f.z, { ry: f.ry });
+    for (const a of [-3, 3]) u.put(CYL, lit(0x9a9a92, i, 1.4), f.x + Math.sin(f.ry) * a, f.y + 8.5, f.z + Math.cos(f.ry) * a, { sx: 0.7, sy: 4.5, sz: 0.7 });
+    g.put(BOX, 0xff4a30, f.x, f.y + 7, f.z, { sx: 0.7, sy: 0.7, sz: 0.7 });
+    halo(f.x, f.y + 7, f.z, 2.4, 0xff4a30, f.ry + Math.PI / 2, 0.3);
+  }
+
+  // ---- The drill: a machine the size of a house, parked on the outside of the second bend, its teeth at the road ----
+  const drillAt = frame(968, -sideOf(968), 7), drillDir = Math.atan2(samples[968].x - drillAt.x, samples[968].z - drillAt.z), dfx = Math.sin(drillDir), dfz = Math.cos(drillDir), dY = drillAt.y + 4.4;
+  ub(lit(0xc8922e, 968, 1.5), 9, 8, 13, drillAt.x - dfx * 7, dY, drillAt.z - dfz * 7, { ry: drillDir });
+  ub(lit(0x2a2622, 968, 2), 9.4, 1.2, 13.4, drillAt.x - dfx * 7, dY - 3.6, drillAt.z - dfz * 7, { ry: drillDir });
+  const drillHead = propBatch();
+  drillHead.put(new THREE.CylinderGeometry(4.2, 4.2, 2, 12), lit(0x9a9a92, 968, 1.5), 0, 0, 0);
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * 6.283; drillHead.put(CONE, lit(0xd8d4c8, 968, 1.5), Math.cos(a) * 3.1, 1.8, Math.sin(a) * 3.1, { sx: 0.8, sy: 2, sz: 0.8 }); }
+  drillHead.put(CONE, lit(0xd8d4c8, 968, 1.5), 0, 2.1, 0, { sx: 1.4, sy: 3, sz: 1.4 });
+  const drill = new THREE.Mesh(drillHead.geometry(), new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+  const drillPivot = new THREE.Group();
+  drillPivot.position.set(drillAt.x - dfx * 0.2, dY, drillAt.z - dfz * 0.2);
+  drillPivot.rotation.set(0, drillDir, 0);
+  drill.rotation.x = Math.PI / 2;
+  drillPivot.add(drill);
+  trackRoot.add(drillPivot);
+
+  // ---- The crystal gallery: clusters on both walls, each one a light of its own ----
+  for (let i = def.grotto[0] + 10; i < def.grotto[1] - 10; i += 9) for (const sd of [1, -1]) {
+    if ((i + sd) % 2 === 0 && rand() < 0.3) continue;
+    const q = samples[i], n = normals[i], hue = rand() < 0.62 ? [0x63f2e4, 0x3fc8d8] : [0xc58aff, 0x9a5cff], lat = sd * (halfOf(i) + 1.2 + rand() * 1.6), x = q.x + n.x * lat, z = q.z + n.z * lat;
+    for (let k = 0; k < 3; k++) { const s = 0.5 + rand() * 0.8, hgt = 1.8 + rand() * 3.4; g.put(CRYSTAL, hue[k % 2], x + (rand() - 0.5) * 1.7, q.y + hgt * 0.55, z + (rand() - 0.5) * 1.7, { rx: (rand() - 0.5) * 0.7, rz: (rand() - 0.5) * 0.7, sx: s, sy: hgt, sz: s }); }
+    halo(x, q.y + 2.4, z, 2.6, hue[0], Math.atan2(tangents[i].x, tangents[i].z) + Math.PI, 0.14);
+  }
+
+  // ---- Ore trains: rails along the wall, carts rolling up and down them ----
+  const CARTS = 4, cartB = propBatch();
+  cartB.put(BOX, 0x8a4a2a, 0, 0.85, 0, { sx: 1.25, sy: 0.75, sz: 2 });
+  cartB.put(LUMP, 0xb78a4a, 0, 1.25, 0, { sx: 0.55, sy: 0.32, sz: 0.85 });
+  cartB.put(BOX, 0x1f1b18, 0, 0.3, 0, { sx: 1.35, sy: 0.4, sz: 1.5 });
+  const rails = def.cartRails.flatMap(([a, z]) => [0, 1].map((k) => ({ a, z, off: k * 0.5, sd: k ? -1 : 1 })));
+  for (const [a, z] of def.cartRails) for (let i = a; i < z; i += 5) {
+    const p0 = frame(i, -1, 0.65), p1 = frame(i + 5, -1, 0.65), len = Math.hypot(p1.x - p0.x, p1.z - p0.z, p1.y - p0.y);
+    for (const off of [-0.45, 0.45]) ub(lit(0x8a8a86, i, 1.1), 0.1, 0.1, len + 0.1, (p0.x + p1.x) / 2 + normals[i].x * off, (p0.y + p1.y) / 2 + 0.02, (p0.z + p1.z) / 2 + normals[i].z * off, { ry: Math.atan2(p1.x - p0.x, p1.z - p0.z), rx: -Math.atan2(p1.y - p0.y, Math.hypot(p1.x - p0.x, p1.z - p0.z)) });
+  }
+  const carts = new THREE.InstancedMesh(cartB.geometry(), new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9a8a7a, fog: false }), CARTS * rails.length);
+  carts.frustumCulled = false;
+  trackRoot.add(carts);
+
+  // ---- The surface camp: a headframe with spinning sheave wheels, a conveyor bridge over the start straight into a hopper, tin sheds ----
+  const STEEL = 0x5a646c, RUST = 0xa3522e, TIN = [0x9aa3a6, 0x8a9396, 0xa8b0a8], HAZ = 0xf2c12e;
+  const hx = 62, hz = -205, hy = 24;
+  for (const [ax, az] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) {
+    box(STEEL, 0.8, 30, 0.8, hx + ax * 0.75, hy + 15, hz + az * 0.75, { rx: -az * 0.018, rz: ax * 0.018 });
+    for (let lv = 6; lv < 30; lv += 6) box(RUST, Math.abs(ax) > 0 ? 11 : 0.5, 0.4, 0.5, hx, hy + lv, hz + az * 0.75);
+  }
+  for (let lv = 6; lv < 30; lv += 6) for (const sx of [-5.3, 5.3]) box(RUST, 0.5, 0.4, 10.6, hx + sx, hy + lv, hz);
+  box(0x2a2622, 13, 1, 13, hx, hy + 30.4, hz);
+  const wheels = propBatch();
+  wheels.put(new THREE.CylinderGeometry(3.4, 3.4, 0.5, 14), 0xc8922e, 0, 0, 0, { rx: Math.PI / 2 });
+  for (let k = 0; k < 4; k++) wheels.put(BOX, 0x2a2622, 0, 0, 0, { sx: 6.4, sy: 0.4, sz: 0.7, rz: (k / 4) * Math.PI });
+  const sheaves = [-1.4, 1.4].map((off) => { const m = new THREE.Mesh(wheels.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true })); m.position.set(hx, hy + 34, hz + off); m.castShadow = true; trackRoot.add(m); return m; });
+  box(STEEL, 0.5, 5, 0.5, hx, hy + 32.4, hz - 1.4); box(STEEL, 0.5, 5, 0.5, hx, hy + 32.4, hz + 1.4);
+  for (const s of [-3, 3]) box(0x2f3338, 0.18, 0.18, 27.7, hx + s, hy + 21.5, hz + 6, { rx: 1.12 }); // the hoist cables, from the wheels down to the winding house
+  box(RUST, 11, 9, 9, hx, hy + 4.5, hz + 11.5); box(0x2a2622, 11.6, 0.8, 9.6, hx, hy + 9.2, hz + 11.5);
+  // the conveyor over the road (x = -40; the start straight runs along z = -175), a covered gallery on trestle legs
+  const cvx = -35;
+  box(0x9aa3a6, 4, 3, 66, cvx, hy + 15, -175, { rx: 0 });
+  box(HAZ, 4.3, 0.5, 66.3, cvx, hy + 13.2, -175);
+  for (const z of [-206, -192, -158, -144]) for (const s of [-1.6, 1.6]) box(STEEL, 0.5, 14, 0.5, cvx + s, hy + 6.5, z);
+  box(RUST, 14, 13, 14, cvx, hy + 7, -214); box(0x2a2622, 14.5, 0.8, 14.5, cvx, hy + 13.8, -214);
+  box(RUST, 10, 10, 10, cvx, hy + 5, -137); b.put(CONE, 0x927f68, cvx + 12, hy + 3, -135, { sx: 8, sy: 6.5, sz: 8 });
+  [[10, -203, 14, 7, 10], [28, -146, 18, 6, 9], [-75, -148, 15, 7, 10], [-78, -205, 16, 6, 10], [110, -212, 15, 6, 10]].forEach(([x, z, w, h, d], k) => {
+    box(TIN[k % 3], w, h, d, x, hy + h / 2, z);
+    box(0x7a4a34, w + 1.2, 0.6, d + 1.2, x, hy + h + 0.3, z);
+    box(0x3a3f44, 3, 3.4, 0.2, x, hy + 1.7, z + (z < -175 ? d / 2 + 0.1 : -d / 2 - 0.1));
+  });
+  b.put(CONE, 0xa89680, -8, hy + 4, -205, { sx: 11, sy: 8, sz: 11 });
+
+  // ---- The open pit: benches all round (the ground), a giant excavator and a haul truck on the floor, ore on the way out ----
+  { const i = 1313, f = frame(i, 1, 13), ry = f.ry, fx = Math.sin(ry), fz = Math.cos(ry), Y = f.y; const O = 0xe08a22;
+    box(0x2a2622, 8, 2.4, 12, f.x, Y + 1.2, f.z, { ry });
+    box(O, 8, 5, 9, f.x, Y + 5, f.z, { ry });
+    box(0xbcd4dc, 3, 2.4, 0.3, f.x + fx * 4.6, Y + 6, f.z + fz * 4.6, { ry });
+    box(O, 2, 2, 18, f.x + fx * 11, Y + 10, f.z + fz * 11, { ry, rx: -0.5 });
+    box(O, 1.6, 1.6, 12, f.x + fx * 22, Y + 8, f.z + fz * 22, { ry, rx: 0.8 });
+    box(0x3a3f44, 4, 3, 3, f.x + fx * 26, Y + 2.8, f.z + fz * 26, { ry });
+  }
+  { const i = 1265, f = frame(i, -1, 9), ry = f.ry + 0.5, Y = f.y;
+    box(0xf2c12e, 8, 1, 13, f.x, Y + 3.2, f.z, { ry });
+    box(0xf2c12e, 7, 3.5, 7, f.x + Math.sin(ry) * -2.5, Y + 5.3, f.z + Math.cos(ry) * -2.5, { ry });
+    box(0xf2c12e, 4, 3, 3.5, f.x + Math.sin(ry) * 4.5, Y + 5, f.z + Math.cos(ry) * 4.5, { ry });
+    for (const a of [-4, 4]) for (const s of [-3.7, 3.7]) { const fx = Math.sin(ry), fz = Math.cos(ry); b.put(new THREE.CylinderGeometry(1.7, 1.7, 1.4, 10), 0x1f1b18, f.x + fx * a + fz * s, Y + 1.7, f.z + fz * a - fx * s, { ry, rz: Math.PI / 2 }); }
+    b.put(LUMP, 0x927f68, f.x + Math.sin(ry) * -2.5, Y + 7.4, f.z + Math.cos(ry) * -2.5, { sx: 3, sy: 1.4, sz: 3 });
+  }
+
+  const addUnlit = (batch, extra = {}) => { const m = new THREE.Mesh(batch.geometry(), new THREE.MeshBasicMaterial({ vertexColors: true, ...extra })); trackRoot.add(m); return m; };
+  addUnlit(u, { fog: false });
+  addUnlit(g, { fog: false });
+  const haloG = new THREE.BufferGeometry();
+  haloG.setAttribute('position', new THREE.Float32BufferAttribute(hp, 3));
+  haloG.setAttribute('color', new THREE.Float32BufferAttribute(hc, 3));
+  trackRoot.add(new THREE.Mesh(haloG, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide })));
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+
+  // ---- Moving parts ----
+  let clock = 0;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1), pos = new THREE.Vector3(), eu = new THREE.Euler(0, 0, 0, 'YXZ');
+  const place = (dt) => {
+    clock += dt;
+    river.update(clock * 6);
+    drill.rotation.y = clock * 2.2;
+    for (const s of sheaves) s.rotation.z = -clock * 1.4;
+    rails.forEach((r, ri) => {
+      const span = r.z - r.a;
+      for (let k = 0; k < CARTS; k++) {
+        const t = (clock * 0.05 + r.off) % 2, u01 = t < 1 ? t : 2 - t, i = Math.round(r.a + u01 * span + (k - 1.5) * 3.2), f = frame(i, -1, 0.65);
+        const sl = (samples[(i + 2) % N].y - samples[(i - 2 + N) % N].y) / (4 * data.spacing);
+        pos.set(f.x, f.y, f.z);
+        eu.set(-Math.atan(sl), f.ry, 0);
+        carts.setMatrixAt(ri * CARTS + k, m.compose(pos, q.setFromEuler(eu), sc));
+      }
+    });
+    carts.instanceMatrix.needsUpdate = true;
   };
   place(0);
   return { update(dt) { sky.update(); place(dt); } };

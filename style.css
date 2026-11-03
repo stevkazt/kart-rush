@@ -850,6 +850,7 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 [data-theme="harbour"] .track-art { background: linear-gradient(160deg, #6cc4e0, #2f7fa8); }
 [data-theme="volcano"] .track-art { background: linear-gradient(160deg, #e0763a, #7a3a2a); }
 [data-theme="jungle"] .track-art { background: linear-gradient(160deg, #6fb551, #2f6e3a); }
+[data-theme="mine"] .track-art { background: linear-gradient(160deg, #6e5a48, #241c16); }
 .track-art { border-radius: 10px; }
 .track-art .road-edge { fill: none; stroke: rgba(0, 0, 0, 0.35); stroke-width: 6; stroke-linejoin: round; }
 .track-art .road { fill: none; stroke: #f4f4f4; stroke-width: 3; stroke-linejoin: round; }
