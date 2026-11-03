@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { sound } from './sound.js';
 import { icon, fillIcons } from './ui-icons.js';
-import { PAINT_ROLES, buildRider, driverAvatar, driverKartArt, sweep } from './drivers.js';
+import { PAINT_ROLES, buildRider, driverAvatar, driverKartArt, driverSeat, roundedBox, sweep } from './drivers.js';
+import { KART_BODIES, bodyNamed } from './karts.js';
 
 /* ==========================================================================
  * 0. CONFIG
@@ -325,19 +326,19 @@ const CFG = {
   racers: [
     { name: 'Nova', colors: [0xe8322f, 0xffd23a, 0x2f6bff], tag: 'The rookie',
       look: { helmet: 0xf2f2f2, visor: 0x2f6bff, mark: 'stripe', markColor: 0xe8322f } },
-    { name: 'Rex', colors: [0x2f6bff, 0xffffff, 0xffd23a], tag: 'The veteran',
+    { name: 'Rex', body: 'Formula', colors: [0x2f6bff, 0xffffff, 0xffd23a], tag: 'The veteran',
       look: { helmet: 0x1e2a5a, visor: 0xffc21a, mark: 'twin', markColor: 0xffffff } },
-    { name: 'Luna', colors: [0x9b4dff, 0x5cc8ff, 0xffffff], tag: 'Night-sky racer',
+    { name: 'Luna', body: 'Monster', colors: [0x9b4dff, 0x5cc8ff, 0xffffff], tag: 'Night-sky racer',
       look: { helmet: 0xe9e4ff, visor: 0x5cc8ff, mark: 'moon', markColor: 0x9b4dff } },
-    { name: 'Bolt', colors: [0xffd23a, 0x222222, 0xe8322f], tag: 'Born at full throttle',
+    { name: 'Bolt', body: 'Junker', colors: [0xffd23a, 0x222222, 0xe8322f], tag: 'Born at full throttle',
       look: { helmet: 0x26262c, visor: 0xff5a1f, mark: 'bolt', markColor: 0xffd23a } },
-    { name: 'Mako', colors: [0x0d9488, 0xef4444, 0x1e293b], tag: 'The shark', // teal kart to match the shark (green until build 37)
+    { name: 'Mako', body: 'Hot Rod', colors: [0x0d9488, 0xef4444, 0x1e293b], tag: 'The shark', // teal kart to match the shark (green until build 37)
       look: { helmet: 0x334155, visor: 0xef4444, mark: 'fin', markColor: 0xf2f2f2 } },
-    { name: 'Pip', colors: [0xff5fb0, 0xffffff, 0x9b4dff], tag: 'Smallest kart in the paddock',
+    { name: 'Pip', body: 'Bubble', colors: [0xff5fb0, 0xffffff, 0x9b4dff], tag: 'Smallest kart in the paddock',
       look: { helmet: 0xffb3d9, visor: 0x9b4dff, mark: 'dots', markColor: 0xffffff } },
-    { name: 'Koda', colors: [0xc2410c, 0xfef3c7, 0x6f8f3a], tag: 'The red panda', // build 37: the 7th driver
+    { name: 'Koda', body: 'Buggy', colors: [0xc2410c, 0xfef3c7, 0x6f8f3a], tag: 'The red panda', // build 37: the 7th driver
       look: { helmet: 0xc2410c, visor: 0x1c1917, mark: 'dots', markColor: 0xfef3c7 } },
-    { name: 'Hex', colors: [0x3b1f8a, 0xffb21e, 0x2e1f6b], tag: 'Nobody knows what is under the hood', // build 37: the 8th driver
+    { name: 'Hex', body: 'Comet', colors: [0x3b1f8a, 0xffb21e, 0x2e1f6b], tag: 'Nobody knows what is under the hood', // build 37: the 8th driver
       look: { helmet: 0x2e1f6b, visor: 0xffb21e, mark: 'dots', markColor: 0xffb21e } },
   ],
   // Kart paint for the player (Kart picker): [body, accent]; null = the driver's own colours. Looks only.
@@ -507,7 +508,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '75'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '76'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -647,6 +648,8 @@ function applyTheme(th) {
 }
 
 const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...extra });
+const KNOB_GEO = new THREE.BoxGeometry(1, 0.07, 0.11); // a tread block on a knobby tyre
+const bodyGeos = new Map(), wheelGeos = new Map(); // baked kart shells + wheels (bodyGeometry, wheelGeometry)
 
 // ---------- 1b. Physics world ----------
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, CFG.gravity, 0) });
@@ -3841,6 +3844,7 @@ function castDrivers() {
     karts[i].style = style;
     const colors = i === 0 ? playerColors() : kartColors(r.colors, r.look);
     setRider(karts[i], r, colors);
+    setKartBody(karts[i], bodyNamed(i === 0 ? picks.body : r.body), r);
     paintKart(karts[i], colors);
   });
 }
@@ -3903,48 +3907,19 @@ function buildKart(colors) {
 
   // --- Visuals: chassis group ---
   const group = new THREE.Group();
-  // color is a number, or a paint role ('body' / 'accent' / 'driver') that paintKart can change later
-  const add = (geo, color, x, y, z, parent = group) => {
-    const role = PAINT_ROLES.indexOf(color);
-    const mesh = new THREE.Mesh(geo, lambert(role < 0 ? color : colors[role]));
-    mesh.userData.paint = role;
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    parent.add(mesh);
-    return mesh;
-  };
   const y0 = K.chassisYOffset;
-  // The chassis is modelled at full size in `frame`, which draws it smaller (K.look, scaled about the ground);
-  // the seat back + steering wheel fit the driver, so they keep their size in `cockpit` (lowered with the driver)
+  // Flames + sparks stay in `frame`, the old chassis space (drawn smaller: K.look); the shell itself is bodyGeometry
   const L = K.look;
-  const frame = new THREE.Group(), cockpit = new THREE.Group();
+  const frame = new THREE.Group();
   frame.scale.set(L.scale, L.scale, L.scale * L.wheelbase);
   frame.position.y = L.groundY * (1 - L.scale);
-  cockpit.position.y = -L.seatDrop;
-  group.add(frame, cockpit);
-  add(new THREE.BoxGeometry(1.5, 0.22, 2.6), 'body', 0, y0 - 0.1, 0, frame);      // floor pan
-  add(new THREE.BoxGeometry(1.15, 0.32, 0.7), 'body', 0, y0 + 0.05, 1.1, frame);  // nose
-  add(new THREE.BoxGeometry(1.9, 0.16, 0.25), 0x333333, 0, y0 - 0.12, 1.5, frame);   // bumper
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', 0.72, y0 + 0.05, 0, frame); // side pods
-  add(new THREE.BoxGeometry(0.28, 0.3, 1.1), 'accent', -0.72, y0 + 0.05, 0, frame);
-  add(new THREE.BoxGeometry(0.75, 0.38, 0.5), 0x777a85, 0, y0 + 0.12, -1.05, frame); // engine
-  add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, 0.6, y0 + 0.35, -1.35, frame);  // spoiler struts
-  add(new THREE.BoxGeometry(0.06, 0.45, 0.06), 0x222222, -0.6, y0 + 0.35, -1.35, frame);
-  add(new THREE.BoxGeometry(1.7, 0.08, 0.42), 'accent', 0, y0 + 0.6, -1.4, frame);    // spoiler
-  add(new THREE.BoxGeometry(0.9, 0.65, 0.22), 0x2a2a3a, 0, y0 + 0.3, -0.6, cockpit);   // seat back
-  // (the driver is a separate rider mesh, per driver: setRider / drivers.js; its paws hold this wheel)
-  const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2, cockpit);
-  wheel.rotation.x = -0.9;
+  group.add(frame);
 
   // Exhaust + boost flame
-  const pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 6);
-  pipeGeo.rotateX(Math.PI / 2);
-  add(pipeGeo, 0x444444, 0.22, y0 + 0.1, -1.4, frame);
-  add(pipeGeo, 0x444444, -0.22, y0 + 0.1, -1.4, frame);
   const flameGeo = new THREE.ConeGeometry(0.16, 0.9, 6);
   flameGeo.rotateX(-Math.PI / 2);
   const flameMat = new THREE.MeshBasicMaterial({ color: 0x66d9ff, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-  const flames = [0.22, -0.22].map((x) => {
+  const flameSet = [0.22, -0.22].map((x) => { // setKartBody places them and picks how many: k.flames
     const f = new THREE.Mesh(flameGeo, flameMat);
     f.position.set(x, y0 + 0.1, -1.95);
     f.visible = false;
@@ -3963,7 +3938,9 @@ function buildKart(colors) {
   });
 
   // One draw call for the whole body instead of ~20 (each one is drawn twice: shadow + screen)
-  const bodyMesh = bakeMeshes(group, [...flames, ...sparks]);
+  const bodyMesh = new THREE.Mesh(bodyGeometry(KART_BODIES[0]), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  bodyMesh.castShadow = true;
+  group.add(bodyMesh);
   bodyMesh.material.emissive = new THREE.Color(0); // the star flashes it through the rainbow
   scene.add(group);
 
@@ -3991,24 +3968,80 @@ function buildKart(colors) {
   group.add(stars);
 
   // --- Visuals: wheels (positioned from the physics wheel transforms, pulled in to the drawn frame: syncMeshes) ---
-  const tireMat = lambert(0x1f1f24);
-  const hubMat = lambert(0xdddddd);
   const wheelMeshes = layout.map((_, i) => {
-    const width = (i < 2 ? 0.34 : 0.44) * L.scale, r = K.wheelRadius * L.scale;
     const g = new THREE.Group();
-    const tireGeo = new THREE.CylinderGeometry(r, r, width, 12);
-    tireGeo.rotateZ(Math.PI / 2); // cylinder axis Y -> axle axis X
-    const tire = new THREE.Mesh(tireGeo, tireMat);
-    const hubGeo = new THREE.CylinderGeometry(0.18 * L.scale, 0.18 * L.scale, width + 0.02, 6);
-    hubGeo.rotateZ(Math.PI / 2);
-    const hub = new THREE.Mesh(hubGeo, hubMat);
-    g.add(tire, hub);
-    bakeMeshes(g);
+    const m = new THREE.Mesh(wheelGeometry(KART_BODIES[0], i), new THREE.MeshLambertMaterial({ vertexColors: true }));
+    m.castShadow = true;
+    g.add(m);
     scene.add(g);
     return g;
   });
 
-  return { body, vehicle, group, wheelMeshes, sparks, sparkMat, flames, stars, bodyMesh, bubble, hull };
+  return { body, vehicle, group, wheelMeshes, sparks, sparkMat, flames: flameSet, flameSet, frame, wheelFit: KART_BODIES[0].wheels, stars, bodyMesh, bubble, hull };
+}
+
+/** One baked mesh per (body, driver), kept: a driver races once per race, so no two karts ever share one (colours are per geometry). */
+function bodyGeometry(B, r = null) {
+  const key = `${B.name}|${r?.name ?? ''}`;
+  if (bodyGeos.has(key)) return bodyGeos.get(key);
+  const K = CFG.kart, L = K.look, y0 = K.chassisYOffset;
+  const root = new THREE.Group(), frame = new THREE.Group(), cockpit = new THREE.Group();
+  frame.scale.set(L.scale, L.scale, L.scale * L.wheelbase);
+  frame.position.y = L.groundY * (1 - L.scale);
+  cockpit.position.y = -L.seatDrop;
+  root.add(frame, cockpit);
+  // color is a number, or a paint role ('body' / 'accent' / 'driver') that paintKart can change later
+  const add = (geo, color, x, y, z, parent = root) => {
+    const role = PAINT_ROLES.indexOf(color);
+    const mesh = new THREE.Mesh(geo, lambert(role < 0 ? color : 0xffffff));
+    mesh.userData.paint = role;
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  B.build({ add, frame, y0 });
+  // The driver's own seat + steering wheel: they fit the driver whatever the car (their paws hold this wheel)
+  const seat = r ? driverSeat(r) : { w: 0.9, h: 0.65 };
+  add(roundedBox(seat.w, seat.h, 0.22, 0.07, 3), 0x2a2a3a, 0, y0 - 0.025 + seat.h / 2, -0.6, cockpit);
+  const wheel = add(new THREE.TorusGeometry(0.18, 0.04, 6, 12), 0x222222, 0, y0 + 0.48, 0.2, cockpit);
+  wheel.rotation.x = -0.9;
+  const geo = bakeMeshes(root).geometry;
+  bodyGeos.set(key, geo);
+  return geo;
+}
+
+/** A wheel of this body, i = 0 FL, 1 FR, 2 RL, 3 RR. Fixed colours, so karts can share it. */
+function wheelGeometry(B, i) {
+  const F = B.wheels, r = i < 2 ? F.fr : F.rr, width = i < 2 ? F.fw : F.rw;
+  const key = `${B.name}|${F.hubs ? i : i < 2 ? 'f' : 'r'}`;
+  if (wheelGeos.has(key)) return wheelGeos.get(key);
+  const g = new THREE.Group();
+  const tireGeo = new THREE.CylinderGeometry(r, r, width, 14);
+  tireGeo.rotateZ(Math.PI / 2); // cylinder axis Y -> axle axis X
+  const hubGeo = new THREE.CylinderGeometry(F.hub, F.hub, width + 0.02, 12);
+  hubGeo.rotateZ(Math.PI / 2);
+  g.add(new THREE.Mesh(tireGeo, lambert(0x1f1f24)), new THREE.Mesh(hubGeo, lambert(F.hubs?.[i] ?? F.hubColor)));
+  for (let n = 0; n < (F.knobs ?? 0) * 2; n++) { // tread blocks, staggered in two rows
+    const knob = new THREE.Mesh(KNOB_GEO, lambert(0x1f1f24)), a = (n / F.knobs) * Math.PI;
+    knob.scale.set(width * 0.46, 1, 1);
+    knob.position.set((n % 2 ? 1 : -1) * width * 0.25, Math.cos(a) * r, Math.sin(a) * r);
+    knob.rotation.x = -a;
+    g.add(knob);
+  }
+  const geo = bakeMeshes(g).geometry;
+  wheelGeos.set(key, geo);
+  return geo;
+}
+
+/** Puts body B on kart k for driver r: looks only, the physics never hear about it. */
+function setKartBody(k, B, r) {
+  const L = CFG.kart.look;
+  k.bodyMesh.geometry = bodyGeometry(B, r);
+  k.wheelMeshes.forEach((w, i) => { w.children[0].geometry = wheelGeometry(B, i); });
+  k.wheelFit = B.wheels;
+  k.flames = k.flameSet.slice(0, B.flames.length);
+  k.flameSet.forEach((f) => { f.visible = false; });
+  B.flames.forEach(([x, y, z], i) => k.flameSet[i].position.set(x / L.scale, (y - k.frame.position.y) / L.scale, z / (L.scale * L.wheelbase)));
 }
 
 /** The bullet: a black slug round the kart with a chrome nose ring, eyes and red fins. */
@@ -4533,6 +4566,7 @@ function initControls() {
   onTap($('btn-pick-done'), () => { sound.click(); showMenu(); });
   onTap($('btn-pick-go'), () => { sound.click(); showMenu(); startChosen(); });
   for (const b of $('mode-pick').children) onTap(b, () => { sound.click(); setMode(b.dataset.mode); });
+  for (const b of $('pick-tabs').children) onTap(b, () => { sound.click(); kartTab = b.dataset.tab; openPicker('kart'); });
   for (const b of $('help-tabs').children) onTap(b, () => { // sideways: controls and items each get the whole card
     sound.click();
     for (const o of $('help-tabs').children) o.classList.toggle('on', o === b);
@@ -5299,13 +5333,14 @@ function buildKeyboard() {
 }
 
 // ---------- Title screen picks (per device): track, driver (karts[0] races as them), kart paint ----------
-const DRIVER_KEY = 'kartrush.driver', PAINT_KEY = 'kartrush.paint';
+const DRIVER_KEY = 'kartrush.driver', PAINT_KEY = 'kartrush.paint', BODY_KEY = 'kartrush.body';
 function savedPick(key, list) {
   let v = null;
   try { v = localStorage.getItem(key); } catch { /* storage blocked */ }
   return list.some((o) => o.name === v) ? v : list[0].name;
 }
-const picks = { driver: savedPick(DRIVER_KEY, CFG.racers), paint: savedPick(PAINT_KEY, CFG.paints) };
+const picks = { driver: savedPick(DRIVER_KEY, CFG.racers), paint: savedPick(PAINT_KEY, CFG.paints), body: savedPick(BODY_KEY, KART_BODIES) };
+let kartTab = 'body'; // the kart picker's tab: 'body' | 'paint'
 function playerDriver() { return CFG.racers.find((r) => r.name === picks.driver); }
 function playerColors(paint = picks.paint) {
   const d = playerDriver(), p = CFG.paints.find((o) => o.name === paint).colors;
@@ -5313,19 +5348,15 @@ function playerColors(paint = picks.paint) {
 }
 
 /** Side view of a kart (colours as kartColors), standing on a faint studio floor so dark paints still read. */
-function kartSvg([body, accent, suit, helmet = 0xffffff, visor = 0x1c2340], driver = playerDriver()) {
-  const [b, a, d, h, v] = [body, accent, suit, helmet, visor].map(cssHex);
+function kartSvg([body, accent, suit, helmet = 0xffffff, visor = 0x1c2340], driver = playerDriver(), kartBody = picks.body) {
+  const [b, a, d, h, v] = [body, accent, suit, helmet, visor].map(cssHex), B = bodyNamed(kartBody);
   const rider = driverKartArt(driver) ?? `<rect x="28" y="11" width="11" height="12" rx="3" fill="${d}"/>
     <circle cx="34" cy="8" r="6.5" fill="${h}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.6"/><rect x="35" y="6" width="6.5" height="3.5" rx="1.5" fill="${v}"/>`;
   return `<svg class="kart-art" viewBox="0 0 72 46" aria-hidden="true">
     <ellipse cx="36" cy="42" rx="33" ry="3.2" fill="#fff" opacity="0.13"/>
-    <rect x="3" y="9" width="15" height="4" rx="1.5" fill="${a}" stroke="#fff" stroke-opacity="0.25" stroke-width="0.6"/><rect x="9" y="12" width="3" height="10" fill="#555"/>
-    <path d="M8 22 H50 L64 25 Q67 26 67 29 V32 H6 Q4 32 4 29 V25 Q4 22 8 22 Z" fill="${b}" stroke="#fff" stroke-opacity="0.3" stroke-width="0.7"/>
-    <rect x="22" y="20" width="22" height="7" rx="2" fill="${a}"/>
+    ${B.art(b, a)}
     ${rider}
-    <rect x="62" y="29" width="7" height="3" rx="1" fill="#333"/>
-    <circle cx="15" cy="34" r="7.5" fill="#222"/><circle cx="15" cy="34" r="3" fill="#888"/>
-    <circle cx="55" cy="35" r="6.5" fill="#222"/><circle cx="55" cy="35" r="2.6" fill="#888"/>
+    ${B.artFront(b, a)}
   </svg>`;
 }
 
@@ -5398,7 +5429,7 @@ function refreshPickRows() {
   fill('track', trackShape(track.id).svg, t.name);
   card('track').dataset.theme = t.theme;
   fill('driver', driverSvg(d), d.name);
-  fill('kart', kartSvg(playerColors()), picks.paint);
+  fill('kart', kartSvg(playerColors()), picks.body);
 }
 
 /** Picker screen for 'track' | 'driver' | 'kart': tapping a card picks it straight away; DONE goes back. */
@@ -5408,7 +5439,9 @@ function openPicker(kind) {
   const staged = kind !== 'track'; // driver / paint: the live 3D kart on the left (split stage)
   hud.pickScreen.classList.toggle('staged', staged);
   hud.pickScreen.classList.toggle('tracks', kind === 'track');
-  $('pick-title').textContent = { track: 'CHOOSE A TRACK', driver: 'CHOOSE YOUR DRIVER', kart: 'PAINT YOUR KART' }[kind];
+  $('pick-title').textContent = { track: 'CHOOSE A TRACK', driver: 'CHOOSE YOUR DRIVER', kart: 'YOUR KART' }[kind];
+  $('pick-tabs').hidden = kind !== 'kart';
+  for (const b of $('pick-tabs').children) b.classList.toggle('on', b.dataset.tab === kartTab);
   const options = {
     track: () => Object.entries(CFG.tracks).filter(([, t]) => !t.debug || DEBUG).map(([id, t]) => ({
       on: () => track.id === id, theme: t.theme, pick: () => selectTrack(id),
@@ -5424,7 +5457,16 @@ function openPicker(kind) {
       },
       label: r.name, html: driverSvg(r), // art only: name + tag show with the 3D driver (user: all text there)
     })),
-    kart: () => CFG.paints.map((p) => ({
+    kart: () => (kartTab === 'body' ? KART_BODIES.map((B) => ({
+      on: () => picks.body === B.name,
+      pick: () => {
+        picks.body = B.name;
+        try { localStorage.setItem(BODY_KEY, B.name); } catch { /* storage blocked */ }
+        setKartBody(kart, B, playerDriver());
+        paintKart(kart, playerColors());
+      },
+      label: B.name, html: kartSvg(playerColors(), playerDriver(), B.name),
+    })) : CFG.paints.map((p) => ({
       on: () => picks.paint === p.name,
       pick: () => {
         picks.paint = p.name;
@@ -5432,7 +5474,7 @@ function openPicker(kind) {
         paintKart(kart, playerColors());
       },
       label: p.name, html: kartSvg(playerColors(p.name)), // the paint's name shows with the 3D kart
-    })),
+    }))),
   }[kind]();
   const cards = options.map((o) => {
     const b = document.createElement('button');
@@ -5458,8 +5500,8 @@ function openPicker(kind) {
   showOverlay(hud.pickScreen);
   if (kind === 'track') trackPreview();
   if (staged) {
+    if (!stage.on) stage.rot = 0; // (a tab change keeps the angle)
     stage.on = true;
-    stage.rot = 0;
     stage.idle = 0;
     hud.overlay.classList.add('stage-on');
     stageLabel(kind);
@@ -5484,8 +5526,9 @@ function trackPreview() {
  * player's driver is looks only), or the paint. */
 function stageLabel(kind) {
   const d = playerDriver();
-  $('stage-name').textContent = kind === 'driver' ? d.name : picks.paint;
-  $('stage-tag').textContent = kind === 'driver' ? d.tag : `${d.name}'s kart`;
+  const onBody = kind === 'kart' && kartTab === 'body';
+  $('stage-name').textContent = kind === 'driver' ? d.name : onBody ? picks.body : picks.paint;
+  $('stage-tag').textContent = kind === 'driver' ? d.tag : onBody ? bodyNamed(picks.body).tag : `${d.name}'s kart`;
   const el = $('stage-name').parentElement;
   el.classList.remove('pop');
   void el.offsetWidth; // restart the transition
@@ -5722,7 +5765,7 @@ function teleStart() {
   tele.nextT = 0;
   tele.race = {
     build: $('build').textContent.split(' ')[1], at: new Date().toISOString(), track: track.id, ...(dbgActive() && { debug: true }), idleFps: idleProbe.fps,
-    steering: savedSteering(), diff: effectiveDiff(), view: app.classList.contains('vertical') ? 'vertical' : 'landscape', laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint },
+    steering: savedSteering(), diff: effectiveDiff(), view: app.classList.contains('vertical') ? 'vertical' : 'landscape', laps: CFG.laps, player: { driver: picks.driver, paint: picks.paint, body: picks.body },
     karts: karts.map((k) => ({ name: k.name, ...(k.ai && { style: k.style, role: k.ai.style.role, skill: +k.ai.skill.toFixed(3), grip: +k.ai.grip.toFixed(1),
       lineUse: +k.ai.lineUse.toFixed(2) }) })),
     // every second: t, then per kart [metres raced, km/h, place, AI target speed as % of top], then the player's
@@ -8163,7 +8206,8 @@ const drawQ = new THREE.Quaternion();
  */
 function syncMeshes() {
   const L = CFG.kart.look;
-  for (const { body, vehicle, group, wheelMeshes, spin, spinTotal, spinKind, launch, bullet } of karts) {
+  const K = CFG.kart;
+  for (const { body, vehicle, group, wheelMeshes, wheelFit: F, spin, spinTotal, spinKind, launch, bullet } of karts) {
     group.position.copy(body.interpolatedPosition);
     group.quaternion.copy(body.interpolatedQuaternion);
     group.scale.set(1, 1, 1);
@@ -8243,9 +8287,9 @@ function syncMeshes() {
       w.visible = !(bullet > 0); // inside the bullet
       // in the kart's frame: pulled in to the drawn (smaller) chassis, the smaller tyre still on the ground
       w.position.copy(t.position).sub(bodyP).applyQuaternion(rawQInv);
-      w.position.x *= L.scale;
-      w.position.z *= L.scale * L.wheelbase;
-      w.position.y -= CFG.kart.wheelRadius * (1 - L.scale);
+      w.position.x *= F.x / K.wheelX;
+      w.position.z *= i < 2 ? F.fz / K.wheelFrontZ : F.rz / K.wheelRearZ;
+      w.position.y -= K.wheelRadius - (i < 2 ? F.fr : F.rr);
       w.position.applyQuaternion(drawQ).add(group.position);
       w.quaternion.copy(t.quaternion).premultiply(interpQ);
       w.scale.set(1 + (1 - squash) * 0.35, squash, 1 + (1 - squash) * 0.35);

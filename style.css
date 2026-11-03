@@ -1377,6 +1377,8 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 .mode-pick { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: rgba(10, 12, 36, 0.78); box-sizing: border-box; }
 .mode-btn { flex: 1 1 0; min-height: 44px; padding: 0 6px; border-radius: 12px; border: 0; background: transparent; color: #fff; opacity: 0.8; font-size: 15px; font-weight: 800; white-space: nowrap; cursor: pointer; }
 .mode-btn.on { opacity: 1; background: #ffe14a; color: #3a1d00; }
+.pick-tabs { flex: 0 0 auto; width: min(100%, 280px); }
+.pick-tabs[hidden] { display: none; }
 .mode-info { margin: 0; height: 20px; line-height: 20px; text-align: center; white-space: nowrap; font-size: 13px; font-weight: 700; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); }
 .mode-info b { color: #ffe14a; }
 .btn-start { width: 100%; box-sizing: border-box; padding: 0 6px; min-height: 62px; font-size: 25px; }
@@ -1398,6 +1400,7 @@ button.setup-tile:active { transform: translateY(2px); background: rgba(40, 44, 
 #app.vertical .lobby-main h1 { order: 0; text-align: center; margin: 0; }
 #app.vertical .lobby-stage { order: 1; flex: 1 1 0; min-height: 0; }
 #app.vertical .mode-pick { order: 2; }
+#app.vertical .pick-tabs { order: 0; }
 #app.vertical .mode-info { order: 3; }
 #app.vertical .screen .setup { order: 4; }
 #app.vertical .btn-start { order: 5; margin-top: 4px; }

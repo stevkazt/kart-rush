@@ -9,6 +9,8 @@
 #   dev/test.sh film [maxFrames=600]       bomb hit on the player (gore on), every frame at a fixed 1/30 s: PNGs + film.jsonl (OUT_DIR)
 #   dev/test.sh shots 300,880:3           screenshots with the player parked at sample idx[:lane] (OUT_DIR)
 #   dev/test.sh studio [front,side,back,fast,turn,chase,face]  lobby close-ups of the player's driver
+#   dev/test.sh fit                        every driver + kart body: anything breaking the driver zone (karts.js)
+#   dev/test.sh combos [rear,profile]       a studio screenshot of every driver in every kart body (OUT_DIR)
 #   dev/test.sh pick [driver,kart,track]    lobby picker screens: open, screenshot, pick the 3rd card, screenshot
 #   dev/test.sh settings [WxH,...]       the Settings screen at those viewports (portrait = rotated)
 #   dev/test.sh profile [seconds]           CPU profile of a race with drawing off (top functions by self time)
@@ -31,8 +33,8 @@ DEBUG_PORT="${DEBUG_PORT:-9333}" # both overridable, to run two tests at once
 if lsof -nP -iTCP:$GAME_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port $GAME_PORT is busy (stale test server serving an old copy?): lsof -iTCP:$GAME_PORT"; exit 1
 fi
-cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/ui-icons.js "$GAME_DIR"/drivers.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
-sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__introCam=introCamera;window.__introShot=()=>INTRO_SHOT;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__finish=finishKart;window.__fx=speedFx;window.__G=()=>({goreFx,eye1,eye2,lens,blood,dots,goreSkel,camFocus,camState,kart,camera,fx,goreSplats});#' \
+cp -R "$GAME_DIR"/index.html "$GAME_DIR"/style.css "$GAME_DIR"/sound.js "$GAME_DIR"/ui-icons.js "$GAME_DIR"/drivers.js "$GAME_DIR"/karts.js "$GAME_DIR"/manifest.webmanifest "$GAME_DIR"/icons "$TMP"/
+sed 's#^// ---------- Boot ----------#window.__k=kart;window.__karts=karts;window.__s=state;Object.defineProperty(window,"__t",{get:()=>track});window.__w=world;window.__in=input;window.__r=renderer;window.__snd=sound;window.__loadTrack=loadTrack;window.__resetKart=resetKart;window.__snap=()=>{camState.snap=true};window.__cam=camera;window.__introCam=introCamera;window.__introShot=()=>INTRO_SHOT;window.__useItem=useItem;window.__spinOut=spinOut;window.__shells=shells;window.__spawn=spawnModel;window.__tele=tele;window.__finish=finishKart;window.__fx=speedFx;window.__pick=(d,b)=>{picks.driver=d;picks.body=b;castDrivers();placeOnGrid();};window.__G=()=>({goreFx,eye1,eye2,lens,blood,dots,goreSkel,camFocus,camState,kart,camera,fx,goreSplats});#' \
   "$GAME_DIR/main.js" > "$TMP/main.js"
 grep -q '__in=input' "$TMP/main.js" || { echo "Boot marker not found in main.js"; exit 1; }
 
@@ -72,6 +74,10 @@ elif [ "$MODE" = "shots" ]; then
   run shots "$1"
 elif [ "$MODE" = "studio" ]; then
   run studio "${1:-front,side,back,fast,turn,chase,face}"
+elif [ "$MODE" = "combos" ]; then
+  run combos "${1:-rear,profile}"
+elif [ "$MODE" = "fit" ]; then
+  run fit x
 elif [ "$MODE" = "blur" ]; then
   run blur "${1:-844x390,390x844:vertical}"
 elif [ "$MODE" = "pick" ]; then

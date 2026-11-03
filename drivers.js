@@ -162,6 +162,8 @@ export function buildRider(r, colors, y0, detail = 1) {
 /** 2D art hooks: null = use the generic (helmeted) art. */
 export const driverAvatar = (r) => DRIVERS[r.name]?.avatar?.(r) ?? null;
 export const driverKartArt = (r) => DRIVERS[r.name]?.kartArt?.(r) ?? null;
+/** The seat this driver brings to any kart: width + height of the seat back. */
+export const driverSeat = (r) => ({ w: 0.9, h: 0.65, ...DRIVERS[r.name]?.seat });
 
 // ---------- Fallback: the original helmeted driver (paint roles: suit, helmet, visor, body stripe) ----------
 const FALLBACK = {
@@ -445,6 +447,7 @@ function crescent(r, depth) {
 }
 
 const LUNA = {
+  seat: { w: 1.12 },
   smooth: true,
   build(R, y0) {
     const { root, joint, part } = R;
@@ -716,6 +719,7 @@ function tooth(b, dir, n, r, h) {
 const MAKO_BULK = 1.15; // the bully sits 15% bigger than the standard driver (user, build 37)
 const MAKO_W = 1.4, MAKO_D = 1.0; // ...and his torso itself is broader + deeper (was 1.1 / 0.84): a muscular barrel
 const MAKO = {
+  seat: { w: 1.1 },
   smooth: true,
   gloss: { metalness: 0.8, roughness: 0.1 }, // the shades and the spikes
   build({ root, joint, part }, y0) {
@@ -832,10 +836,10 @@ const MAKO = {
     ds.lineTo(-0.13, -0.02);
     part(head, finGeo(ds, 0.05, 0.4, 0.3), (x, y) => mix(M.slate, mix(M.teal, M.slate, 0.55), smoothstep(0.38, 0.1, y)), 0, 0.41, -0.02);
 
-    // Tail: a short tapered stalk out of the gap above the seat back, then a vertical crescent (a rudder)
-    const tail = joint(root, 0, y0 + 0.68, -0.64);
-    tail.scale.setScalar(S);
-    part(tail, sweep([[0, 0, 0.06], [0, 0.005, -0.06], [0, 0.015, -0.17]], (u) => lerp(0.075, 0.035, u), 12, 16),
+    // Tail: a small vertical crescent (a rudder) right behind the seat, on a stub: it stays in the driver zone (karts.js)
+    const tail = joint(root, 0, y0 + 0.72, -0.68);
+    tail.scale.setScalar(S * 0.72);
+    part(tail, sweep([[0, 0, 0.06], [0, 0.005, -0.03], [0, 0.015, -0.09]], (u) => lerp(0.075, 0.04, u), 10, 14),
       (x, y) => mix(M.white, sharkSkin(0.1), smoothstep(-0.03, 0.01, y)));
     const ts = new THREE.Shape();
     ts.moveTo(0, -0.035);
@@ -843,7 +847,7 @@ const MAKO = {
     ts.quadraticCurveTo(0.12, 0.12, 0.12, 0.02); // its trailing edge into the fork
     ts.quadraticCurveTo(0.13, -0.06, 0.17, -0.13); // lower lobe: short
     ts.quadraticCurveTo(0.05, -0.08, 0, -0.035);
-    part(tail, finGeo(ts, 0.03, 0.3, 0.4), (x, y) => mix(mix(M.teal, M.slate, 0.4), M.slate, smoothstep(0.05, 0.28, Math.abs(y))), 0, 0.015, -0.15);
+    part(tail, finGeo(ts, 0.03, 0.3, 0.4), (x, y) => mix(mix(M.teal, M.slate, 0.4), M.slate, smoothstep(0.05, 0.28, Math.abs(y))), 0, 0.015, -0.07);
 
     // ---- Animation hook ----
     const st = { t: 0, lean: 0, sway: 0, speed: 0, acc: 0, chomp: 0, fire: 0, boost: 0, idle: 3 };
@@ -910,8 +914,7 @@ const MAKO = {
   kartArt() {
     const [teal, slate, wh, mouth, gill, sh, red, vest, spike] = [M.teal, M.slate, M.white, M.mouth, M.gill, M.shades, M.red, M.vest, M.spike].map(css);
     const skin = css(mix(M.teal, M.slate, 0.4));
-    return `<path d="M29 12.4 L24.6 11.8 L24.6 14.2 L29 15.6 Z" fill="${skin}"/>
-    <path d="M25.4 12.4 Q22.8 8.8 19.2 4.8 Q24.4 7 26 11.6 Z M25.4 13.6 Q23.4 16.8 20.6 18.8 Q25 18 26.2 14.2 Z" fill="${skin}"/>
+    return `<path d="M28.6 13 Q26.6 10.4 24.2 8.2 Q27.6 9.6 28.8 12.6 Z M28.6 14.4 Q27.2 16.6 25.2 18 Q28.4 17.4 29.2 15 Z" fill="${skin}"/>
     <rect x="28" y="14" width="11" height="9" rx="3" fill="${vest}"/><path d="M36 14.2 L39 14.6 L39 20 Z" fill="${wh}"/><path d="M35 14.2 L36.6 14.2 L38.6 19 Z" fill="${red}"/>
     <path d="M29 14.6 L28.4 11 L30.6 14.2 Z M31.6 14.2 L31.6 10.6 L33.4 14.2 Z" fill="${spike}"/>
     <path d="M33.5 16.5 L42 19" stroke="${skin}" stroke-width="3" stroke-linecap="round"/><circle cx="42.5" cy="19.2" r="1.7" fill="${skin}"/>
@@ -1183,7 +1186,7 @@ const B = {
   black: 0x111318, metal: 0x94a3b8, metalDark: 0x475569, battery: 0x16a34a, wireR: 0xef4444, wireB: 0x3b82f6, glove: 0xf8fafc,
 };
 /** A box with rounded edges (radius r) and exact smooth normals. */
-function roundedBox(w, h, d, r, seg = 16) {
+export function roundedBox(w, h, d, r, seg = 16) {
   const g = new THREE.BoxGeometry(w, h, d, seg, seg, seg);
   const p = g.attributes.position, nrm = g.attributes.normal, v = new THREE.Vector3(), c = new THREE.Vector3();
   const ix = w / 2 - r, iy = h / 2 - r, iz = d / 2 - r;
@@ -1533,10 +1536,10 @@ const KODA = {
       return { j, sx };
     });
 
-    // Tail: huge, fluffy, ring-striped, curling up the right side of the seat; rings follow the tube's length
-    const tail = joint(root, 0, y0 + 0.6, -0.7);
+    // Tail: still big, fluffy and ring-striped, tucked up behind his right shoulder (driver zone, karts.js); rings follow the tube's length
+    const tail = joint(root, 0, y0 + 0.7, -0.68);
     tail.scale.setScalar(S);
-    const tailPts = [[0, 0, 0.06], [-0.03, -0.02, -0.12], [-0.17, 0, -0.26], [-0.34, 0.12, -0.25], [-0.43, 0.3, -0.13], [-0.43, 0.46, 0], [-0.37, 0.57, 0.08]];
+    const tailPts = [[0, 0, 0.04], [-0.03, -0.01, -0.05], [-0.1, 0.01, -0.1], [-0.17, 0.09, -0.1], [-0.21, 0.2, -0.05], [-0.22, 0.31, 0.0], [-0.18, 0.4, 0.03]];
     const tailCurve = new THREE.CatmullRomCurve3(tailPts.map((q) => new THREE.Vector3(...q)));
     const samples = tailCurve.getSpacedPoints(120);
     const along = (x, y, z) => { // u of the nearest point on the tail's spine
@@ -1544,7 +1547,7 @@ const KODA = {
       samples.forEach((q, i) => { const d = (q.x - x) ** 2 + (q.y - y) ** 2 + (q.z - z) ** 2; if (d < bd) { bd = d; best = i; } });
       return best / 120;
     };
-    const fur = (u, v) => (0.15 * Math.sin(Math.PI * u) ** 0.6 + 0.055 * (1 - u) + 0.003) * (1 + 0.07 * Math.sin(v * Math.PI * 18 + u * 60) * Math.sin(u * 70));
+    const fur = (u, v) => (0.115 * Math.sin(Math.PI * u) ** 0.6 + 0.045 * (1 - u) + 0.003) * (1 + 0.07 * Math.sin(v * Math.PI * 18 + u * 60) * Math.sin(u * 70));
     part(tail, sweep(tailPts, fur, 64, 24), (x, y, z) => {
       const u = along(x, y, z);
       const ring = smoothstep(0.5, 0.75, 0.5 + 0.5 * Math.cos(u * Math.PI * 2 * 3.5));
@@ -1566,8 +1569,8 @@ const KODA = {
       head.rotation.z = st.lean * 0.1;
       head.rotation.y = -st.lean * 0.2;
       head.rotation.x = -0.05 * speed;
-      tail.rotation.y = -st.sway * 0.22 + Math.sin(st.t * 1.3) * 0.04;
-      tail.rotation.z = st.sway * 0.12;
+      tail.rotation.y = -st.sway * 0.1 + Math.sin(st.t * 1.3) * 0.03;
+      tail.rotation.z = st.sway * 0.05;
       // ears: little twitches when stopped, back with speed
       const idle = 1 - clamp(speed * 5, 0, 1);
       for (const e of ears) {
@@ -1615,9 +1618,9 @@ const KODA = {
   kartArt() {
     const [ru, rd, cr, mk, dk, bd, jk, kn, rg, pw] = [K.rust, K.rustDark, K.cream, K.mask, K.dark, K.band, K.jacket, K.knit, K.ring, K.paw].map(css);
     return `<defs><clipPath id="koda-ktail"><path d="M28 18.4 C20 19.6 15.6 15.2 16 9.6 C16.4 4.8 20 2 24.4 3 C21.4 5.4 21 9 22.4 12 C23.8 14.6 26.2 15 28.4 14.6 Z"/></clipPath></defs>
-    <path d="M28 18.4 C20 19.6 15.6 15.2 16 9.6 C16.4 4.8 20 2 24.4 3 C21.4 5.4 21 9 22.4 12 C23.8 14.6 26.2 15 28.4 14.6 Z" fill="${ru}"/>
+    <g transform="translate(9.5 5) scale(0.66)"><path d="M28 18.4 C20 19.6 15.6 15.2 16 9.6 C16.4 4.8 20 2 24.4 3 C21.4 5.4 21 9 22.4 12 C23.8 14.6 26.2 15 28.4 14.6 Z" fill="${ru}"/>
     <g clip-path="url(#koda-ktail)" fill="${rg}"><rect x="14" y="5" width="12" height="2.2" transform="rotate(-30 20 6)"/><rect x="14" y="10" width="10" height="2.2" transform="rotate(10 19 11)"/><rect x="20" y="14.6" width="6" height="6" /></g>
-    <path d="M23.6 3.2 C22.6 3.6 22 4.4 21.8 5.2 C23 5 24 4.2 24.4 3 Z" fill="${rd}"/>
+    <path d="M23.6 3.2 C22.6 3.6 22 4.4 21.8 5.2 C23 5 24 4.2 24.4 3 Z" fill="${rd}"/></g>
     <rect x="28" y="14" width="11" height="9" rx="3" fill="${jk}"/><rect x="28" y="13.4" width="8" height="2" rx="1" fill="${kn}"/>
     <path d="M33.5 16.5 L42 19" stroke="${jk}" stroke-width="2.8" stroke-linecap="round"/><circle cx="42.6" cy="19.2" r="1.7" fill="${pw}"/>
     <path d="M31 3.6 C30.2 1.4 31 -0.2 32.8 0.2 C34.4 0.6 35 2 34.8 3.4 Z" fill="${cr}"/><path d="M31.8 3.2 C31.4 1.8 31.8 0.9 32.8 1.1 C33.8 1.3 34 2.2 33.9 3.1 Z" fill="${mk}"/>
@@ -1645,6 +1648,7 @@ const PIP_HEAD = 1 / PIP_SCALE; // chibi: the head (goggles, beanie) at full sta
 const PIP_POM = 1.2;
 
 const PIP = {
+  seat: { w: 0.78, h: 0.56 },
   smooth: true,
   gloss: { metalness: 0.75, roughness: 0.25 }, // brass goggles + lenses
   build(R, y0) {

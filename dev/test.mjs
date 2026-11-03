@@ -37,6 +37,7 @@ await send('Page.enable');
 // a saved profile so the lobby opens (not the hello screen)
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.getItem('kartrush.profile') || localStorage.setItem('kartrush.profile', '{"name":"Test","age":30}')` });
 if (process.env.DRIVER) await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.driver', ${JSON.stringify(process.env.DRIVER)})` });
+if (process.env.BODY) await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.body', ${JSON.stringify(process.env.BODY)})` });
 if (mode === 'film') { // gore on, phone-sized vertical view, and a clock the test drives (__manual() then __adv(ms) = one frame)
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.gore', '1'); localStorage.setItem('kartrush.view', 'vertical');
     (() => { const rn = performance.now.bind(performance), rr = window.requestAnimationFrame.bind(window); let man = false, fake = 0, q = [];
@@ -50,7 +51,7 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-if (!['studio', 'pick', 'settings', 'cup', 'menu', 'viewswitch'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
+if (!['studio', 'combos', 'fit', 'pick', 'settings', 'cup', 'menu', 'viewswitch'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -194,7 +195,37 @@ if (mode === 'autopilot' || mode === 'trace') {
     const s = await send('Page.captureScreenshot');
     fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}shot-${idx}${process.env.ITEMS ? '-items' : ''}.png`), Buffer.from(s.data, 'base64'));
   }
-} else if (mode === 'studio') {
+} else if (mode === 'fit') {
+  // the driver zone (karts.js), measured: the rider's real vertices at rest and at full swing either way, and the car's
+  const res = await send('Runtime.evaluate', { awaitPromise: true, expression: `(async () => {
+    const m = await import('./karts.js'), Z = m.DRIVER_ZONE, lines = [], v = __k.group.position.clone();
+    const poses = [{ speed: 0, steer: 0, drift: 0, boost: 0 }, { speed: 1, steer: 1, drift: 1, boost: 0 }, { speed: 1, steer: -1, drift: 1, boost: 0 }];
+    for (const r of ['Nova', 'Luna', 'Mako', 'Rex', 'Bolt', 'Koda', 'Pip', 'Hex']) {
+      __pick(r, 'Classic');
+      const R = __k.rider, mesh = R.mesh, n = mesh.geometry.attributes.position.count;
+      let xMax = 0, zMin = 0, out = 0, yMax = 0, yMin = 9;
+      for (const p of poses) {
+        for (let i = 0; i < 120; i++) R.update?.(1 / 60, p);
+        mesh.updateMatrixWorld(true); mesh.skeleton.update();
+        for (let i = 0; i < n; i++) {
+          mesh.getVertexPosition(i, v);
+          if (v.z >= Z.seat) continue; // only what is behind the seat
+          xMax = Math.max(xMax, Math.abs(v.x)); zMin = Math.min(zMin, v.z); yMax = Math.max(yMax, v.y); yMin = Math.min(yMin, v.y);
+          if (Math.abs(v.x) > Z.x || v.z < Z.z || v.y < Z.y) out++;
+        }
+      }
+      lines.push(r.padEnd(5) + ' behind the seat: |x| ' + xMax.toFixed(2) + '  z ' + zMin.toFixed(2) + '  y ' + yMin.toFixed(2) + '..' + yMax.toFixed(2) + '  outside zone: ' + out + (out ? '  <- FIX' : ''));
+    }
+    for (const B of m.KART_BODIES) {
+      __pick('Nova', B.name);
+      const P = __k.bodyMesh.geometry.attributes.position, inZ = [];
+      for (let i = 0; i < P.count; i++) { const x = P.getX(i), y = P.getY(i), z = P.getZ(i); if (Math.abs(x) < Z.x && y > Z.y && z > Z.z && z < Z.seat) inZ.push(i); }
+      lines.push(B.name.padEnd(8) + ' ' + P.count / 3 + ' triangles, vertices in the zone: ' + inZ.length + (inZ.length ? '  <- FIX' : ''));
+    }
+    return lines.join(String.fromCharCode(10));
+  })()` });
+  console.log(res.result?.value ?? res.exceptionDetails?.exception?.description ?? res);
+} else if (mode === 'studio' || mode === 'combos') {
   // camera + look-at in kart-local space (kart faces +Z, left = +X), fov, and a forced rider pose (null = live)
   const STUDIO = {
     front: [[1.4, 1.5, 2.2], [0, 0.9, -0.3], 30, null],
@@ -210,6 +241,9 @@ if (mode === 'autopilot' || mode === 'trace') {
     brow: [[-0.75, 1.75, 0.9], [0, 1.1, -0.15], 24, null], // above the face from the driver's right: visor, brow, scars
     flank: [[1.5, 1.35, -1.7], [0, 0.95, -1.15], 28, null], // the tail from the left, close
     flankR: [[-1.5, 1.35, -1.7], [0, 0.95, -1.15], 28, null], // ...and from the right
+    carBack: [[-2.4, 1.9, -5], [0, 0.42, -0.2], 26, null], // the whole kart: rear 3/4, front 3/4, side (kart bodies)
+    carFront: [[2.6, 1.7, 5], [0, 0.42, 0.2], 26, null],
+    carSide: [[7, 0.5, 0], [0, 0.42, 0], 22, null],
     items: [[1.2, 1.4, 1.2], [1.2, -0.5, 5], 40, null], // item close-up: a banana, green, red parked ahead (on the road)
   };
   await ev(`(() => { document.getElementById('overlay').style.display = 'none';
@@ -220,7 +254,18 @@ if (mode === 'autopilot' || mode === 'trace') {
       c.lookAt(__k.group.localToWorld(c.up.clone().set(...v[1])));
       if (v[3]) for (let i = 0; i < 20; i++) __k.rider.update?.(1 / 120, v[3]); }
       r0(sc, c); }; })()`);
-  for (const name of arg.split(',')) {
+  if (mode === 'combos') {
+    for (const d of (process.env.DRIVERS || 'Nova,Luna,Mako,Rex,Bolt,Koda,Pip,Hex').split(',')) for (const b of (process.env.BODIES || 'Classic,Hot Rod,Bubble,Formula,Monster,Buggy,Junker,Comet').split(',')) {
+      await ev(`__pick('${d}', '${b}')`);
+      if (process.env.COMBO_EVAL) await ev(process.env.COMBO_EVAL); // e.g. 'setInterval(() => __k.boost = 9, 100)'
+      for (const name of arg.split(',')) {
+        await ev(`window.__view = ${JSON.stringify(STUDIO[name])}`);
+        await sleep(1200);
+        const s = await send('Page.captureScreenshot');
+        fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}combo-${d}-${b.replace(/ /g, '')}-${name}.png`), Buffer.from(s.data, 'base64'));
+      }
+    }
+  } else for (const name of arg.split(',')) {
     if (name === 'items') await ev(`[['banana', 1.2, 4.5], ['green', 2.6, 6.5], ['red', -0.3, 7]].forEach(([kind, x, z]) =>
       __spawn(kind, __k.group.localToWorld(__k.group.position.clone().set(x, -0.61, z))))`);
     await ev(`window.__view = ${JSON.stringify(STUDIO[name])}`);
@@ -247,6 +292,14 @@ if (mode === 'autopilot' || mode === 'trace') {
     await tap('#pick-list .pick-card:nth-child(3)');
     await sleep(2500);
     await shot(`${kind}-picked`);
+    if (kind === 'kart') { // the Paint tab: the same picker, the body kept
+      await tap('#pick-tabs [data-tab="paint"]');
+      await sleep(2000);
+      await shot('kart-paint');
+      console.log('paint tab', await ev(`[document.querySelectorAll('#pick-list .pick-card').length, document.getElementById('stage-name').textContent, localStorage.getItem('kartrush.body')].join(' / ')`));
+      await tap('#pick-tabs [data-tab="body"]');
+      await sleep(500);
+    }
     await tap('#btn-pick-done');
     await sleep(1500);
   }
