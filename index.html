@@ -99,23 +99,22 @@
         <div class="lobby-main">
           <div class="lobby-cta">
             <h1>KART<span>RUSH</span></h1>
-            <p class="race-pill">3 laps &middot; 5 rivals &middot; you start last</p>
-            <button id="btn-start" class="btn-primary btn-start">START RACE</button>
-            <button id="btn-cup" class="btn-secondary btn-cup">GRAND PRIX &middot; 5 TRACKS</button>
+            <div class="cta-go">
+              <div id="mode-pick" class="mode-pick">
+                <button class="mode-btn" data-mode="race">Single Race</button>
+                <button class="mode-btn" data-mode="cup">Grand Prix</button>
+              </div>
+              <p id="mode-pill" class="mode-info"></p>
+              <button id="btn-start" class="btn-primary btn-start">START RACE</button>
+            </div>
           </div>
           <div class="lobby-stage"></div>
-          <div class="card setup">
-            <div class="setup-title">RACE SETUP</div>
-            <button class="setup-track" data-pick="track">
-              <span class="pick-art"></span>
-              <span class="pick-text"><small>TRACK</small><b></b><em></em></span>
-              <span class="chev">&#8250;</span>
-              <span class="setup-record" id="menu-record"></span>
-            </button>
-            <div class="setup-pair">
-              <button class="setup-tile" data-pick="driver"><small>DRIVER</small><span class="pick-art"></span><b></b><em class="driver-tag"></em></button>
-              <button class="setup-tile" data-pick="kart"><small>PAINT</small><span class="pick-art"></span><b></b><em class="swatches"></em></button>
-            </div>
+          <!-- Three equal tiles. Grand Prix swaps the first for its tracks, in the same spot at the same size: nothing on this screen moves between modes -->
+          <div class="setup">
+            <button class="setup-tile" data-pick="track"><small>TRACK</small><span class="pick-art"></span><b></b></button>
+            <div id="setup-cup" class="setup-tile cup-tile" hidden><small>TRACKS</small><span id="cup-maps" class="pick-art cup-maps"></span><b>5 races</b></div>
+            <button class="setup-tile" data-pick="driver"><small>DRIVER</small><span class="pick-art"></span><b></b></button>
+            <button class="setup-tile" data-pick="kart"><small>PAINT</small><span class="pick-art"></span><b></b></button>
           </div>
         </div>
         <p id="build"></p>
@@ -129,7 +128,7 @@
         <form id="hello-form" class="hello-form" autocomplete="off" novalidate>
           <label class="field"><span class="setting-label">YOUR NAME</span>
             <input id="hello-name" type="text" maxlength="12" readonly inputmode="none" placeholder="Name"></label>
-          <label class="field field-age"><span class="setting-label">AGE</span>
+          <label class="field field-age"><span class="setting-label">AGE (FOR GORE)</span>
             <input id="hello-age" type="text" maxlength="3" readonly inputmode="none" placeholder="Age"></label>
           <button id="btn-hello" type="button" class="btn-primary btn-go" aria-label="Let's race"><i data-icon="go"></i></button>
         </form>
@@ -151,7 +150,10 @@
         <div class="pick-panel">
           <div id="pick-title" class="pick-title"></div>
           <div id="pick-list" class="pick-list"></div>
-          <button id="btn-pick-done" class="btn-primary">DONE</button>
+          <div class="pick-actions">
+            <button id="btn-pick-done" class="btn-secondary">DONE</button>
+            <button id="btn-pick-go" class="btn-primary">RACE!</button>
+          </div>
         </div>
       </div>
 
@@ -166,6 +168,7 @@
           <p id="res-record" class="record"></p>
           <div class="btn-row">
             <button id="btn-again" class="btn-primary">RACE AGAIN</button>
+            <button id="btn-next" class="btn-secondary">NEXT TRACK</button>
             <button id="btn-menu" class="btn-secondary">MENU</button>
           </div>
         </div>
@@ -180,28 +183,34 @@
             <button id="btn-restart" class="btn-secondary">RESTART</button>
             <button id="btn-quit" class="btn-secondary">MENU</button>
           </div>
-          <button class="btn-small btn-help" aria-label="How to play">? HOW TO PLAY</button>
-          <button class="btn-small btn-settings"><i data-icon="gear"></i>SETTINGS</button>
-          <button class="btn-small btn-debug" hidden>DEBUG</button>
+          <div class="pause-tools">
+            <button class="btn-small btn-help" aria-label="How to play">?</button>
+            <button class="btn-small btn-settings" aria-label="Settings"><i data-icon="gear"></i></button>
+            <button class="btn-small btn-debug" hidden>DEBUG</button>
+          </div>
         </div>
       </div>
       <!-- How to play (from the title or pause screen) -->
       <div id="help-screen" class="screen screen-col" hidden>
         <div class="help-head">
           <div class="pick-title">HOW TO PLAY</div>
-          <button id="btn-help-back" class="btn-primary help-back">BACK</button>
+          <button id="btn-help-back" class="btn-close" aria-label="Close how to play"><i data-icon="close"></i></button>
         </div>
-        <div class="card help-card">
+        <div id="help-tabs" class="track-pick help-tabs">
+          <button class="trk on" data-tab="controls">Controls</button>
+          <button class="trk" data-tab="items">Items</button>
+        </div>
+        <div id="help-card" class="card help-card show-controls">
           <div class="help-col help-controls">
             <h3>CONTROLS</h3>
             <div class="help-grid g3">
-              <div class="tile ls"><span class="hi hb hb-gas">GAS</span><b>GAS</b><small>Hold to go</small></div><div class="tile ls"><span class="hi hb hb-brake">BRK</span><b>BRAKE</b><small>Slow down, hold to reverse</small></div><div class="tile"><span class="hi hb hb-steer"><i data-icon="arrows"></i></span><b>STEER</b><small>Arrows or joystick</small></div><div class="tile"><span class="hi hb hb-item">?</span><b>ITEM</b><small>Tap, or slide GAS onto it</small></div><div class="tile"><span class="hi hb hb-reset">&#x21BB;</span><b>RESET</b><small>Back on the road</small></div><div class="tile"><span class="hi hbar"><i></i></span><b>DRIFT</b><small>Hold a turn, let go to boost</small></div><div class="tile ls"><span class="hi hb hb-one">1</span><b>ROCKET</b><small>GAS as it shows 1</small></div><div class="tile"><span class="hi hpad">&#9654;&#9654;</span><b>BOOST PAD</b><small>Free speed</small></div><div class="tile"><span class="hi hbox"></span><b>ITEM BOX</b><small>Drive through for an item</small></div>
+              <div class="tile ls"><span class="hi hb hb-gas">GAS</span><b>GAS</b><small>Hold to go</small></div><div class="tile ls"><span class="hi hb hb-brake">BRK</span><b>BRAKE</b><small>Slow down, hold to reverse</small></div><div class="tile"><span class="hi hb hb-steer"><i data-icon="arrows"></i></span><b>STEER</b><small class="ls">Arrows or joystick</small><small class="up">Left and right buttons</small></div><div class="tile"><span class="hi hb hb-item">?</span><b>ITEM</b><small class="ls">Tap, or slide GAS onto it</small><small class="up">Tap it</small></div><div class="tile"><span class="hi hb hb-reset">&#x21BB;</span><b>RESET</b><small>Back on the road</small></div><div class="tile"><span class="hi hbar"><i></i></span><b>DRIFT</b><small>Hold a turn, let go to boost</small></div><div class="tile ls"><span class="hi hb hb-one">1</span><b>ROCKET</b><small>GAS as it shows 1</small></div><div class="tile"><span class="hi hpad">&#9654;&#9654;</span><b>BOOST PAD</b><small>Free speed</small></div><div class="tile"><span class="hi hbox"></span><b>ITEM BOX</b><small>Drive through for an item</small></div>
             </div>
           </div>
           <div class="help-col help-items">
             <h3>ITEMS</h3>
             <div class="help-grid g4">
-              <div class="tile"><span class="hi hs hs-green"></span><b>GREEN</b><small>Bounces twice, then pops</small></div><div class="tile"><span class="hi hs hs-red"></span><b>RED</b><small>Homes in on the kart ahead</small></div><div class="tile"><span class="hi hs hs-blue"></span><b>BLUE</b><small>Hunts the leader</small></div><div class="tile"><span class="hi"><i data-icon="banana"></i></span><b>BANANA</b><small>Drop it, spin them out</small></div><div class="tile"><span class="hi"><i data-icon="mushroom"></i></span><b>MUSHROOM</b><small>Speed boost</small></div><div class="tile"><span class="hi"><i data-icon="shield"></i></span><b>SHIELD</b><small>Blocks one hit</small></div><div class="tile"><span class="hi"><i data-icon="star"></i></span><b>STAR</b><small>Invincible and fast</small></div><div class="tile"><span class="hi hs hs-bullet"></span><b>BULLET</b><small>Rockets you ahead</small></div>
+              <div class="tile"><span class="hi hs hs-green"></span><b>GREEN</b><small>Bounces twice, then pops</small></div><div class="tile"><span class="hi hs hs-red"></span><b>RED</b><small>Homes in on the kart ahead</small></div><div class="tile"><span class="hi hs hs-blue"></span><b>BLUE</b><small>Hunts the leader</small></div><div class="tile"><span class="hi"><i data-icon="banana"></i></span><b>BANANA</b><small>Drop it, spin them out</small></div><div class="tile"><span class="hi"><i data-icon="mushroom"></i></span><b>MUSHROOM</b><small>Speed boost</small></div><div class="tile"><span class="hi hi-triple"><i data-icon="mushroom"></i><em>x3</em></span><b>TRIPLE</b><small>Three speed boosts</small></div><div class="tile"><span class="hi"><i data-icon="shield"></i></span><b>SHIELD</b><small>Blocks one hit</small></div><div class="tile"><span class="hi"><i data-icon="star"></i></span><b>STAR</b><small>Invincible and fast</small></div><div class="tile"><span class="hi hs hs-bullet"></span><b>BULLET</b><small>Rockets you ahead</small></div><div class="tile"><span class="hi hs hs-bomb"></span><b>BOMB</b><small>Drop it, blasts anyone close</small></div>
             </div>
           </div>
         </div>
@@ -214,84 +223,71 @@
       </div>
       <!-- Settings (from the title or pause screen; saved per device) -->
       <div id="settings-screen" class="screen screen-col" hidden>
-        <div class="pick-title">SETTINGS</div>
+        <div class="settings-head">
+          <div class="pick-title">SETTINGS</div>
+          <button id="btn-settings-back" class="btn-close" aria-label="Close settings"><i data-icon="close"></i></button>
+        </div>
         <div class="card settings-card">
-          <div class="setting-row">
-            <div class="setting">
-              <span class="setting-label">STEERING</span>
-              <div id="steer-pick" class="track-pick">
-                <button class="trk" data-steer="buttons"><i data-icon="arrows"></i>Buttons</button>
-                <button class="trk" data-steer="joystick"><i data-icon="joystick"></i>Joystick</button>
+          <div class="set-col">
+            <section class="set-group">
+              <h3>CONTROLS</h3>
+              <!-- the upright view always uses the buttons, and only the sideways view can flip: hidden there -->
+              <div class="set-row sideways-only">
+                <span class="setting-label">STEERING</span>
+                <div id="steer-pick" class="track-pick">
+                  <button class="trk" data-steer="buttons"><i data-icon="arrows"></i>Buttons</button>
+                  <button class="trk" data-steer="joystick"><i data-icon="joystick"></i>Joystick</button>
+                </div>
               </div>
-            </div>
-            <div class="setting">
-              <span class="setting-label">ALL SOUND</span>
-              <div id="mute-pick" class="track-pick">
-                <button class="trk" data-muted="0"><i data-icon="speaker"></i>On</button>
-                <button class="trk" data-muted="1"><i data-icon="muted"></i>Off</button>
+              <div class="set-row">
+                <span class="setting-label">HOLD PHONE</span>
+                <div id="view-pick" class="track-pick">
+                  <button class="trk" data-view="0">Sideways</button>
+                  <button class="trk" data-view="1">Upright</button>
+                </div>
               </div>
-            </div>
+              <div class="set-row sideways-only">
+                <span class="setting-label">FLIP SCREEN</span>
+                <div id="flip-pick" class="track-pick">
+                  <button class="trk" data-flip="0">Off</button>
+                  <button class="trk" data-flip="1">On</button>
+                </div>
+              </div>
+            </section>
           </div>
-          <!-- dimmed while ALL SOUND is off -->
-          <div id="volume-row" class="setting-row">
-            <div class="setting">
-              <span class="setting-label">MUSIC</span>
-              <div class="track-pick vol-pick" data-bus="music">
-                <button class="trk" data-vol="0">Off</button>
-                <button class="trk" data-vol="0.35">Low</button>
-                <button class="trk" data-vol="0.65">Mid</button>
-                <button class="trk" data-vol="1">Full</button>
+          <div class="set-col">
+            <section class="set-group">
+              <h3>SOUND</h3>
+              <div class="set-row">
+                <span class="setting-label">MUSIC</span>
+                <div class="track-pick vol-pick" data-bus="music"><button class="trk" data-vol="0">Off</button><button class="trk" data-vol="0.35">Low</button><button class="trk" data-vol="0.65">Mid</button><button class="trk" data-vol="1">Full</button></div>
               </div>
-            </div>
-            <div class="setting">
-              <span class="setting-label">SOUND EFFECTS</span>
-              <div class="track-pick vol-pick" data-bus="sfx">
-                <button class="trk" data-vol="0">Off</button>
-                <button class="trk" data-vol="0.35">Low</button>
-                <button class="trk" data-vol="0.65">Mid</button>
-                <button class="trk" data-vol="1">Full</button>
+              <div class="set-row">
+                <span class="setting-label">EFFECTS</span>
+                <div class="track-pick vol-pick" data-bus="sfx"><button class="trk" data-vol="0">Off</button><button class="trk" data-vol="0.35">Low</button><button class="trk" data-vol="0.65">Mid</button><button class="trk" data-vol="1">Full</button></div>
               </div>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting">
-              <span class="setting-label">DIFFICULTY</span>
-              <div id="diff-pick" class="track-pick">
-                <button class="trk" data-diff="easy">Easy</button>
-                <button class="trk" data-diff="medium">Medium</button>
-                <button class="trk" data-diff="hard">Hard</button>
+            </section>
+            <section class="set-group">
+              <h3>RACE</h3>
+              <div class="set-row">
+                <span class="setting-label">DIFFICULTY</span>
+                <div id="diff-pick" class="track-pick">
+                  <button class="trk" data-diff="easy">Easy</button>
+                  <button class="trk" data-diff="medium">Medium</button>
+                  <button class="trk" data-diff="hard">Hard</button>
+                </div>
               </div>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting">
-              <span class="setting-label">VIEW</span>
-              <div id="view-pick" class="track-pick">
-                <button class="trk" data-view="0">Landscape</button>
-                <button class="trk" data-view="1">Vertical</button>
+              <p class="set-note upright-only">Upright is always Easy: your kart accelerates by itself.</p>
+              <div id="gore-row" class="set-row" hidden>
+                <span class="setting-label">GORE (13+)</span>
+                <div id="gore-pick" class="track-pick">
+                  <button class="trk" data-gore="0">Off</button>
+                  <button class="trk" data-gore="1">On</button>
+                </div>
               </div>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="setting">
-              <span class="setting-label">SCREEN</span>
-              <div id="flip-pick" class="track-pick">
-                <button class="trk" data-flip="0">Normal</button>
-                <button class="trk" data-flip="1">Flipped</button>
-              </div>
-            </div>
-          </div>
-          <div id="gore-row" class="setting-row" hidden>
-            <div class="setting">
-              <span class="setting-label">GORE (AGES 13+)</span>
-              <div id="gore-pick" class="track-pick">
-                <button class="trk" data-gore="0">Off</button>
-                <button class="trk" data-gore="1">On</button>
-              </div>
-            </div>
+            </section>
           </div>
         </div>
-        <button id="btn-settings-back" class="btn-primary">BACK</button>
       </div>
       <div id="confetti" aria-hidden="true"></div>
     </div>

@@ -50,7 +50,7 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-if (!['studio', 'pick', 'settings', 'cup', 'menu'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
+if (!['studio', 'pick', 'settings', 'cup', 'menu', 'viewswitch'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -133,7 +133,8 @@ if (mode === 'autopilot' || mode === 'trace') {
   // the whole Grand Prix, each race ended on the spot: table after each, final table, no errors. Prints the points.
   const shot = async (name) => { const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}cup-${name}.png`), Buffer.from(s.data, 'base64')); };
   await ev(`window.__errs = []; window.addEventListener('error', (e) => __errs.push(e.message));`);
-  await ev(`document.getElementById('btn-cup').click()`);
+  await ev(`localStorage.setItem('kartrush.mode', 'cup'); document.querySelector('#mode-pick [data-mode=cup]').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: 0, clientY: 0 }))`);
+  await ev(`(() => { const e = document.querySelector('#mode-pick [data-mode=cup]'), r = e.getBoundingClientRect(), o = { pointerId: 1, clientX: r.x + 4, clientY: r.y + 4 }; e.dispatchEvent(new PointerEvent('pointerdown', o)); e.dispatchEvent(new PointerEvent('pointerup', o)); const g = document.getElementById('btn-start'), q = g.getBoundingClientRect(), p = { pointerId: 2, clientX: q.x + 4, clientY: q.y + 4 }; g.dispatchEvent(new PointerEvent('pointerdown', p)); g.dispatchEvent(new PointerEvent('pointerup', p)); })()`);
   for (let r = 0; r < 5; r++) {
     await sleep(1000);
     for (let t = 0; t < 600 && (await ev(`__s.phase`)) !== 'race'; t++) { await ev(`if (__s.intro > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
@@ -260,6 +261,105 @@ if (mode === 'autopilot' || mode === 'trace') {
     const s = await send('Page.captureScreenshot');
     fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}settings-${size}.png`), Buffer.from(s.data, 'base64'));
   }
+} else if (mode === 'ui') {
+  // every screen outside the race at a phone size (UI=390x797:vertical | 844x390), with what's small or scrolls printed per screen
+  const [size, view] = (arg === 'x' ? '390x797:vertical' : arg).split(':'), [width, height] = size.split('x').map(Number);
+  await ev(`localStorage.setItem('kartrush.view', ${JSON.stringify(view ? 'vertical' : 'landscape')})`);
+  await ev(`localStorage.setItem('kart-rush-muted', '1'); localStorage.setItem('kartrush.volume.music', '0.35'); localStorage.removeItem('kartrush.volume.sfx')`);
+  await send('Page.reload');
+  await sleep(1000);
+  for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
+  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: true });
+  await sleep(2500);
+  const name = view ? 'v' : 'l';
+  const shot = async (n) => {
+    const s = await send('Page.captureScreenshot');
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}ui-${name}-${n}.png`), Buffer.from(s.data, 'base64'));
+    console.log(n, await ev(`(() => { const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden' && !e.closest('[hidden]') && !e.closest('#hud-top,#controls'); };
+      const btn = [...document.querySelectorAll('#overlay button')].filter(vis), small = btn.filter((b) => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height) < 44; }).map((b) => (b.id || b.className || '').toString().split(' ')[0] + ':' + (b.innerText || b.getAttribute('aria-label') || '').trim().slice(0, 12).replace(/\\s+/g, ' ') + ' ' + Math.round(b.getBoundingClientRect().width) + 'x' + Math.round(b.getBoundingClientRect().height));
+      const off = btn.filter((b) => { const r = b.getBoundingClientRect(); return r.bottom > innerHeight + 1 || r.right > innerWidth + 1 || r.top < -1 || r.left < -1; }).length;
+      const scroll = [...document.querySelectorAll('#overlay *')].filter((e) => vis(e) && e.scrollHeight > e.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(e).overflowY)).map((e) => (e.id || e.className).toString().split(' ').slice(0, 2).join('.') + ' ' + e.clientHeight + '/' + e.scrollHeight);
+      const fonts = [...document.querySelectorAll('#overlay *')].filter((e) => vis(e) && e.children.length === 0 && (e.textContent || '').trim()).map((e) => parseFloat(getComputedStyle(e).fontSize)); 
+      return JSON.stringify({ buttons: btn.length, under44: small, offscreen: off, scroll, minFont: Math.min(...fonts) }); })()`));
+  };
+  const tapEl = (sel) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); const o = { bubbles: true, pointerId: 1, pointerType: 'touch', isPrimary: true }; e.dispatchEvent(new PointerEvent('pointerdown', o)); e.dispatchEvent(new PointerEvent('pointerup', o)); e.click(); })()`);
+  if (!(await ev(`Number.isFinite(__cam.view.offsetX) && Number.isFinite(__cam.view.offsetY)`))) console.log('FAIL: camera view offset is not a number: the 3D scene draws nothing');
+  await shot('home');
+  // real taps through the switch and the settings, then read back what they changed
+  const realTap = (sel) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}), r = e.getBoundingClientRect(), o = { bubbles: true, pointerId: 7, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 }; e.dispatchEvent(new PointerEvent('pointerdown', o)); e.dispatchEvent(new PointerEvent('pointerup', o)); })()`);
+  console.log('after mute migration', await ev(`JSON.stringify([localStorage.getItem('kartrush.volume.music'), localStorage.getItem('kartrush.volume.sfx'), __snd.muted])`));
+  const homeRects = () => ev(`JSON.stringify(['#mode-pick', '#mode-pill', '#btn-start', '.setup', '.setup [data-pick=driver]', '.setup [data-pick=kart]', '.setup-tile:not([hidden])'].map((q) => { const r = document.querySelector(q).getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map((v) => Math.round(v * 10) / 10); }))`);
+  const rectsRace = await homeRects();
+  await realTap('#mode-pick [data-mode=cup]'); await sleep(500); await shot('home-cup');
+  console.log('layout same in both modes', rectsRace === await homeRects());
+  console.log('cup mode', await ev(`JSON.stringify([document.getElementById('btn-start').textContent, document.getElementById('mode-pill').textContent, document.querySelector('.setup [data-pick=track]').hidden, document.getElementById('setup-cup').hidden, document.querySelectorAll('.cup-map').length, localStorage.getItem('kartrush.mode')])`));
+  await realTap('#mode-pick [data-mode=race]'); await sleep(400);
+  console.log('race mode', await ev(`JSON.stringify([document.getElementById('btn-start').textContent, document.getElementById('mode-pill').textContent])`));
+  await tapEl('.lobby-top .btn-settings'); await sleep(500);
+  await realTap('.vol-pick[data-bus=music] [data-vol="0.35"]'); await realTap('.vol-pick[data-bus=sfx] [data-vol="0.65"]'); await realTap('#diff-pick [data-diff=hard]');
+  console.log('settings taps', await ev(`JSON.stringify([localStorage.getItem('kartrush.volume.music'), localStorage.getItem('kartrush.volume.sfx'), localStorage.getItem('kartrush.diff'), document.querySelector('.vol-pick[data-bus=music] .on')?.textContent])`));
+  await realTap('.vol-pick[data-bus=music] [data-vol="1"]'); await realTap('.vol-pick[data-bus=sfx] [data-vol="1"]');
+  await realTap('#btn-settings-back'); await sleep(500);
+  console.log('close settings -> lobby', await ev(`!document.getElementById('menu-screen').hidden && document.getElementById('settings-screen').hidden`));
+  for (const kind of ['track', 'driver', 'kart']) {
+    await tapEl(`.setup [data-pick="${kind}"]`); await sleep(1800); await shot(`pick-${kind}`);
+    await tapEl('#btn-pick-done'); await sleep(900);
+  }
+  await tapEl('.lobby-top .btn-settings'); await sleep(900); await shot('settings');
+  await ev(`(() => { const c = document.querySelector('#settings-screen .settings-card'); c.scrollTop = 1e5; document.getElementById('settings-screen').scrollTop = 1e5; })()`); await sleep(300); await shot('settings-end');
+  await tapEl('#btn-settings-back'); await sleep(700);
+  await tapEl('.lobby-top .btn-help'); await sleep(900); await shot('help');
+  if (!view) { await realTap('#help-tabs [data-tab=items]'); await sleep(400); await shot('help-items'); }
+  await ev(`(() => { for (const e of document.querySelectorAll('#help-screen, #help-screen *')) e.scrollTop = 1e5; })()`); await sleep(300); await shot('help-end');
+  await tapEl('#btn-help-back'); await sleep(700);
+  await tapEl('#hello-edit'); await sleep(900); await shot('hello');
+  await tapEl('#btn-hello'); await sleep(1200);
+  if (await ev(`document.getElementById('menu-screen').hidden`)) await ev(`document.getElementById('btn-hello').click()`);
+  await sleep(600);
+  await ev(`document.getElementById('btn-start').click()`);
+  for (let t = 0; t < 300 && (await ev(`__s.phase`)) !== 'race'; t++) { await ev(`if (__s.intro > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
+  await sleep(800);
+  await tapEl('#btn-pause'); await sleep(800); await shot('pause');
+  await tapEl('#btn-resume'); await sleep(800);
+  await ev(`__finish(__k)`);
+  for (let t = 0; t < 300 && !(await ev(`__s.resultsShown`)); t++) { await ev(`if (__s.podium > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
+  await sleep(1200);
+  await shot('results');
+  const was = await ev(`__t.id`);
+  await realTap('#btn-next'); await sleep(2500);
+  console.log('next track', was, '->', await ev(`__t.id + ' ' + __s.phase`));
+  await ev(`document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(600);
+  await tapEl('#btn-pause'); await sleep(500); await tapEl('#btn-quit'); await sleep(1500);
+  await tapEl('.setup [data-pick="driver"]'); await sleep(1200); await realTap('#btn-pick-go'); await sleep(2000);
+  console.log('RACE! from picker', await ev(`__s.phase + ' intro ' + (__s.intro > 0) + ' overlay hidden ' + document.getElementById('overlay').classList.contains('hidden') + ' stage ' + document.getElementById('overlay').classList.contains('stage-on')`));
+} else if (mode === 'viewswitch') {
+  // upright -> Settings -> Sideways -> close (and back), on the phone's Safari size: the scene must still be there. Prints the camera at each step.
+  await ev(`localStorage.setItem('kartrush.view', 'vertical'); localStorage.setItem('kartrush.track', ${JSON.stringify(process.env.TRACK || 'spiral')})`);
+  await send('Page.reload');
+  await sleep(1000);
+  for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
+  const [width, height] = (arg === 'x' ? '390x680' : arg).split('x').map(Number);
+  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: true });
+  await sleep(2000);
+  const tap = (sel) => ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}), r = e.getBoundingClientRect(), o = { bubbles: true, pointerId: 7, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 }; e.dispatchEvent(new PointerEvent('pointerdown', o)); e.dispatchEvent(new PointerEvent('pointerup', o)); })()`);
+  const state = async (n) => {
+    const s = await send('Page.captureScreenshot');
+    fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}view-${n}.png`), Buffer.from(s.data, 'base64'));
+    if (!(await ev(`Number.isFinite(__cam.view.offsetX) && Number.isFinite(__cam.view.offsetY)`))) console.log('FAIL: camera view offset is not a number: the 3D scene draws nothing');
+    console.log(n, await ev(`JSON.stringify({ app: [document.getElementById('app').className, document.getElementById('app').clientWidth, document.getElementById('app').clientHeight], cam: __cam.position.toArray().map((v) => +v.toFixed(1)), fov: __cam.fov, aspect: __cam.aspect, view: __cam.view && [__cam.view.fullWidth, __cam.view.fullHeight, __cam.view.offsetX, __cam.view.offsetY, __cam.view.width, __cam.view.height], kart: __k.body.position.toArray ? __k.body.position.toArray().map((v) => +v.toFixed(1)) : [__k.body.position.x, __k.body.position.y, __k.body.position.z], canvas: [__r.domElement.clientWidth, __r.domElement.clientHeight], calls: __r.info.render.calls, tris: __r.info.render.triangles, lost: __r.getContext().isContextLost() })`));
+  };
+  await state('1-upright');
+  await tap('.lobby-top .btn-settings'); await sleep(600);
+  await tap('#view-pick [data-view="0"]'); await sleep(800);
+  await state('2-settings-sideways');
+  await tap('#btn-settings-back'); await sleep(1500);
+  await state('3-home-sideways');
+  await tap('#mode-pick [data-mode=cup]'); await sleep(800);
+  await state('4-home-cup');
+  await tap('.lobby-top .btn-settings'); await sleep(600);
+  await tap('#view-pick [data-view="1"]'); await sleep(800);
+  await tap('#btn-settings-back'); await sleep(1500);
+  await state('5-back-upright');
 } else if (mode === 'blur') {
   // speed blur check: arg = WxH[:vertical],... ; each gets a boost + the cannon on a straight, screenshot while it is on
   while ((await ev('__s.phase')) !== 'race') await sleep(100);

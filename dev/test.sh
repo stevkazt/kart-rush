@@ -76,6 +76,10 @@ elif [ "$MODE" = "blur" ]; then
   run blur "${1:-844x390,390x844:vertical}"
 elif [ "$MODE" = "pick" ]; then
   run pick "${1:-driver,kart}"
+elif [ "$MODE" = "viewswitch" ]; then
+  run viewswitch "${1:-x}"
+elif [ "$MODE" = "ui" ]; then
+  run ui "${1:-x}"
 elif [ "$MODE" = "settings" ]; then
   run settings "${1:-844x390,667x375,308x528}"
 elif [ "$MODE" = "profile" ]; then

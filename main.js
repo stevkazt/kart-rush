@@ -507,7 +507,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '74'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '75'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -4355,7 +4355,7 @@ const hud = {
   place: $('place'), placeNum: $('place-num'), placeSuffix: $('place-suffix'), placeOf: $('place-of'),
   countdown: $('countdown'), message: $('message'),
   driftFill: $('drift-fill'), overlay: $('overlay'),
-  menuScreen: $('menu-screen'), resultsScreen: $('results-screen'), menuRecord: $('menu-record'),
+  menuScreen: $('menu-screen'), resultsScreen: $('results-screen'),
   resPlace: $('res-place'), resTime: $('res-time'), resLap: $('res-lap'), resRecord: $('res-record'),
   standings: $('standings'), confetti: $('confetti'),
   item: $('btn-item'), itemB: $('btn-item-b'), warn: $('warn'), perf: $('perf'), split: $('split'), wrongway: $('wrongway'), tip: $('tip'),
@@ -4419,6 +4419,8 @@ function onTap(el, fn) {
 /* ==========================================================================
  * 2. CONTROL LISTENERS (multi-touch via Pointer Events)
  * ========================================================================== */
+// (up here: initControls reads these at boot. Declared later, the catches around them hid the error and every relaunch forgot the volume levels, the joystick and the flip)
+const volKey = (bus) => `kartrush.volume.${bus}`, STEER_KEY = 'kartrush.steering', FLIP_KEY = 'kartrush.flip';
 initControls();
 
 function initControls() {
@@ -4529,16 +4531,24 @@ function initControls() {
 
   for (const row of document.querySelectorAll('.setup [data-pick]')) onTap(row, () => { sound.click(); openPicker(row.dataset.pick); });
   onTap($('btn-pick-done'), () => { sound.click(); showMenu(); });
+  onTap($('btn-pick-go'), () => { sound.click(); showMenu(); startChosen(); });
+  for (const b of $('mode-pick').children) onTap(b, () => { sound.click(); setMode(b.dataset.mode); });
+  for (const b of $('help-tabs').children) onTap(b, () => { // sideways: controls and items each get the whole card
+    sound.click();
+    for (const o of $('help-tabs').children) o.classList.toggle('on', o === b);
+    $('help-card').classList.toggle('show-controls', b.dataset.tab === 'controls');
+    $('help-card').classList.toggle('show-items', b.dataset.tab === 'items');
+  });
   buildKeyboard();
   onTap($('hello-edit'), () => { sound.click(); showHello(); });
-  onTap($('btn-start'), () => { dbgClear(); startRace(); }); // the normal start is never a debug race
+  onTap($('btn-start'), startChosen);
   app.addEventListener('pointerdown', () => { // a tap skips the opening shots and the podium
     if (state.intro > 0) beginCountdown();
     else if (state.podium > 0) endPodium();
   });
   onTap($('btn-again'), () => { if (cup) cupNext(); else startRace(); });
   onTap($('btn-menu'), () => { sound.click(); cup = null; showMenu(); });
-  onTap($('btn-cup'), () => { dbgClear(); cupStart(); });
+  onTap($('btn-next'), () => { sound.click(); nextTrack(); });
   $('btn-pause').addEventListener('pointerdown', (e) => { e.preventDefault(); pauseGame(); });
   onTap($('btn-resume'), resumeGame);
   onTap($('btn-restart'), () => { state.paused = false; startRace(); });
@@ -4560,13 +4570,9 @@ function initControls() {
     setVolume(pick.dataset.bus, savedVolume(pick.dataset.bus), false);
   }
 
-  // --- Sound: on/off in Settings (sound.js remembers it); any touch re-wakes audio that iOS suspended (calls, app switch)
-  const showMute = () => {
-    for (const b of $('mute-pick').children) b.classList.toggle('on', (b.dataset.muted === '1') === sound.muted);
-    $('volume-row').classList.toggle('dim', sound.muted); // levels don't matter while everything is off
-  };
-  for (const b of $('mute-pick').children) onTap(b, () => { sound.setMuted(b.dataset.muted === '1'); showMute(); sound.click(); });
-  showMute();
+  // ALL SOUND is gone from Settings (74.1): someone who had it off keeps the silence as Music + Effects off, and can turn each back on
+  if (sound.muted) { setVolume('music', 0); setVolume('sfx', 0); sound.setMuted(false); }
+  // Any touch re-wakes audio that iOS suspended (calls, app switch)
   // (also the first tap on the title screen, which starts its music: iOS allows no sound before a tap)
   document.addEventListener('pointerdown', () => { if (!state.paused) sound.unlock(); });
 
@@ -5081,6 +5087,41 @@ function selectTrack(id) {
   warmUpShaders(); // the new track's materials, before the race needs them
 }
 
+// ---------- Single Race or Grand Prix: the switch above START (74.1; the user: a bare Grand Prix button told a casual player nothing) ----------
+const MODE_KEY = 'kartrush.mode';
+let startMode = 'race';
+try { if (localStorage.getItem(MODE_KEY) === 'cup') startMode = 'cup'; } catch { /* storage blocked */ }
+function setMode(mode) {
+  startMode = mode;
+  try { localStorage.setItem(MODE_KEY, mode); } catch { /* storage blocked */ }
+  showMode();
+}
+/** The info line, the big button and the first tile say what the chosen mode is. Same spots and sizes in both (the user: the screen shifting between modes lost consistency). */
+function showMode() {
+  const on = startMode === 'cup', rec = loadRecords()[track.id];
+  for (const b of $('mode-pick').children) b.classList.toggle('on', b.dataset.mode === startMode);
+  let best = 0;
+  try { best = +localStorage.getItem(CUP_KEY) || 0; } catch { /* storage blocked */ }
+  $('mode-pill').innerHTML = on
+    ? `${CUP_TRACKS.length} races &middot; most points wins${best ? ` &middot; <b>Best ${ordinal(best)}</b>` : ''}`
+    : `${CFG.laps} laps &middot; ${karts.length - 1} rivals${rec?.race ? ` &middot; <b>Record ${fmtTime(rec.race)}</b>` : ' &middot; you start last'}`;
+  $('btn-start').textContent = on ? 'START GRAND PRIX' : 'START RACE';
+  document.querySelector('.setup [data-pick="track"]').hidden = on;
+  $('setup-cup').hidden = !on;
+  if (on) $('cup-maps').innerHTML = CUP_TRACKS.map((id) => `<span class="cup-map" data-theme="${CFG.tracks[id].theme}">${trackShape(id).svg}</span>`).join('');
+  requestAnimationFrame(layoutLobby);
+}
+function startChosen() {
+  dbgClear(); // the normal start is never a debug race
+  if (startMode === 'cup') cupStart(); else startRace();
+}
+/** Results -> NEXT TRACK: the next one in the track list, round to the first. */
+function nextTrack() {
+  const ids = Object.keys(CFG.tracks).filter((id) => !CFG.tracks[id].debug);
+  selectTrack(ids[(ids.indexOf(track.id) + 1) % ids.length]);
+  startRace();
+}
+
 // ---------- Grand Prix (72.9): all five tracks in a row, points per race, the same field throughout ----------
 const CUP_TRACKS = ['meadow', 'canyon', 'frost', 'tech', 'spiral'], CUP_POINTS = [10, 8, 6, 4, 2, 1], CUP_KEY = 'kartrush.cupBest';
 let cup = null; // { at: index in CUP_TRACKS, pts: { racer: points }, over: the final standings are showing }
@@ -5139,6 +5180,7 @@ function showMenu() {
   camState.snap = true;
   hud.confetti.replaceChildren();
   refreshPickRows();
+  showMode();
   if (!profile) return showHello(); // first launch: name + age before anything else
   $('hello-edit').hidden = false;
   requestAnimationFrame(layoutLobby);
@@ -5345,24 +5387,18 @@ function recordText(id) {
   return rec?.race ? `Record ${fmtTime(rec.race)}` : 'No record yet';
 }
 
-/** RACE SETUP on the lobby: the picked track (with its record), driver and paint. */
+/** The lobby's tiles: the picked track, driver and paint. */
 function refreshPickRows() {
   const t = CFG.tracks[track.id], d = playerDriver(), card = (kind) => document.querySelector(`.setup [data-pick="${kind}"]`);
-  const fill = (kind, art, name, sub) => {
+  const fill = (kind, art, name) => {
     const el = card(kind);
     el.querySelector('.pick-art').innerHTML = art;
     el.querySelector('b').textContent = name;
-    el.querySelector('em').innerHTML = sub;
   };
-  fill('track', trackShape(track.id).svg, '', `${trackShape(track.id).length} m · ${CFG.laps} laps`);
-  card('track').querySelector('b').innerHTML = `${icon(t.icon)}${t.name}`;
+  fill('track', trackShape(track.id).svg, t.name);
   card('track').dataset.theme = t.theme;
-  const rec = loadRecords()[track.id];
-  hud.menuRecord.innerHTML = rec?.race
-    ? `<span>RECORD</span> ${fmtTime(rec.race)} <span>BEST LAP</span> ${fmtTime(rec.lap)}` : '<span>NO RECORD YET</span>';
-  fill('driver', driverSvg(d), d.name, d.tag);
-  const c = playerColors();
-  fill('kart', kartSvg(c), picks.paint, `<i style="background:${cssHex(c[0])}"></i><i style="background:${cssHex(c[1])}"></i>`);
+  fill('driver', driverSvg(d), d.name);
+  fill('kart', kartSvg(playerColors()), picks.paint);
 }
 
 /** Picker screen for 'track' | 'driver' | 'kart': tapping a card picks it straight away; DONE goes back. */
@@ -5458,7 +5494,6 @@ function stageLabel(kind) {
 }
 
 // ---------- Settings (per device). Steering: 'buttons' (the two arrows) or 'joystick' (analogue). ----------
-const STEER_KEY = 'kartrush.steering';
 let settingsFrom = null; // the screen BACK returns to (title or pause)
 let helpFrom = null;     // same for HOW TO PLAY
 function savedSteering() {
@@ -5648,7 +5683,6 @@ function setView(vertical, save = true) {
 }
 // Screen flip (Settings -> SCREEN): under portrait lock the game is turned 90deg clockwise; flipped turns it
 // the other way, for holding the phone the other way round. Saved in kartrush.flip.
-const FLIP_KEY = 'kartrush.flip';
 function savedFlip() { try { return localStorage.getItem(FLIP_KEY) === '1'; } catch { return false; } }
 function setFlip(on, save = true) {
   if (save) try { localStorage.setItem(FLIP_KEY, on ? '1' : '0'); } catch { /* storage blocked */ }
@@ -5671,7 +5705,6 @@ function setGore(on, save = true) {
 for (const b of $('gore-pick').children) onTap(b, () => { sound.click(); setGore(b.dataset.gore === '1'); });
 setGore(goreSaved, false);
 // Volume levels: 'music' and 'sfx' (effects + engines + drift squeal), 0..1 in four steps
-const volKey = (bus) => `kartrush.volume.${bus}`;
 function savedVolume(bus) {
   try { const v = parseFloat(localStorage.getItem(volKey(bus))); return Number.isFinite(v) ? v : 1; } catch { return 1; }
 }
@@ -5766,6 +5799,9 @@ function pauseGame() {
   document.querySelectorAll('.ctl.pressed').forEach((el) => el.classList.remove('pressed'));
   sound.suspend();
   showOverlay(hud.pauseScreen);
+  renderer.setRenderTarget(null);
+  renderer.render(scene, camera); // once more without the mirror: nothing is drawn while paused, so it would float behind the menu
+  document.getElementById('mirror-frame').style.display = 'none';
 }
 
 function resumeGame() {
@@ -5797,6 +5833,7 @@ function showResults() {
   sound.music('menu');
   $('res-time-label').textContent = 'TIME';
   $('res-lap-label').textContent = 'BEST LAP';
+  $('btn-next').hidden = !!cup;
   $('btn-again').textContent = !cup ? 'RACE AGAIN' : cup.at === CUP_TRACKS.length - 1 ? 'FINAL TABLE' : 'NEXT RACE';
 
   const p = kart.place;
@@ -8344,7 +8381,8 @@ function lobbyCamera(dt, bp, yaw) {
     if (vert) { shift = 0; shiftY = Math.round(app.clientHeight / 2 - (el.offsetTop + el.offsetHeight / 2)); } // stage on top: kart in its middle
     else shift = Math.round(app.clientWidth / 2 - (el.offsetLeft + el.offsetWidth / 2)); // kart in the stage's middle
   } else {
-    a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22); dist = vert ? 11 : 9; up = 2.3; lookUp = 0.9; fov = LOBBY_FOV; shift = lobbyShift; shiftY = lobbyShiftY;
+    // sideways the kart has the whole middle (74.8)
+    a = 0.8 + 0.3 * Math.sin(lobbyClock * 0.22); dist = vert ? 11 : app.clientWidth < 720 ? 8.3 : 7.2; up = 2.3; lookUp = 0.9; fov = LOBBY_FOV; shift = lobbyShift; shiftY = lobbyShiftY;
   }
   // smooth move between turntable and stage: blend the orbit (angle, distance, height), so it swings round the
   // kart instead of cutting through it
@@ -8381,9 +8419,9 @@ function lobbyCamera(dt, bp, yaw) {
 /** Where the open middle of the lobby is: shift the 3D view so the kart lands there (px, + = kart moves left). */
 function layoutLobby() {
   const cta = document.querySelector('.lobby-cta'), setup = document.querySelector('.setup');
-  if (!cta.offsetWidth) return; // lobby not shown
-  if (app.classList.contains('vertical')) { // stacked: the open gap is between the logo block and the setup card
-    const top = cta.offsetTop + cta.offsetHeight, bottom = setup.offsetTop;
+  if (!setup.offsetWidth) return; // lobby not shown
+  if (app.classList.contains('vertical')) { // stacked: the open gap is between the logo and the switch
+    const logo = document.querySelector('.lobby-main h1'), top = logo.offsetTop + logo.offsetHeight, bottom = $('mode-pick').offsetTop;
     lobbyShift = 0; lobbyShiftY = Math.round(app.clientHeight / 2 - (top + bottom) / 2);
     return;
   }
@@ -8657,7 +8695,7 @@ function render(dt) {
   } else {
     renderer.render(scene, camera);
   }
-  const mirrorOn = (state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown') && !(state.intro > 0) && !(state.podium > 0);
+  const mirrorOn = (state.phase === 'race' || state.phase === 'finished' || state.phase === 'countdown') && !(state.intro > 0) && !(state.podium > 0) && !app.classList.contains('overlay-on'); // (behind a menu it floated as a stray picture)
   document.getElementById('mirror-frame').style.display = mirrorOn ? 'block' : 'none';
   if (mirrorOn) {
     const b = kart.body, f = b.interpolatedQuaternion.vmult(LOCAL_FWD, tmpVec);
