@@ -5,6 +5,21 @@ import { icon, fillIcons } from './ui-icons.js';
 import { PAINT_ROLES, buildRider, driverAvatar, driverKartArt, driverSeat, roundedBox, sweep } from './drivers.js';
 import { KART_BODIES, bodyNamed } from './karts.js';
 
+// 72.2 (canyon held exactly 30 fps, and a flat 30 is either a cap such as iOS Low Power Mode or frames just over 16.7 ms): frames that draw nothing run at the cap.
+// 76.6: once per launch, before anything else touches the page, so the first loading splash just stays up. On the menu it froze the kart in mid-landing for 45 frames
+// (user: the landing 'kinda lags'), and after the boot the splash redrew in the laid-out page and looked like a second loading screen. (The timer: rAF doesn't run in a hidden page.)
+const idleProbe = await new Promise((done) => {
+  let left = 45, last = 0;
+  const gaps = [];
+  const end = () => done({ fps: gaps.length ? Math.round(1000 / gaps.sort((a, b) => a - b)[gaps.length >> 1]) : 0 }); // the median: one stall during loading isn't a cap (0 = unknown: lowerResolution stays off)
+  setTimeout(end, 3000);
+  requestAnimationFrame(function tick(now) {
+    if (--left < 40) gaps.push(now - last); // (skipping the first frames: the page is still settling)
+    last = now;
+    if (left) requestAnimationFrame(tick); else end();
+  });
+});
+
 /* ==========================================================================
  * 0. CONFIG
  * ========================================================================== */
@@ -37,7 +52,7 @@ const CFG = {
   // move when a layout changes. Features: bumps [idx, length m, height m] (a crest: air above
   // ~sqrt(20 * length^2 / (2 pi^2 height)) m/s), jumps [lip idx, ramp length m, rise m] (a kicker with a
   // step down after the lip), banks [idx, half-length m, degrees] (the outside of the bend is raised),
-  // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges).
+  // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges). cut { points, halfWidth, mouth } = one shortcut beside the loop (buildCut).
   tracks: {
     meadow: {
       name: 'Green Valley', icon: 'pine', theme: 'meadow', farm: true,
@@ -115,6 +130,8 @@ const CFG = {
       banks: [[162, 25, 8]],
       bankRuns: [[352, 452, 5, 25, 25]], // the Summit
       ice: [[797, 990]],
+      // The frozen stream (76.2): a shortcut across the inside of the bend above the lake, narrow and all ice. See buildCut.
+      cut: { points: [[-35.5, -46], [-42, -52], [-47, -63], [-47, -79], [-38, -94], [-25, -104], [-6, -108]], halfWidth: 4.5, mouth: 8 },
       boxRows: [60, 297, 504, 845],                 // (297 added in build 36)
       pads: [[30, -3], [513, 0], [670, 2], [1040, 0]],
       gallery: [588, 632],                          // the roofed stretch on the way down (frostLandmarks)
@@ -508,7 +525,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '76'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '76.8'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -804,9 +821,11 @@ function buildTrack(def, th) {
   oL[N] = oL[0]; oR[N] = oR[0];
   const data = { N, samples, tangents, normals, spacing, radius, line, lineRadius, wL, wR, oL, oR, bank, wallH, hilly, ice, gap, airZone, levelColors: def.levelColors, edges: def.edges, edgeDefault: def.edgeDefault, palette: { ...th.palette, ...def.palette } };
   track = data; // the road helpers below (surfaceY, roadPoint...) read the global
+  if (def.cut) data.cut = buildCut(def.cut, data);
 
   if (hilly) {
     buildRoadBodies(data);
+    if (data.cut) buildRoadBodies({ ...data.cut, N: data.cut.n - 1, wL: data.cut.w, wR: data.cut.w }, (i, lat) => cutPoint(data.cut, i, lat));
     // a catch-all floor far below, in case a kart ever leaves the road (it is put back: updateKartProgress)
     const floor = new CANNON.Body({ mass: 0, material: physMats.ground, shape: new CANNON.Plane() });
     floor.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
@@ -861,6 +880,7 @@ function buildTrack(def, th) {
     trackRoot.add(makeRibbon(data, (i) => line[i % N] - wear[i], (i) => line[i % N] + wear[i], 0.03, (i) => ((wear[i] > 0.05 || wear[i + 1] > 0.05) && !ice[i] ? P.wear : null)));
   }
   buildWalls(data, P);
+  if (data.cut) buildCutSurface(data.cut, P);
   buildStartLine(data, P);
   return data;
 }
@@ -947,6 +967,118 @@ function roadPoint(i, lat, up = 0, out = new THREE.Vector3()) {
   return out.set(s.x + n.x * lat, surfaceY(i, lat) + up, s.z + n.z * lat);
 }
 
+/**
+ * A shortcut (76.2): a piece of road off to one side of the loop, which everything else still believes is one closed spline. A kart on it counts as passing
+ * the main samples it skips, evenly (cutIndex), so laps, places and resets carry on; a reset puts it back on the main road. Its own colliders and walls;
+ * the main rail opens wherever the cut's mouth runs through it. AIs stay on the main road.
+ */
+function buildCut({ points, halfWidth, mouth }, data) {
+  const T = CFG.track, { samples: road, spacing } = data;
+  const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
+  const n = Math.ceil(curve.getLength() / spacing) + 1, samples = curve.getSpacedPoints(n - 1);
+  const nearest = (p, from = 0, to = data.N - 1) => {
+    let best = from, bd = Infinity;
+    for (let i = from; i <= to; i++) { const d = (road[i].x - p.x) ** 2 + (road[i].z - p.z) ** 2; if (d < bd) { bd = d; best = i; } }
+    return best;
+  };
+  const from = nearest(samples[0]), to = nearest(samples[n - 1]);
+  const scanFrom = from - 40, scanTo = to + 40;
+  // Level with the road while inside it, then a straight run down between the two
+  const inRoad = samples.map((p) => { const j = nearest(p, scanFrom, scanTo), lat = lateral(j, p); return Math.abs(lat) < railLat(j, lat) ? j : -1; });
+  const leave = inRoad.indexOf(-1), back = inRoad.lastIndexOf(-1);
+  samples.forEach((p, i) => { p.y = inRoad[i] >= 0 ? road[inRoad[i]].y : 0; });
+  samples.forEach((p, i) => { if (inRoad[i] < 0) p.y = lerp(samples[leave - 1].y, samples[back + 1].y, smoothstep(leave - 1, back + 1, i)); });
+  const tangents = [], normals = [], w = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = samples[Math.max(0, i - 1)], b = samples[Math.min(n - 1, i + 1)], len = Math.hypot(b.x - a.x, b.z - a.z);
+    tangents.push({ x: (b.x - a.x) / len, y: 0, z: (b.z - a.z) / len });
+    normals.push({ x: tangents[i].z, y: 0, z: -tangents[i].x });
+    w[i] = lerp(halfWidth, mouth, 1 - smoothstep(0, 22, Math.min(i, n - 1 - i) * spacing)); // wide where it meets the road
+  }
+  const cut = { n, samples, tangents, normals, w, from, to, inRoad, bank: new Float32Array(n), gap: new Uint8Array(n), ice: samples.map((_, i) => smoothstep(leave - 4, leave + 12, i)) };
+  // The main rail stands aside for the mouths
+  const open = { 1: new Uint8Array(data.N + 1), '-1': new Uint8Array(data.N + 1) };
+  for (const sd of [1, -1]) for (let i = scanFrom; i <= scanTo; i++) {
+    const off = sd * ((sd > 0 ? data.wL[i] : data.wR[i]) + T.curb + T.wallThickness / 2);
+    const x = road[i].x + data.normals[i].x * off, z = road[i].z + data.normals[i].z * off;
+    open[sd][i] = samples.some((p, j) => Math.hypot(p.x - x, p.z - z) < w[j] + T.curb) ? 1 : 0;
+  }
+  data.railOpen = open;
+  // Its walls: everywhere but inside the main road
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), f = new THREE.Vector3(), l = new THREE.Vector3(), u = new THREE.Vector3();
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), th = T.wallThickness, sink = 0.5, h = T.wallHeight, stride = T.wallStride;
+  cut.wallAt = (i, sd, extra = th / 2) => {
+    const lat = sd * (w[i] + T.curb + extra), p = samples[i], x = p.x + normals[i].x * lat, z = p.z + normals[i].z * lat;
+    const j = nearest({ x, z }, scanFrom, scanTo), ml = lateral(j, { x, z });
+    return { x, z, y: p.y, free: Math.abs(ml) >= railLat(j, ml) + th };
+  };
+  cut.onRoad = ([x, , z]) => { const j = nearest({ x, z }, scanFrom, scanTo), ml = lateral(j, { x, z }); return Math.abs(ml) < railLat(j, ml); };
+  const chunks = staticChunks(physMats.wall);
+  for (const sd of [1, -1]) {
+    for (let i = 0; i < n - 1; i += stride) {
+      const j = Math.min(i + stride, n - 1), A = cut.wallAt(i, sd), B = cut.wallAt(j, sd);
+      if (!A.free && !B.free) continue;
+      a.set(A.x, A.y, A.z); b.set(B.x, B.y, B.z);
+      f.subVectors(b, a);
+      const len = f.length() + th;
+      f.normalize();
+      l.set(0, 1, 0).cross(f).normalize();
+      u.crossVectors(f, l);
+      a.add(b).multiplyScalar(0.5).addScaledVector(u, (h - sink) / 2);
+      q.setFromRotationMatrix(m.makeBasis(l, u, f));
+      chunks.add(new CANNON.Box(new CANNON.Vec3(th / 2, (h + sink) / 2, len / 2)), a, q);
+    }
+    chunks.done();
+  }
+  return cut;
+}
+function cutPoint(cut, i, lat, up = 0, out = new THREE.Vector3()) {
+  const s = cut.samples[i], n = cut.normals[i];
+  return out.set(s.x + n.x * lat, s.y + up, s.z + n.z * lat);
+}
+/** The ice ribbon of a cut. Corners over the road dip under it, so the road's own edge draws the line where the ice begins. */
+function buildCutSurface(cut, P) {
+  const pos = [], col = [], T = CFG.track, c = new THREE.Color(), edge = new THREE.Color(P.shoulder[0]);
+  const ICE = [0xbfe2f1, 0xa9d6ec, 0xcbe8f4];
+  const row = (i, lat) => { const p = cutPoint(cut, i, lat, 0.02).toArray(); if (cut.onRoad(p)) p[1] -= 0.32; return p; };
+  const lats = [-1, -0.78, 0.78, 1];
+  for (let i = 0; i < cut.n - 1; i++) {
+    const j = i + 1, band = (i >> 2) % 3, wi = cut.w[i] + T.curb, wj = cut.w[j] + T.curb;
+    for (let e = 0; e < 3; e++) {
+      const p0 = row(i, lats[e] * wi), p1 = row(i, lats[e + 1] * wi), p2 = row(j, lats[e] * wj), p3 = row(j, lats[e + 1] * wj);
+      if ([p0, p1, p2, p3].every(cut.onRoad)) continue; // the road itself is already there
+      pos.push(...p0, ...p2, ...p1, ...p1, ...p2, ...p3);
+      c.set(ICE[e === 1 ? band : 2]).lerp(edge, (e === 1 ? 0 : 0.55) + (1 - cut.ice[i]) * 0.45);
+      for (let v = 0; v < 6; v++) col.push(c.r, c.g, c.b);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+}
+/** The main sample a kart on the cut counts as passing, or -1 when it isn't on the cut. */
+function cutIndex(k, prevIdx) {
+  const c = track.cut;
+  if (!c || prevIdx < c.from - 35 || prevIdx > c.to + 35) return -1;
+  const p = k.body.position;
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < c.n; i += 2) { const d = (c.samples[i].x - p.x) ** 2 + (c.samples[i].z - p.z) ** 2; if (d < bd) { bd = d; best = i; } }
+  const reach = c.w[best] + CFG.track.curb + CFG.track.wallThickness + 1;
+  if (bd > reach * reach || Math.abs(c.samples[best].y - p.y) > 2.5) return -1;
+  let j = c.from - 35, jd = Infinity;
+  for (let i = c.from - 35; i <= c.to + 35; i += 2) { const d = (track.samples[i].x - p.x) ** 2 + (track.samples[i].z - p.z) ** 2; if (d < jd) { jd = d; j = i; } }
+  const lat = lateral(j, p);
+  if (Math.abs(lat) < railLat(j, lat) - 1) return -1; // still on the main road, in the mouth
+  k.cutI = best;
+  return Math.round(lerp(c.from, c.to, best / (c.n - 1)));
+}
+/** How icy it is under a kart. */
+const iceUnder = (k) => (k.cut ? track.cut.ice[k.cutI] : track.ice[k.trackIdx]);
+
 /** Lateral offset (+ = left) of a world point from the centre line at sample i. */
 function lateral(i, p) {
   const s = track.samples[i], n = track.normals[i];
@@ -974,7 +1106,7 @@ function roadBasis(i, m = new THREE.Matrix4()) {
  *   through the mesh). Flat boxes can't follow banking that eases in and out: neighbours met with a ~20 cm
  *   step at the road edges, which beached karts when the boxes were the driving surface.
  */
-function buildRoadBodies({ N, samples, normals, wL, wR, bank, gap }) {
+function buildRoadBodies({ N, samples, normals, wL, wR, bank, gap }, at = roadPoint) {
   const T = CFG.track, k = T.roadStride, thick = 1;
   const edgeL = (i) => wL[i] + T.curb + T.wallThickness, edgeR = (i) => -(wR[i] + T.curb + T.wallThickness);
   const ROWS = 40; // samples per trimesh body
@@ -983,7 +1115,7 @@ function buildRoadBodies({ N, samples, normals, wL, wR, bank, gap }) {
     const verts = [], tris = [];
     for (let i = i0; i <= i1; i++) {
       for (const lat of [edgeR(i), edgeL(i)]) {
-        const p = roadPoint(i, lat);
+        const p = at(i, lat);
         verts.push(p.x - o.x, p.y - o.y, p.z - o.z);
       }
       if (i > i0 && !gap[i - 1]) {
@@ -1134,7 +1266,7 @@ function makeRibbon({ N, samples, normals, bank, gap }, inner, outer, y, colorAt
  * z-fought: the rails flickered as the camera moved.) Rails follow the road's height and reach 0.5 m
  * below it, so no gap opens under them on slopes.
  */
-function buildWalls({ N, samples, normals, wL, wR, oL, oR, wallH, gap, levelColors: lc, edges }, P) {
+function buildWalls({ N, samples, normals, wL, wR, oL, oR, wallH, gap, railOpen, levelColors: lc, edges }, P) {
   const T = CFG.track;
   const th = T.wallThickness, k = T.wallStride, sink = 0.5;
   const pos = [], col = [];
@@ -1156,6 +1288,7 @@ function buildWalls({ N, samples, normals, wL, wR, oL, oR, wallH, gap, levelColo
     for (let i = 0; i < N; i += k) {
       const j = Math.min(i + k, N);
       if (gap.subarray(i, j).some((g) => g)) continue; // no rail over the cut road
+      if (railOpen?.[side][i] && railOpen[side][j]) continue; // the mouth of a shortcut
       const inA = -th / 2, outA = th / 2, hi = wallH[i], hj = wallH[j];
       if (!edges) { // (a track with `edges` draws its own barriers: only the colliders here)
         quad(edge(i, inA, -sink), edge(j, inA, -sink), edge(i, inA, hi), edge(j, inA, hj));     // road-side face
@@ -1476,7 +1609,7 @@ function farmLand(data, rand, plain) {
  * A track's themed barriers (71.7; `edges`, the look of each stretch per side), standing on the rails' colliders with their road faces lined up and following the
  * road's height. Boxes, so each piece costs little, all in batch `b`. `kindAt(i, side)` may override a stretch (the desert's bridge).
  */
-function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, edges, edgeDefault = 'fence', palette: P }, b, kindAt = null) {
+function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, railOpen, cut, edges, edgeDefault = 'fence', palette: P }, b, kindAt = null) {
   const BOX = new THREE.BoxGeometry(1, 1, 1), SINK = 0.6; // (reaching below the road: no gap on slopes and banks)
   const STONES = P.stone || [0xb7aa96, 0xa89b86, 0xc0b39e], HEDGES = [0x3e8a3a, 0x478f3c, 0x38803a], WOOD = P.wood || [0x8f6a42, 0x7f5c38], STEEL = [0xa3402a, 0x8f3824];
   const BOARDS = [0xffd23a, 0xe8322f, 0x2f6bff, 0xf4efe4, 0x3fb950, 0xff7a1f];
@@ -1494,7 +1627,7 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, edges,
       return [samples[k].x + normals[k].x * lat, samples[k].z + normals[k].z * lat, surfaceY(k, lat)];
     };
     for (let i = 0; i < N; i += STEP) {
-      if (gap[i]) continue;
+      if (gap[i] || railOpen?.[sd][i]) continue;
       const kind = kindAt?.(i, sd) || kinds[sd][i], n = (i / STEP) | 0;
       const piece = (depth) => { // the box from this sample to the next along the barrier, `depth` thick
         const [x0, z0, y0] = at(i, depth / 2), [x1, z1, y1] = at(i + STEP, depth / 2), hor = Math.hypot(x1 - x0, z1 - z0);
@@ -1544,6 +1677,18 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, edges,
       }
     }
   }
+  if (!cut) return;
+  // A shortcut's banks: ice blocks where the stream runs, snow at its mouths. And a post with an orange board where it splits off, so it can be seen coming.
+  for (const sd of [1, -1]) for (let i = 0, n = 0; i < cut.n; i += STEP, n++) {
+    const { x, z, y, free } = cut.wallAt(i, sd, 1.15);
+    if (!free) continue;
+    const kind = cut.ice[i] > 0.9 ? 'ice' : 'snow', big = 1.05 + 0.25 * ((n * 7) % 5) / 4;
+    b.put(LUMP, LUMPS[kind][n % 3], x, y + (kind === 'ice' ? 0.35 : 0.2), z, { ry: n * 1.7, sx: 1.25, sy: (kind === 'ice' ? 0.95 : 0.85) * big, sz: 2.3 });
+  }
+  const nose = Array.from({ length: cut.n }, (_, i) => i).find((i) => cut.wallAt(i, 1).free);
+  const { x, z, y } = cut.wallAt(nose, 1), t = cut.tangents[nose];
+  b.put(BOX, 0x4a3a30, x, y + 1.5, z, { sx: 0.25, sy: 3, sz: 0.25 });
+  for (const [dy, c] of [[0, 0xff8a2a], [0.75, 0xffffff], [1.5, 0xff8a2a]]) b.put(BOX, c, x, y + 1.7 + dy * 0.5, z, { ry: Math.atan2(t.x, t.z), sx: 2.6, sy: 0.36, sz: 0.1 });
 }
 
 /**
@@ -1767,10 +1912,15 @@ const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); retu
  * `colorAt(x, z, h, slope, color)` paints it. `carve(x, z, h)` has the last word on a height. Adds the mesh to trackRoot; returns the lookups the scenery uses.
  */
 function makeTerrain(data, shape, colorAt, { floor = -0.35, step = 3.5, material = {}, carve = null } = {}) {
-  const { N, samples, normals, wL, wR, oL, oR, bank } = data;
+  const { wL, wR, oL, oR, cut } = data, N0 = data.N;
   const T = CFG.track;
+  // (a shortcut counts as road too: it runs in a gully of its own)
+  const N = N0 + (cut ? cut.n : 0);
+  const samples = cut ? [...data.samples.slice(0, N0), ...cut.samples] : data.samples, normals = cut ? [...data.normals.slice(0, N0), ...cut.normals] : data.normals;
+  const bank = cut ? [...data.bank.slice(0, N0), ...cut.bank] : data.bank;
   const flat = new Float32Array(N); // road + rails + 2.5 m of flat floor, from the centre line
-  for (let i = 0; i < N; i++) flat[i] = Math.max(wL[i] + oL[i], wR[i] + oR[i]) + T.curb + T.wallThickness + 2.5;
+  for (let i = 0; i < N0; i++) flat[i] = Math.max(wL[i] + oL[i], wR[i] + oR[i]) + T.curb + T.wallThickness + 2.5;
+  for (let i = N0; i < N; i++) flat[i] = cut.w[i - N0] + T.curb + T.wallThickness + 2.5;
   const CELL = 20, REACH = 70, R = Math.ceil(REACH / CELL);
   const buckets = new Map();
   const key = (cx, cz) => cx * 4096 + cz;
@@ -3735,6 +3885,7 @@ world.addEventListener('postStep', () => { for (const k of karts) { k.preVx = k.
  * A rail only ever faces across the road, so a normal mostly along the road is one of those seams.
  */
 const railSnag = (k, nx, nz) => {
+  if (k.cut) return false; // (its walls don't run along the main road's tangents)
   const t = track.tangents[k.trackIdx];
   return Math.abs(nx * t.x + nz * t.z) > Math.hypot(nx, nz) * CFG.kart.railSeam;
 };
@@ -4426,6 +4577,10 @@ function buildMinimap() {
       i === 0 ? map.path.moveTo(x, y) : map.path.lineTo(x, y);
     });
     map.path.closePath();
+    track.cut?.samples.forEach((s, i) => {
+      const [x, y] = map.project(s.x, s.z);
+      i === 0 ? map.path.moveTo(x, y) : map.path.lineTo(x, y);
+    });
   };
   map.project = (x, z) => [map.ox + (x - map.minX) * map.scale, map.oz + (z - map.minZ) * map.scale];
   return map;
@@ -4958,8 +5113,13 @@ function updateGameFlow(dt) {
 function updateKartProgress(k, dt, racing) {
   const N = track.N;
   const prevIdx = k.trackIdx;
-  const idx = nearestTrackIndex(k.body.position, prevIdx);
+  const onCut = cutIndex(k, prevIdx), idx = onCut >= 0 ? onCut : nearestTrackIndex(k.body.position, prevIdx);
   k.trackIdx = idx;
+  if ((onCut >= 0) !== !!k.cut) {
+    k.cut = onCut >= 0;
+    teleEvent('cut', k, { on: k.cut, kmh: Math.round(k.speed * 3.6), ...(k.cut ? {} : { dur: +(state.raceTime - k.cutT).toFixed(2) }) });
+    if (k.cut) k.cutT = state.raceTime;
+  }
 
   if (racing && !k.finished) {
     if (Math.abs(idx - N / 2) < N * 0.1) k.halfway = true;
@@ -4983,7 +5143,7 @@ function updateKartProgress(k, dt, racing) {
   const wheelsDown = k.vehicle.wheelInfos.filter((w) => w.raycastResult.hasHit).length;
   k.flipTimer = up.y < 0.3 || (wheelsDown < 3 && !track.airZone[idx]) ? k.flipTimer + dt : 0; // (72.12: a long jump took > 1.5 s, and the kart was reset in mid-air, upright)
   // Off the road (over a rail, off a jump): well below the road surface for a moment
-  const below = surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
+  const below = !k.cut && surfaceY(idx, clampLane(idx, lateral(idx, k.body.position), 0)) - k.body.position.y > 2.5;
   k.fallT = below ? k.fallT + dt : 0;
   // Ghost (after a respawn): solid again once its time is up and no kart is inside it
   if (k.ghost > 0) k.ghost = Math.max(0, k.ghost - dt);
@@ -4995,7 +5155,7 @@ function updateKartProgress(k, dt, racing) {
   const lat = lateral(idx, k.body.position);
   const railFace = railLat(idx, lat);
   // (72.11: a kart leaning on a bank's low rail has its centre further out, and it is on the road: helix karts were being reset at 20-50 km/h, 4 times a race)
-  k.railT = Math.abs(lat) > railFace - 0.2 + Math.abs(track.bank[idx]) * 2 && k.bullet <= 0 ? (k.railT || 0) + dt : 0;
+  k.railT = !k.cut && Math.abs(lat) > railFace - 0.2 + Math.abs(track.bank[idx]) * 2 && k.bullet <= 0 ? (k.railT || 0) + dt : 0;
   const onRail = k.railT > 0.3;
   // The player trying to get going (a pedal held) but stuck, e.g. nose into a rail on a slope where
   // reversing uphill barely moves: the AIs' watchdog does the same for them
@@ -5206,7 +5366,6 @@ function showMenu() {
   Object.assign(state, { phase: 'menu', resultsShown: false, intro: 0, podium: 0 }); // (quitting from a pause during the shots: they'd have gone on to a countdown over the menu)
   introLog.n = 0;
   app.classList.remove('cine');
-  Object.assign(idleProbe, { wait: 5, left: 45, n: 0, ms: 0 }); // (fps stays until it has a new value)
   sound.music('menu');
   clearItems();
   fx.reset();
@@ -5242,7 +5401,7 @@ function rocketStart() {
 function updateWrongWay(dt) {
   const t = track.tangents[kart.trackIdx];
   const fwd = kart.body.quaternion.vmult(LOCAL_FWD, wrongFwd), v = kart.body.velocity;
-  const backwards = state.phase === 'race' && !kart.finished && kart.spin <= 0 &&
+  const backwards = state.phase === 'race' && !kart.finished && kart.spin <= 0 && !kart.cut &&
     fwd.x * t.x + fwd.z * t.z < -0.5 && v.x * t.x + v.z * t.z < -2;
   state.wrongT = backwards ? state.wrongT + dt : 0;
   const show = state.wrongT > 1;
@@ -7843,7 +8002,7 @@ function driveKart(k, dt, canDrive) {
     ? clamp((Math.abs(k.steerSmooth) - 0.75) / 0.25, 0, 1) * clamp((speed - K.driftMinSpeed) / 6, 0, 1)
     : 0;
   k.driftAmt = driftAmt;
-  const iceMul = lerp(1, K.iceGrip, track.ice[k.trackIdx]);
+  const iceMul = lerp(1, K.iceGrip, iceUnder(k));
   const rearGrip = lerp(K.rearGrip, K.driftGrip, driftAmt) * iceMul;
   vehicle.wheelInfos[0].frictionSlip = vehicle.wheelInfos[1].frictionSlip = K.frontGrip * iceMul;
   vehicle.wheelInfos[2].frictionSlip = rearGrip;
@@ -8108,7 +8267,7 @@ function applyStabilityAssist(k) {
 
   // a bank tilted into the turn adds g * tan(bank) of cornering (bank > 0 raises the left: helps right turns)
   const bankHelp = Math.max(0, Math.sign(k.steerSmooth) * track.bank[k.trackIdx]) * -CFG.gravity;
-  const gripLimit = (K.maxLateralAccel * lerp(1, K.iceGrip, track.ice[k.trackIdx]) + bankHelp) / speed;
+  const gripLimit = (K.maxLateralAccel * lerp(1, K.iceGrip, iceUnder(k)) + bankHelp) / speed;
   const targetYaw = clamp((speed * Math.tan(k.steerAngle)) / K.wheelBase, -gripLimit, gripLimit);
   const slack = K.yawSlack + K.steerYawSlack * Math.abs(k.steerSmooth) + K.driftYawSlack * k.driftAmt;
   const yaw = body.angularVelocity.y;
@@ -8780,9 +8939,7 @@ function updatePerf(ms) {
 }
 
 const fpsLog = { n: 0, ms: 0, worst: 0, js: 0, low: 0 };
-// 72.2 (canyon held exactly 30 fps, and a flat 30 is either a cap such as iOS Low Power Mode or frames just over 16.7 ms): a moment on the menu draws nothing, so its rate is
-// the cap whatever the scene costs. Logged as `idleFps` in each race, with `js` (ms of script per frame) in the `fps` events: a slow race with a fast idle = the GPU.
-const idleProbe = { wait: 5, left: 45, n: 0, ms: 0, fps: 0 }; // (`wait`: real frames first, so the canvas has something to keep)
+// `idleProbe` (top of this file) is the frame rate cap whatever the scene costs. Logged as `idleFps` in each race, with `js` (ms of script per frame) in the `fps` events: a slow race with a fast idle = the GPU.
 let jsStart = 0, jsMs = 0;
 const jsEnd = () => { jsMs = performance.now() - jsStart; };
 // ...and if the race is the problem (the idle isn't capped, 2 windows in a row under 45 fps), draw fewer pixels: 1.75 -> 1.5 -> 1.25 at most, for the rest of the session.
@@ -8828,13 +8985,6 @@ function loop(now) {
     if (goreFx.t >= 0) { goreFx.t += rawDt; sc = goreTimeScale(goreFx.t); if (goreFx.t > GORE_FX_END) goreFx.t = -1; }
     if (goreFx.l >= 0) { goreFx.l += rawDt; sc = Math.min(sc, goreLandScale(goreFx.l)); if (goreFx.l > GORE_LAND_END) goreFx.l = -1; }
     dt *= sc;
-  }
-  if (idleProbe.wait > 0) idleProbe.wait--;
-  else if (idleProbe.left > 0 && state.phase === 'menu' && !state.paused) { // (the canvas keeps the last frame meanwhile)
-    if (--idleProbe.left < 40) { idleProbe.n++; idleProbe.ms += now - lastTime; } // (skipping the first frames: they still carry the last draw)
-    if (!idleProbe.left) idleProbe.fps = Math.round(idleProbe.n * 1000 / idleProbe.ms);
-    lastTime = now;
-    return;
   }
   lastTime = now;
 

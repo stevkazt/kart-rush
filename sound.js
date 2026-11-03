@@ -482,7 +482,7 @@ const sfx = {
 
 // ---------- Music: little step-sequenced chiptune loops ----------
 // 16 steps per bar. 'menu': slower and softer, for the title and results screens. Race music: one song per track (72.2), so a place sounds like itself.
-// A song: `bpm`, `chords` [root, third, fifth per bar, MIDI], `lead` (a list per bar: semitones above the bar's root + 12, -1 = rest), and its `voice(s, t, STEP, chord, opt, bar)`:
+// A song: `bpm`, `chords` [root, third, fifth per bar, MIDI], `lead` (a list per bar: semitones above the bar's root + 12, -1 = rest), optional `leadTwin` (a second guitar, this many semitones off), and its `voice(s, t, STEP, chord, opt, bar)`:
 // the band under the lead (bass, stabs, drums). Bars loop; lead and chords may have different lengths, so an A part and a B part just extend the lists.
 const CHORDS = [[48, 52, 55], [43, 47, 50], [45, 48, 52], [41, 45, 48]]; // MIDI roots + triads: C - G - Am - F
 const LEAD = [ // scale degrees in semitones above the chord root (+12), -1 = rest
@@ -511,36 +511,39 @@ const SONGS = {
       if (s % 2 === 0) hat(t, opt);
     },
   },
-  // Canyon Run: a desert chase in A harmonic minor. A surf-guitar lead picked on every 16th, then a mariachi trumpet call; a galloping low guitar, 3-3-2 stabs, snare fills and a whip crack.
+  // Canyon Run: a Texas boogie in A major, nothing like the other six. Two guitars an octave apart on a hook that calls and answers, the shuffle riff under it, cowbell, claps; a 12-bar blues, then a big F - G - A climb and a stop with a pick-up run back into the top.
   canyon: {
-    bpm: 168, leadType: 'sawtooth', leadVol: 0.15, leadLen: 0.95,
-    chords: [[45, 48, 52], [45, 48, 52], [41, 45, 48], [40, 44, 47], [45, 48, 52], [45, 48, 52], [38, 41, 45], [40, 44, 47], [38, 41, 45], [45, 48, 52], [40, 44, 47], [45, 48, 52], [41, 45, 48], [43, 47, 50], [40, 44, 47], [40, 44, 47]], // Am Am F E Am Am Dm E Dm Am E Am F G E E
+    bpm: 160, leadType: 'sawtooth', leadVol: 0.15, leadLen: 1.7, leadTwin: -12,
+    chords: [[45, 49, 52], [45, 49, 52], [45, 49, 52], [45, 49, 52], [38, 42, 45], [38, 42, 45], [45, 49, 52], [45, 49, 52], [40, 44, 47], [38, 42, 45], [45, 49, 52], [40, 44, 47], [41, 45, 48], [43, 47, 50], [45, 49, 52], [45, 49, 52]], // A A A A D D A A E D A E F G A A
     lead: [
-      [7, 7, 7, 7, 8, 8, 7, 7, 5, 5, 3, 3, 2, 2, 3, 3],
-      [0, 0, 0, 0, 0, 0, 3, 3, 7, 7, 7, 7, 12, 12, 12, 12],
-      [16, 16, 16, 16, 14, 14, 12, 12, 11, 11, 11, 11, 12, 12, 12, 12],
-      [16, 16, 16, 16, 16, 16, 13, 13, 12, 12, 12, 12, 12, 12, 12, 12],
-      [12, 12, 11, 11, 12, 12, 7, 7, 3, 3, 7, 7, 0, 0, 0, 0],
-      [3, 3, 5, 5, 7, 7, 7, 7, 8, 8, 7, 7, 5, 5, 3, 3],
-      [12, 12, 15, 15, 19, 19, 19, 19, 18, 18, 19, 19, 15, 15, 12, 12],
-      [7, 7, 10, 10, 12, 12, 16, 16, 19, 19, 19, 19, 19, 19, _, _],
-      [19, _, 19, 19, _, 15, _, 19, 24, _, _, 22, _, 19, _, _],
-      [15, _, 15, 15, _, 12, _, 15, 19, _, _, 17, _, 15, _, _],
-      [19, _, 19, 16, _, 12, _, 16, 19, _, 22, _, 19, _, 16, _],
-      [12, _, _, 7, _, 12, _, 15, 12, _, _, _, 7, 8, 11, 12],
-      [16, _, 16, 19, _, 16, _, 12, 16, _, 19, _, 16, _, 12, _],
-      [16, _, 16, 19, _, 16, _, 12, 16, _, 19, _, 16, _, 12, _],
-      [12, 12, 12, 12, 13, 13, 12, 12, 16, 16, 16, 16, 19, 19, 19, 19],
-      [24, 24, 24, 24, 24, 24, 24, 24, 22, 22, 19, 19, 16, 16, 13, 13],
+      [12, _, 12, _, 15, 16, 19, _, _, _, 19, _, 16, _, 12, _],
+      [_, _, _, _, 19, _, 17, _, 16, _, 14, _, 12, _, _, _],
+      [12, _, 12, _, 15, 16, 19, _, _, _, 19, _, 16, _, 12, _],
+      [24, _, 24, _, 22, _, 19, _, 17, _, 16, _, 15, 16, _, _],
+      [24, _, 24, _, 27, 28, 31, _, _, _, 31, _, 28, _, 24, _],
+      [_, _, _, _, 31, _, 29, _, 28, _, 26, _, 24, _, _, _],
+      [12, _, 12, _, 15, 16, 19, _, _, _, 19, _, 16, _, 12, _],
+      [_, _, _, _, 19, _, 17, _, 16, _, 14, _, 12, _, _, _],
+      [24, _, 24, _, 27, 28, 31, _, _, _, 31, _, 28, _, 24, _],
+      [31, _, 31, _, 28, _, 24, _, _, _, 24, _, 28, _, 31, _],
+      [24, _, 19, _, 16, _, 12, _, 15, 16, _, 19, _, _, _, _],
+      [19, _, _, 19, _, 19, 22, _, 24, _, _, 24, 28, _, 31, _],
+      [24, _, _, 24, _, 28, 31, _, 31, _, 31, _, 28, _, 24, _],
+      [24, _, _, 24, _, 28, 31, _, 31, _, 31, _, 28, _, 24, _],
+      [31, _, 28, _, 24, _, 19, _, 24, _, 28, _, 31, _, _, _],
+      [24, _, _, _, _, _, _, _, 12, 14, 15, 16, 19, _, _, _],
     ],
-    voice(s, t, STEP, [root, third, fifth], opt, bar) {
-      if (s % 4 !== 1) tone(midi(root - (s % 4 === 0 ? 12 : 0)), t, STEP * (s % 4 === 0 ? 1.8 : 0.8), { ...opt, type: 'sawtooth', vol: s % 4 === 0 ? 0.3 : 0.2 }); // the gallop
-      if (s % 8 === 0 || s % 8 === 3 || s % 8 === 6) [root + 12, fifth + 12, third + 24].forEach((n) => tone(midi(n), t, STEP * 1.1, { ...opt, type: 'square', vol: 0.06 })); // 3-3-2 stabs
-      if (s % 4 === 0) kick(t, opt, 0.75, 130);
-      if (s % 8 === 4) snare(t, opt, 0.55, 2000);
-      if (bar % 8 === 7 && s >= 10) snare(t, opt, 0.2 + (s - 10) * 0.05, 2000); // a roll into the next part
-      if (s % 2 === 1) noiseHit(t, 0.025, { ...opt, freq: 3400, type: 'bandpass', vol: 0.16, q: 5 }); // castanets
-      if (bar % 8 === 3 && s === 12) noiseHit(t, 0.12, { ...opt, freq: 1800, sweepTo: 9000, type: 'bandpass', vol: 0.5, q: 2 }); // the whip
+    voice(s, t, STEP, [root], opt, bar) {
+      if (bar % 16 === 15 && s > 0) { // the stop: the band drops out, only a tom run under the guitars' pick-up
+        if (s >= 8 && s % 2 === 0) tone(190 - (s - 8) * 9, t, 0.14, { ...opt, type: 'sine', vol: 0.65, slide: 0.55 });
+        return;
+      }
+      if (s % 2 === 0) tone(midi(root + [0, 0, 7, 7, 9, 9, 10, 9][s >> 1]), t, STEP * 1.7, { ...opt, type: 'sawtooth', vol: 0.26 }); // the boogie
+      if (s % 8 === 0) tone(midi(root - 12), t, STEP * 3, { ...opt, type: 'triangle', vol: 0.4 });
+      if ([0, 6, 8, 10].includes(s)) kick(t, opt, 0.8, 135);
+      if (s % 8 === 4) { snare(t, opt, 0.5, 2000); noiseHit(t, 0.07, { ...opt, freq: 1200, type: 'bandpass', vol: 0.3, q: 1.5 }); } // snare + claps
+      if (s % 4 === 0) [800, 540].forEach((f) => tone(f, t, 0.07, { ...opt, type: 'square', vol: 0.035 })); // the cowbell
+      if (s % 2 === 0) hat(t, opt, 0.12, s % 4 === 2 ? 0.07 : 0.03);
     },
   },
   // Frost Peak: glassy bells in D major over a soft bass, sleigh bells instead of a hi-hat. Quick but light on its feet.
@@ -681,7 +684,10 @@ function scheduleMusic() {
       const chord = song.chords[bar % song.chords.length];
       song.voice(s, t, STEP, chord, opt, bar);
       const l = song.lead[bar % song.lead.length][s];
-      if (l >= 0) tone(midi(chord[0] + l + 12), t, STEP * (song.leadLen ?? 1.9), { ...opt, type: song.leadType, vol: song.leadVol });
+      if (l >= 0) {
+        tone(midi(chord[0] + l + 12), t, STEP * (song.leadLen ?? 1.9), { ...opt, type: song.leadType, vol: song.leadVol });
+        if (song.leadTwin) tone(midi(chord[0] + l + 12 + song.leadTwin), t, STEP * (song.leadLen ?? 1.9), { ...opt, type: song.leadType, vol: song.leadVol * 0.7 });
+      }
     } else {
       // Arpeggio on eighths, a soft bass note per half bar, the lead every other bar, a gentle kick
       const [root, third, fifth] = CHORDS[bar % 4];

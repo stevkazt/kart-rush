@@ -12,7 +12,7 @@ Plans for what comes next, and what the night of 2026-11-02 and the first phone 
 1. **Where the first shortcut goes.** Recommended: Frost's frozen lake. Second choice: Harbour's container yard.
 2. ~~Which new track comes first~~: the mine, built.
 
-The shortcut hasn't been answered, and the moon base is neither approved nor started. The layouts are proposals.
+The shortcut was answered on 2026-11-03: Frost's lake side, built as the frozen stream (76.4, see tracks.md). The moon base is neither approved nor started. The layouts are proposals.
 
 ## New track: the mine or cave (BUILT as Deep Shaft, 73.1: tracks.md; these were the notes)
 Low ceilings, lamps, rail bridges over deep drops, and bursts into daylight.

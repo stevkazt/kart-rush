@@ -38,6 +38,8 @@ await send('Page.enable');
 await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.getItem('kartrush.profile') || localStorage.setItem('kartrush.profile', '{"name":"Test","age":30}')` });
 if (process.env.DRIVER) await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.driver', ${JSON.stringify(process.env.DRIVER)})` });
 if (process.env.BODY) await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.body', ${JSON.stringify(process.env.BODY)})` });
+if (mode === 'menuland') await send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => { const rr = window.requestAnimationFrame.bind(window); window.__fr = []; window.__looks = [];
+  window.requestAnimationFrame = (cb) => rr((t) => { cb(t); const a = document.getElementById('app'), c = a ? a.className : '?'; if (!c.includes('booted')) { const L = window.__looks.at(-1); if (L && L[0] === c) { L[1]++; L[2].push(Math.round(t)); } else window.__looks.push([c, 1, [Math.round(t)]]); } if (window.__r && window.__k) window.__fr.push([Math.round(t), window.__r.info.render.frame, +window.__k.body.position.y.toFixed(3), document.getElementById('app').classList.contains('booted') ? 1 : 0, window.__s.phase]); }); })()` });
 if (mode === 'film') { // gore on, phone-sized vertical view, and a clock the test drives (__manual() then __adv(ms) = one frame)
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `localStorage.setItem('kartrush.gore', '1'); localStorage.setItem('kartrush.view', 'vertical');
     (() => { const rn = performance.now.bind(performance), rr = window.requestAnimationFrame.bind(window); let man = false, fake = 0, q = [];
@@ -51,7 +53,7 @@ await send('Page.navigate', { url: `http://localhost:${process.env.GAME_PORT}/in
 // wait for the page (a track with heights takes longer to build), then START
 for (let t = 0; t < 60 && (await ev(`typeof __s !== 'undefined' && __s.phase === 'menu'`)) !== true; t++) await sleep(500);
 await sleep(500);
-if (!['studio', 'combos', 'fit', 'pick', 'settings', 'cup', 'menu', 'viewswitch'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
+if (!['studio', 'combos', 'fit', 'pick', 'settings', 'cup', 'menu', 'viewswitch', 'menuland'].includes(mode)) await ev(`document.getElementById('btn-start').click()`);
 
 if (mode === 'autopilot' || mode === 'trace') {
   await ev(fs.readFileSync(path.join(here, 'autopilot.js'), 'utf8'));
@@ -169,6 +171,23 @@ if (mode === 'autopilot' || mode === 'trace') {
   while ((await ev('__s.phase')) !== 'race') await sleep(200);
   const all = JSON.parse(await ev('JSON.stringify(__cf)')), med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
   console.log(`${process.env.TRACK || 'meadow'} frames ${all.length} calls max ${Math.max(...all.map((r) => r[0]))} med ${med(all.map((r) => r[0]))} tris max ${Math.max(...all.map((r) => r[1]))} med ${med(all.map((r) => r[1]))}`);
+} else if (mode === 'menuland') {
+  // the kart's drop onto the grid: frames with no draw and no physics while it lands, at boot and on coming back from a race
+  const report = async (label) => {
+    const fr = JSON.parse(await ev('JSON.stringify(__fr)')), on = fr.filter((f) => f[3] && f[4] === 'menu');
+    let stuck = 0, ms = 0, y = 0, run = 0, drawn = 0, start = on[0]?.[0] ?? 0;
+    for (let i = 1; i < on.length; i++) {
+      if (on[i][1] !== on[i - 1][1]) { drawn++; run = 0; start = on[i][0]; continue; }
+      if (++run > stuck) { stuck = run; ms = on[i][0] - start; y = on[i][2]; }
+    }
+    console.log(label, 'frames', on.length, 'drawn', drawn, '| longest run with no draw:', stuck, 'frames,', ms, 'ms, kart held at y', y, '| kart y', on[0]?.[2], '->', on.at(-1)?.[2]);
+  };
+  console.log('boot took (ms since navigation start, main.js first ran -> now):', await ev('Math.round(performance.now())'));
+  console.log('splash frames by page state (one row = one look):', await ev('JSON.stringify(__looks)'), 'idleFps', await ev('__idle.fps'));
+  await sleep(12000); await report('boot');
+  await ev(`document.getElementById('btn-start').click()`); await sleep(6000);
+  await ev(`(__fr.length = 0, __s.paused = false, document.getElementById('btn-quit').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })), document.getElementById('btn-quit').dispatchEvent(new PointerEvent('pointerup', { bubbles: true })))`);
+  await sleep(12000); await report('return');
 } else if (mode === 'menu') {
   const s = await send('Page.captureScreenshot'); fs.writeFileSync(path.join(process.env.OUT_DIR, `${tag}menu.png`), Buffer.from(s.data, 'base64'));
 } else if (mode === 'shots') {
