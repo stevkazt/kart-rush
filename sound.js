@@ -612,27 +612,51 @@ const SONGS = {
       if (s % 2 === 1) noiseHit(t, 0.03, { ...opt, freq: 5000, type: 'highpass', vol: 0.09 }); // a shaker
     },
   },
-  // Deep Shaft: a work song for the mine in D minor. Hammer on steel on the off beats, a pounding low-string riff, a lone harmonica-like square up top, the whole thing marching at a run.
+  // Deep Shaft: a runaway mine cart, as dark bluegrass in A minor (77.1; the user didn't like the first one, a marching work song). A banjo rolling non-stop, a fiddle on the tune, the bass on the beat and a train-beat snare.
   mine: {
-    bpm: 158, leadType: 'square', leadVol: 0.14, leadLen: 1.5,
-    chords: [[38, 41, 45], [38, 41, 45], [34, 38, 41], [36, 40, 43], [38, 41, 45], [41, 45, 48], [36, 40, 43], [33, 37, 40]], // Dm Dm Bb C Dm F C A
+    bpm: 152, leadType: 'sawtooth', leadVol: 0.13, leadLen: 1.7,
+    chords: [[45, 48, 52], [45, 48, 52], [43, 47, 50], [45, 48, 52], [48, 52, 55], [43, 47, 50], [45, 48, 52], [40, 44, 47]], // Am Am G Am C G Am E
     lead: [
-      [14, _, _, 17, _, 19, 17, _, 14, _, 12, _, 14, _, _, _],
-      [14, _, _, 17, _, 19, 21, _, 24, _, 21, _, 19, _, 17, _],
-      [10, _, _, 14, _, 17, 19, _, 17, _, 14, _, 10, _, _, _],
-      [12, _, _, 16, _, 19, 22, _, 19, _, 16, _, 12, _, 14, _],
-      [26, _, 24, _, 21, _, 19, _, 21, _, 24, _, 26, _, _, _],
-      [29, _, 26, _, 24, _, 21, _, 24, _, 26, _, 29, _, _, _],
+      [12, _, 15, _, 19, _, 17, 15, 12, _, 19, _, 17, 15, 12, _],
+      [12, _, 15, _, 19, _, 22, _, 24, _, 22, 19, 17, _, 15, _],
+      [16, _, 19, _, 24, _, 21, 19, 16, _, 19, _, 21, 19, 16, _],
+      [15, _, 12, _, 19, _, 17, 15, 12, _, 10, _, 12, _, _, _],
+      [16, _, 19, _, 24, _, 21, 19, 16, _, 19, _, 21, 19, 16, _],
+      [19, _, 24, _, 28, _, 24, 21, 19, _, 16, _, 19, 21, 24, _],
+      [24, _, 22, 19, 17, _, 15, _, 12, _, 15, _, 19, _, 24, _],
       [28, _, 24, _, 22, _, 19, _, 16, _, 19, _, 22, _, 24, _],
-      [25, _, _, 25, 24, _, 21, _, 19, _, 16, _, 13, _, _, _],
     ],
     voice(s, t, STEP, [root, third, fifth], opt) {
-      if ([0, 2, 3, 6, 8, 10, 11, 14].includes(s)) tone(midi(root), t, STEP * 0.9, { ...opt, type: 'sawtooth', vol: 0.26 }); // the riff
-      if (s === 0 || s === 8) [third + 12, fifth + 12].forEach((n) => tone(midi(n), t, STEP * 3, { ...opt, type: 'sawtooth', vol: 0.06 }));
-      if (s % 4 === 0) kick(t, opt, 0.8, 120);
-      if ([4, 12].includes(s)) snare(t, opt, 0.5, 1800);
-      if ([2, 6, 7, 10, 14].includes(s)) { tone(1760, t, 0.09, { ...opt, type: 'square', vol: 0.05, slide: 0.97 }); noiseHit(t, 0.03, { ...opt, freq: 3800, type: 'bandpass', vol: 0.2, q: 8 }); } // hammer on steel
-      if (s % 2 === 1) hat(t, opt, 0.08);
+      const roll = [root + 24, third + 24, fifth + 24, root + 36, fifth + 24, third + 24, root + 36, fifth + 24][s % 8]; // the banjo's forward roll
+      tone(midi(roll), t, STEP * 0.9, { ...opt, type: 'triangle', vol: s % 4 === 0 ? 0.2 : 0.13, slide: 0.995 });
+      if (s === 0 || s === 8) tone(midi(root - 12), t, STEP * 2.5, { ...opt, type: 'triangle', vol: 0.6 }); // upright bass: root...
+      if (s === 4 || s === 12) tone(midi(fifth - 24), t, STEP * 2.5, { ...opt, type: 'triangle', vol: 0.5 }); // ...and fifth
+      if (s % 8 === 0) kick(t, opt, 0.6, 110);
+      if (s % 4 === 2) noiseHit(t, 0.04, { ...opt, freq: 2600, type: 'bandpass', vol: 0.16, q: 2 }); // the train beat's brushes
+      if (s === 4 || s === 12) snare(t, opt, 0.42, 2000);
+    },
+  },
+  // Moon Base: an 80s sci-fi chase in F# minor. A sequencer bass running in octaves, a glassy arpeggio, a four-on-the-floor kick, a long gliding lead.
+  moon: {
+    bpm: 144, leadType: 'sine', leadVol: 0.5, leadLen: 2.6,
+    chords: [[42, 45, 49], [42, 45, 49], [38, 42, 45], [40, 44, 47], [42, 45, 49], [45, 49, 52], [38, 42, 45], [37, 41, 44]], // F#m F#m D E F#m A D C#
+    lead: [
+      [12, _, _, _, 15, _, _, 12, 10, _, _, _, 7, _, _, _],
+      [12, _, _, _, 15, _, 17, _, 19, _, _, _, 17, _, 15, _],
+      [19, _, _, _, 16, _, _, 12, 19, _, 21, _, 19, _, 16, _],
+      [12, _, _, _, 16, _, _, 19, 24, _, _, _, 19, _, 16, _],
+      [19, _, _, 17, 15, _, _, 12, 15, _, _, 12, 7, _, _, _],
+      [12, _, _, 16, 19, _, _, 16, 24, _, _, _, 19, _, 16, _],
+      [24, _, _, 23, 19, _, 16, _, 12, _, 16, _, 19, _, 24, _],
+      [24, _, _, _, 28, _, _, _, 31, _, _, 28, 24, _, _, _],
+    ],
+    voice(s, t, STEP, [root, third, fifth], opt) {
+      tone(midi(root - (s % 2 ? 0 : 12)), t, STEP * 0.8, { ...opt, type: 'sawtooth', vol: s % 4 === 0 ? 0.3 : 0.22 }); // the sequencer
+      const arp = [root + 24, fifth + 24, third + 24, root + 36, fifth + 24, third + 36, root + 36, fifth + 36][s % 8];
+      tone(midi(arp), t, STEP * 0.6, { ...opt, type: 'square', vol: 0.045 });
+      if (s % 4 === 0) kick(t, opt, 0.85, 130);
+      if (s === 4 || s === 12) snare(t, opt, 0.45, 2600);
+      if (s % 4 === 2) hat(t, opt, 0.14);
     },
   },
   // Spiral Run (the volcano): fast and heavy in E minor. Chugging low saw, power chords, double kick, a screaming square lead on the second half.

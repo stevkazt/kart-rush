@@ -12,7 +12,7 @@ Plans for what comes next, and what the night of 2026-11-02 and the first phone 
 1. **Where the first shortcut goes.** Recommended: Frost's frozen lake. Second choice: Harbour's container yard.
 2. ~~Which new track comes first~~: the mine, built.
 
-The shortcut was answered on 2026-11-03: Frost's lake side, built as the frozen stream (76.4, see tracks.md). The moon base is neither approved nor started. The layouts are proposals.
+The shortcut was answered on 2026-11-03: Frost's lake side, built as the frozen stream (76.4, see tracks.md). The moon base was built on 2026-11-03 as a dumbbell (77.1, tracks.md 'Moon Base'), awaiting the user's verdict.
 
 ## New track: the mine or cave (BUILT as Deep Shaft, 73.1: tracks.md; these were the notes)
 Low ceilings, lamps, rail bridges over deep drops, and bursts into daylight.
@@ -23,7 +23,7 @@ Low ceilings, lamps, rail bridges over deep drops, and bursts into daylight.
 - **Signature corner:** must be new. Don't repeat Green Valley's hairpin, the Carousel, the Summit, the Yard zigzag, the helix or the figure-8.
 - **Song:** its own, with drive (see Music below).
 
-## New track: the moon base (proposal)
+## New track: the moon base (BUILT, 77.1: tracks.md; these were the notes)
 Black sky with Earth overhead, craters, glass tubes, a road floating over the void.
 - **Scenery can be cheap:** there's little of it. The risk is the opposite: it can look empty, and the user wants landmarks integrated with the road. Use the base, tubes and craters to shape the road.
 - **Black sky vs. dark scenes:** keep the ground and road bright, so only the sky is black.

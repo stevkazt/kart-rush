@@ -28,7 +28,7 @@ launcher repo later. The LAN server above still works for quick testing (no offl
 - Overlay screens: `#menu-screen` (lobby), `#pick-screen`, `#hello-screen`, `#settings-screen`, `#pause-screen`, `#results-screen`;
   `showOverlay(screen)`. Details: `docs/ui.md`.
 - Plans for new tracks + design lessons: `docs/track-plans.md`.
-- Tracks (`CFG.tracks`: meadow, canyon, frost, tech = Harbour Run, jungle = Temple Run, mine = Deep Shaft, spiral; lab is debug only), heights, banking, themes: `docs/tracks.md`.
+- Tracks (`CFG.tracks`: meadow, canyon, frost, tech = Harbour Run, jungle = Temple Run, mine = Deep Shaft, moon = Moon Base, spiral; lab is debug only), heights, banking, themes: `docs/tracks.md`.
 - Kart bodies (`karts.js`, `KART_BODIES`, driver zone): `docs/systems.md`.
 - Characters (`drivers.js`, one baked SkinnedMesh per rider, `DRIVERS` registry, 8 drivers): `docs/drivers.md`.
 - Items, AI personalities, rail reset, places, sound, effects, baked kart meshes: `docs/systems.md`.
@@ -157,10 +157,11 @@ check touch and feel.
 
 
 ## Open items (details in docs/history.md)
-- **Build 77 is pushed and live (`sw.js` v77). It contains:**
+- **NEWEST, START HERE: Moon Base and Deep Shaft's new song (build 78, pushed and live, `sw.js` v78; docs/tracks.md 'Moon Base').** The user tried the normal jumps and asked to push. Watch: all 8 AI resets in 4 bot races at 77.8 were on the Rim (idx 849-1006), player bot none; not looked into. User: low-gravity hops felt 'floaty in a bad way', so they are now normal jumps; the dust trail is 'worth' it and long enough; Moon Base's song 'did not bother me' (not much of a verdict); Deep Shaft's new song not noticed yet. Grand Prix is 7 races with Moon Base last. Test Lab is only in the debug menu. Items on a shortcut are still untested. Check `fps` in the first Moon Base race log.
+- **Build 77 (`sw.js` v77) contained:**
   - **Home screen landing fix: approved by the user.** `idleFps` is measured once per launch, first thing in main.js under the first loading splash (docs/history.md '76.5-76.8'). No 76.8+ race has been logged yet: check `idleFps` reads properly in the next one (60, or 30 in Low Power Mode).
   - **Canyon's new song (Texas boogie in A major): the user says it's better. Frost's frozen stream (docs/tracks.md 'Shortcuts'): worth taking but too short; the user said to leave it as is on this track, so make later shortcuts longer.** Bananas and shells on the stream are untested.
-  - **Grand Prix (76.9, user's choice): 6 races, Green Valley, Canyon, Frost, Harbour, Temple Run, Deep Shaft; Spiral Run is out of it but still in Single Race.** The saved best place carries over from the old 5-race cup. Driver tiles now show names.
+  - **Grand Prix (76.9, user's choice; Moon Base added 77.7): 7 races, Green Valley, Canyon, Frost, Harbour, Temple Run, Deep Shaft, Moon Base; Spiral Run is out of it but still in Single Race.** The saved best place carries over from the old 5-race cup. Driver tiles now show names.
   - **No triangle limit (user, 76.9): 'nothing tells if we need a limit on that yet'.** The old ~320k was only where the 72.11 trimming landed. The phone held 59.9 fps at 403k on Frost (76.4) and 59.8 at 430k on Canyon (75.7). Logged `fps` is the real check; `cost` only catches sudden jumps. Limits of the evidence: capped at 60, single races, one iPhone.
 - **NEWEST, START HERE: custom kart bodies, all 8 built (build 76, pushed and live; docs/systems.md 'Kart bodies'). The user chose: drivers and cars stay freely mixable, looks only; 'don't worry too much about tails'. The user: 'they look pretty good so far', complaints may come later. Canyon's worst spot is now 319k triangles (306k before). Next if wanted: Wheels tab.**
 - **NEWEST, START HERE: build 75 is pushed and live: Deep Shaft (the mine) and the rebuilt menus (docs/ui.md 'Before the race', docs/tracks.md). Always check menus upright AND sideways (`dev/test.sh ui`, `viewswitch`). The user approved the sideways home and the no-fade tunnels; **they don't like Deep Shaft's song.** The player bot flips on Deep Shaft now and then (3 in 8 races, not located): look if the user reports it.** Then **docs/track-plans.md** = plans for new tracks (mine, moon base), alternative paths, design lessons, open checks, and the two answers owed by the user. Then docs/history.md 'First phone feedback on the night's builds'.

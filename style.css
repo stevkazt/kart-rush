@@ -798,6 +798,7 @@ input { -webkit-user-select: text; user-select: text; -webkit-touch-callout: def
 [data-theme="volcano"] .track-art { background: linear-gradient(160deg, #e0763a, #7a3a2a); }
 [data-theme="jungle"] .track-art { background: linear-gradient(160deg, #6fb551, #2f6e3a); }
 [data-theme="mine"] .track-art { background: linear-gradient(160deg, #6e5a48, #241c16); }
+[data-theme="moon"] .track-art { background: linear-gradient(160deg, #2a2f4a, #05060e); }
 .track-art { border-radius: 10px; }
 .track-art .road-edge { fill: none; stroke: rgba(0, 0, 0, 0.35); stroke-width: 6; stroke-linejoin: round; }
 .track-art .road { fill: none; stroke: #f4f4f4; stroke-width: 3; stroke-linejoin: round; }
@@ -1391,7 +1392,7 @@ button.setup-tile:active { transform: translateY(2px); background: rgba(40, 44, 
 .setup-tile .pick-art svg { width: auto; height: 100%; max-width: 100%; }
 .setup-tile b { font-size: 14px; font-weight: 900; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .cup-maps { flex-wrap: wrap; gap: 3px; align-content: center; }
-.cup-map { display: block; width: calc(33.3% - 3px); }
+.cup-map { display: block; width: 26px; } /* 3 x 3 fits the art's fixed height */
 .cup-map .track-art { display: block; width: 100%; height: auto; border-radius: 4px; }
 /* Upright: the kart in the open middle, everything you touch at the bottom, START last */
 #app.vertical #overlay .lobby h1 { font-size: 50px; }

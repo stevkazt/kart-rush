@@ -52,7 +52,7 @@ const CFG = {
   // move when a layout changes. Features: bumps [idx, length m, height m] (a crest: air above
   // ~sqrt(20 * length^2 / (2 pi^2 height)) m/s), jumps [lip idx, ramp length m, rise m] (a kicker with a
   // step down after the lip), banks [idx, half-length m, degrees] (the outside of the bend is raised),
-  // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges). cut { points, halfWidth, mouth } = one shortcut beside the loop (buildCut).
+  // ice [from idx, to idx] (low grip, see kart.iceGrip; 8 m soft edges). cut { points, halfWidth, mouth, dip, dust } = one shortcut beside the loop (buildCut).
   tracks: {
     meadow: {
       name: 'Green Valley', icon: 'pine', theme: 'meadow', farm: true,
@@ -235,6 +235,33 @@ const CFG = {
       },
       palette: { road: [0x8a7c6c, 0x827466], stone: [0x9a8c7a, 0x8d806f, 0xa4968a] },
     },
+    // Moon Base (77.1): a dumbbell (user: most tracks look like a circle with disturbances). Two craters joined by a thin waist, the base between the waist's two roads. Down through the base, round the launch pad,
+    // back along the road floating over the rille with two jumps, then the Rim: 180+ degrees banked round the big crater, or the dust trail straight across its floor.
+    moon: {
+      name: 'Moon Base', icon: 'moon', theme: 'moon',
+      intro: [[840, 930, 9], [480, 625, 6], [1250, 1300, 5]], // round the Rim, over the rille, through the base
+      points: [
+        [20, 26, 0], [70, 26, 0], [120, 26, 0], [150, 29, 0.6],
+        [174.3, 43.2, 1.5], [191.6, 46, 2], [208.7, 42, 2.6], [223.1, 32, 3.2], [232.7, 17.2, 3.7], [236, 0, 4.2], [232.7, -17.2, 4.8], [223.1, -32, 5.4], [208.7, -42, 5.9], [191.6, -46, 6.5], [174.3, -43.2, 7],
+        [150, -29, 8], [120, -26, 9.5], [70, -26, 10], [20, -26, 10], [-30, -26, 10], [-80, -26, 10], [-130, -26, 10], [-175, -33, 10.5],
+        [-213.8, -56.2, 11], [-237.8, -62, 10.7], [-262.2, -57.9, 10.4], [-283.1, -44.6, 10.2], [-297.1, -24.2, 10], [-302, 0, 10], [-297.1, 24.2, 10], [-283.1, 44.6, 10.2], [-262.2, 57.9, 10.4], [-237.8, 62, 10.7], [-213.8, 56.2, 11],
+        [-175, 33, 10.2], [-130, 26, 6.5], [-85, 26, 2.5], [-40, 26, 0],
+      ],
+      jumps: [[500, 10, 1], [620, 10, 1]],
+      tallWalls: [[470, 700]],
+      bumps: [[1130, 24, 0.7]],
+      bankRuns: [[815, 1032, 8, 30, 30]], // the Rim
+      // The dust trail (77.1): across the crater floor, past the lander. Longer than Frost's stream (user: that one is too short). `dip` = how far it drops below its mouths, `dust` = how slippery (share of ice).
+      cut: { points: [[-204, -52], [-222, -52.6], [-240.6, -50.2], [-254.7, -39.2], [-261.2, -21.7], [-257.3, -3.3], [-252.8, 13.8], [-251.6, 32.5], [-241.8, 47.4], [-224.9, 55.7], [-206, 55.3]], halfWidth: 5.5, mouth: 8, dip: 6, dust: 0.6 },
+      crater: [-240, 0, 50, 5], tube: [1178, 1252], rocket: [190, 0],
+      boxRows: [188, 445, 730, 924, 1095],
+      pads: [[40, 0], [300, 0], [478, 0], [598, 0], [1160, 0]],
+      edgeDefault: 'moon',
+      edges: {
+        1: [[1290, 1317, 'boards'], [0, 40, 'boards']],
+        '-1': [[1290, 1317, 'boards'], [0, 40, 'boards']],
+      },
+    },
     spiral: {
       name: 'Spiral Run', icon: 'volcano', theme: 'volcano', gaps: [43],
       intro: [[700, 800, 7], [1148, 1222, 7], [1625, 1652, 6]], // up the cone, over the lava, into the station
@@ -317,6 +344,7 @@ const CFG = {
     railTurn: 8,            // rad/s^2 swinging a nose-into-the-rail kart along it (build 45: head-on hits stopped it dead / flipped it)
     offroadSpeed: 17,       // run-off grass (`openEdges`): speed it slows the kart to (m/s; a star or a boost ignores it)...
     offroadDrag: 0.9,       // ...share of speed lost per second until then, full 1.5 m past the curb
+    dustSpeed: 23, dustDrag: 0.6, // a dusty shortcut (`cut.dust`): the same, all across it
     wallScrape: 0.2,        // share of speed lost per second sliding along a rail (~9 m/s^2 at top speed,
                             // little when crawling off it; rails had no friction: free to lean on)
 
@@ -525,7 +553,7 @@ const app = $('app');
 // Debug tools (the DEBUG panel, the Test Lab track): on the LAN server (plain http) only (72.8). On the hosted copy, 5 quick taps on the build label switch them on for this phone.
 const DEBUG_KEY = 'kartrush.debug';
 const DEBUG = location.protocol === 'http:' || (() => { try { return localStorage.getItem(DEBUG_KEY) === '1'; } catch { return false; } })();
-const VERSION_N = '77'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
+const VERSION_N = '78'; // the build shown on the title screen + in the race log: main number = sw.js VERSION, then +.1 for every change Claude makes (so the user can confirm the latest is running)
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -972,7 +1000,7 @@ function roadPoint(i, lat, up = 0, out = new THREE.Vector3()) {
  * the main samples it skips, evenly (cutIndex), so laps, places and resets carry on; a reset puts it back on the main road. Its own colliders and walls;
  * the main rail opens wherever the cut's mouth runs through it. AIs stay on the main road.
  */
-function buildCut({ points, halfWidth, mouth }, data) {
+function buildCut({ points, halfWidth, mouth, dip = 0, dust = 0 }, data) {
   const T = CFG.track, { samples: road, spacing } = data;
   const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
   const n = Math.ceil(curve.getLength() / spacing) + 1, samples = curve.getSpacedPoints(n - 1);
@@ -987,7 +1015,7 @@ function buildCut({ points, halfWidth, mouth }, data) {
   const inRoad = samples.map((p) => { const j = nearest(p, scanFrom, scanTo), lat = lateral(j, p); return Math.abs(lat) < railLat(j, lat) ? j : -1; });
   const leave = inRoad.indexOf(-1), back = inRoad.lastIndexOf(-1);
   samples.forEach((p, i) => { p.y = inRoad[i] >= 0 ? road[inRoad[i]].y : 0; });
-  samples.forEach((p, i) => { if (inRoad[i] < 0) p.y = lerp(samples[leave - 1].y, samples[back + 1].y, smoothstep(leave - 1, back + 1, i)); });
+  samples.forEach((p, i) => { if (inRoad[i] < 0) p.y = lerp(samples[leave - 1].y, samples[back + 1].y, smoothstep(leave - 1, back + 1, i)) - dip * 0.5 * (1 - Math.cos((6.2832 * (i - leave + 1)) / (back - leave + 2))); });
   const tangents = [], normals = [], w = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const a = samples[Math.max(0, i - 1)], b = samples[Math.min(n - 1, i + 1)], len = Math.hypot(b.x - a.x, b.z - a.z);
@@ -995,7 +1023,7 @@ function buildCut({ points, halfWidth, mouth }, data) {
     normals.push({ x: tangents[i].z, y: 0, z: -tangents[i].x });
     w[i] = lerp(halfWidth, mouth, 1 - smoothstep(0, 22, Math.min(i, n - 1 - i) * spacing)); // wide where it meets the road
   }
-  const cut = { n, samples, tangents, normals, w, from, to, inRoad, bank: new Float32Array(n), gap: new Uint8Array(n), ice: samples.map((_, i) => smoothstep(leave - 4, leave + 12, i)) };
+  const cut = { n, samples, tangents, normals, w, from, to, inRoad, bank: new Float32Array(n), gap: new Uint8Array(n), dust, ice: samples.map((_, i) => smoothstep(leave - 4, leave + 12, i) * (dust || 1)) };
   // The main rail stands aside for the mouths
   const open = { 1: new Uint8Array(data.N + 1), '-1': new Uint8Array(data.N + 1) };
   for (const sd of [1, -1]) for (let i = scanFrom; i <= scanTo; i++) {
@@ -1039,7 +1067,7 @@ function cutPoint(cut, i, lat, up = 0, out = new THREE.Vector3()) {
 /** The ice ribbon of a cut. Corners over the road dip under it, so the road's own edge draws the line where the ice begins. */
 function buildCutSurface(cut, P) {
   const pos = [], col = [], T = CFG.track, c = new THREE.Color(), edge = new THREE.Color(P.shoulder[0]);
-  const ICE = [0xbfe2f1, 0xa9d6ec, 0xcbe8f4];
+  const ICE = cut.dust ? [0xa39f96, 0x9b978e, 0xb3afa6] : [0xbfe2f1, 0xa9d6ec, 0xcbe8f4];
   const row = (i, lat) => { const p = cutPoint(cut, i, lat, 0.02).toArray(); if (cut.onRoad(p)) p[1] -= 0.32; return p; };
   const lats = [-1, -0.78, 0.78, 1];
   for (let i = 0; i < cut.n - 1; i++) {
@@ -1048,7 +1076,7 @@ function buildCutSurface(cut, P) {
       const p0 = row(i, lats[e] * wi), p1 = row(i, lats[e + 1] * wi), p2 = row(j, lats[e] * wj), p3 = row(j, lats[e + 1] * wj);
       if ([p0, p1, p2, p3].every(cut.onRoad)) continue; // the road itself is already there
       pos.push(...p0, ...p2, ...p1, ...p1, ...p2, ...p3);
-      c.set(ICE[e === 1 ? band : 2]).lerp(edge, (e === 1 ? 0 : 0.55) + (1 - cut.ice[i]) * 0.45);
+      c.set(ICE[e === 1 ? band : 2]).lerp(edge, (e === 1 ? 0 : 0.55) + (1 - cut.ice[i] / (cut.dust || 1)) * 0.45);
       for (let v = 0; v < 6; v++) col.push(c.r, c.g, c.b);
     }
   }
@@ -1451,6 +1479,15 @@ const THEMES = {
     },
     build: buildMine,
   },
+  moon: {
+    // a black sky over bright ground: hard sunlight on pale dust, so the road never reads as a dark scene (only the sky is black)
+    sky: 0x03040a, fog: [0x14161f, 420, 1000], hemi: [0xffffff, 0xc0c0c8, 1.55], sun: [0xffffff, 2.5], sunOffset: [-80, 90, 60],
+    palette: {
+      road: [0x62666f, 0x5b5f68], dash: 0x4fd8ff, curb: [0x4fd8ff, 0xf1f3f7], shoulder: [0xc9c7c1, 0xbfbdb7], wear: 0x4f525a,
+      rail: [0xe6e8ee, 0x4fd8ff], arch: [0x2a2d36, 0x4fd8ff], stone: [0xd8dae0, 0xc9ccd3, 0xe2e4ea],
+    },
+    build: buildMoon,
+  },
 };
 
 function buildMeadow(data) {
@@ -1615,7 +1652,7 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, railOp
   const BOARDS = [0xffd23a, 0xe8322f, 0x2f6bff, 0xf4efe4, 0x3fb950, 0xff7a1f];
   const TYRE = new THREE.CylinderGeometry(0.72, 0.72, 0.55, 8);
   const LUMP = new THREE.IcosahedronGeometry(1, 0), NET = [0xff6a1f, 0xff8a2a], BOLLARD = new THREE.CylinderGeometry(0.22, 0.26, 1.1, 7);
-  const LUMPS = { snow: [0xf1f5fa, 0xe6edf5, 0xdde6f0], ice: [0xbfe2f1, 0xa9d6ea, 0xd3edf7], basalt: [0x3f3a3d, 0x4b4548, 0x342f32] };
+  const LUMPS = { snow: [0xf1f5fa, 0xe6edf5, 0xdde6f0], ice: [0xbfe2f1, 0xa9d6ea, 0xd3edf7], basalt: [0x3f3a3d, 0x4b4548, 0x342f32], rock: [0x8d8d90, 0x7f7f84, 0x9c9b98] };
   const th = CFG.track.wallThickness, kinds = { 1: new Array(N).fill(edgeDefault), '-1': new Array(N).fill(edgeDefault) };
   for (const sd of ['1', '-1']) for (const [from, to, kind] of edges[sd]) for (let i = from; i < to && i < N; i++) kinds[sd][i] = kind;
   const STEP = 4;
@@ -1636,7 +1673,16 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, railOp
       const wall = (color, depth, h, f = piece(depth)) => b.put(BOX, color, f.x, f.y + (h - SINK) / 2, f.z, { ry: f.ry, rx: f.rx, sx: depth, sy: h + SINK, sz: f.len });
       const beam = (color, y, f) => b.put(BOX, color, f.x, f.y + y, f.z, { ry: f.ry, rx: f.rx, sx: 0.1, sy: 0.16, sz: f.len });
       const tall = wallH[i] > CFG.track.wallHeight + 0.1; // (around a jump the colliders are taller: only a wall looks right)
-      if (tall) wall(STONES[n % 3], 0.8, wallH[i]);
+      if (kind === 'moon') { // a white panel with a lit band; around the jumps a taller open frame, so the view over the rille stays
+        const f = piece(0.25);
+        b.put(BOX, 0xe6e8ee, f.x, f.y + 0.35, f.z, { ry: f.ry, rx: f.rx, sx: 0.25, sy: 1.3, sz: f.len });
+        b.put(BOX, n % 2 ? 0x4fd8ff : 0x38b6e8, f.x, f.y + 1.06, f.z, { ry: f.ry, rx: f.rx, sx: 0.3, sy: 0.14, sz: f.len });
+        if (tall) {
+          b.put(BOX, 0xc4c8d0, f.x, f.y + wallH[i], f.z, { ry: f.ry, rx: f.rx, sx: 0.14, sy: 0.14, sz: f.len });
+          if (n % 2 === 0) b.put(BOX, 0xc4c8d0, f.x, f.y + wallH[i] / 2, f.z, { ry: f.ry, sx: 0.14, sy: wallH[i], sz: 0.14 });
+        }
+      }
+      else if (tall) wall(STONES[n % 3], 0.8, wallH[i]);
       else if (kind === 'fence' || kind === 'steel') {
         const f = piece(th), [c0, c1] = kind === 'steel' ? STEEL : WOOD;
         beam(n % 2 ? c1 : c0, 0.55, f);
@@ -1682,7 +1728,7 @@ function buildBarriers({ N, samples, normals, wL, wR, oL, oR, wallH, gap, railOp
   for (const sd of [1, -1]) for (let i = 0, n = 0; i < cut.n; i += STEP, n++) {
     const { x, z, y, free } = cut.wallAt(i, sd, 1.15);
     if (!free) continue;
-    const kind = cut.ice[i] > 0.9 ? 'ice' : 'snow', big = 1.05 + 0.25 * ((n * 7) % 5) / 4;
+    const kind = cut.dust ? 'rock' : cut.ice[i] > 0.9 ? 'ice' : 'snow', big = 1.05 + 0.25 * ((n * 7) % 5) / 4;
     b.put(LUMP, LUMPS[kind][n % 3], x, y + (kind === 'ice' ? 0.35 : 0.2), z, { ry: n * 1.7, sx: 1.25, sy: (kind === 'ice' ? 0.95 : 0.85) * big, sz: 2.3 });
   }
   const nose = Array.from({ length: cut.n }, (_, i) => i).find((i) => cut.wallAt(i, 1).free);
@@ -2868,7 +2914,7 @@ function roadOnStilts(data, b, { heightAt, nearby }, rand, column, colors, deckC
     // down to the ground, or to whatever part of the road passes under here
     let foot = heightAt(p.x, p.z) - 0.5, onRoad = false;
     nearby(p.x, p.z, (j, d) => {
-      if (d > 16 || samples[j].y > p.y - 3) return;
+      if (j >= N || d > 16 || samples[j].y > p.y - 3) return; // (j >= N: a shortcut's sample, see makeTerrain)
       const off = Math.abs(lateral(j, p));
       if (off < Math.max(wL[j], wR[j]) + T.curb + 0.6) onRoad = true; // (a column standing in a lane of the road below: no)
       else if (off < Math.max(wL[j], wR[j]) + 3.5) foot = Math.max(foot, samples[j].y + 0.2); // ...on the rail beside it: fine
@@ -3478,6 +3524,219 @@ function canyonLandmarks(data, heightAt) {
 }
 
 /**
+ * Moon Base (77.1). A dumbbell: base on the waist, launch pad in the small crater, the Rim round the big one, the road on pylons over a rille between them. Black sky, stars and Earth; the ground and road stay bright.
+ * Nearly everything is one batch. Moving: the rocket's launch, a rover on the crater floor, a shuttle overhead.
+ */
+function buildMoon(data) {
+  const { N, samples, tangents, normals, def } = data;
+  const rand = seededRand(1969), noise = makeNoise(rand);
+  const [cx0, cz0, craterR, floorY] = def.crater;
+  const roadD = (x, z) => { let d = Infinity; for (let i = 0; i < N; i += 6) d = Math.min(d, Math.hypot(x - samples[i].x, z - samples[i].z)); return d; };
+  // Small craters, anywhere well clear of the road
+  const pits = [];
+  for (let k = 0; k < 400 && pits.length < 22; k++) {
+    const x = -390 + rand() * 720, z = -160 + rand() * 320, r = 7 + rand() * 15;
+    if (roadD(x, z) > r + 24 && Math.hypot(x - cx0, z - cz0) > craterR + r) pits.push([x, z, r, 1.5 + r * 0.22]);
+  }
+  const DUST = [0xcac8c2, 0xbfbdb7, 0xd2d0ca, 0xb6b4ae].map((h) => new THREE.Color(h)), DEEP = new THREE.Color(0x85858a), RAY = new THREE.Color(0xe9e7e2);
+  const ground = makeTerrain(data,
+    (x, z) => [3 + 11 * noise(x / 70 + 8, z / 70), 12, 34, 0.5],
+    (x, z, h, slope, cc) => {
+      cc.copy(DUST[(noise(x / 11 + 4, z / 11) * 3.999) | 0]);
+      if (noise(x / 45 + 20, z / 9) > 0.74) cc.lerp(RAY, 0.6); // streaks thrown out by old impacts
+      if (slope > 0.5) cc.lerp(DEEP, Math.min(1, (slope - 0.5) * 1.5));
+    },
+    { step: 4, carve: (x, z, h) => {
+      const d = Math.hypot(x - cx0, z - cz0);
+      if (d < craterR + 4) h = lerp(floorY, h, smoothstep(craterR - 14, craterR + 4, d)); // the big crater's floor
+      const out = Math.max(0, x - 135, -150 - x); // the rille under the south road, closing off at both craters
+      if (out < 30) h = lerp(h, -6, (1 - smoothstep(10, 34, Math.abs(z + 26))) * (1 - smoothstep(0, 30, out)));
+      for (const [px, pz, r, depth] of pits) {
+        const u = Math.hypot(x - px, z - pz) / r;
+        if (u < 1.5) h += u < 1 ? -depth * (1 - u * u) + depth * 0.3 : depth * 0.3 * (1 - (u - 1) * 2);
+      }
+      return h;
+    } });
+  const { heightAt, minX, maxX, minZ, maxZ } = ground;
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+  const plain = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), lambert(0xa8a6a1));
+  plain.rotation.x = -Math.PI / 2; plain.position.set(cx, -9, cz); // (under the lowest ground: from the Rim it would hide the base)
+  trackRoot.add(plain);
+  const sky = makeSky(0x0b0c16, 0x05060e, 0x020308, 0xffffff);
+  farMassifs(rand, noise, 18, () => [cx, cz], (y, n) => (y + n * 0.25 > 0.6 ? 0xb9b8b4 : y > 0.3 ? 0x9a9a98 : 0x83838a), { r: [420, 480], h: [40, 90], w: [70, 120] });
+  // Stars: tiny quads on the dome that follows the camera, in the sky's own shader
+  const sp = [], sc = [], cc = new THREE.Color();
+  for (let i = 0; i < 520; i++) {
+    const y = 0.04 + rand() * 0.96, a = rand() * 6.2832, r = Math.sqrt(1 - y * y), v = new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r).multiplyScalar(440);
+    const s = 0.5 + rand() * rand() * 1.5, e1 = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(s), e2 = v.clone().cross(e1).normalize().multiplyScalar(s);
+    cc.setHSL(0.6, 0.2, 0.55 + rand() * 0.45);
+    for (const [u, w] of [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]]) { sp.push(v.x + e1.x * u + e2.x * w, v.y + e1.y * u + e2.y * w, v.z + e1.z * u + e2.z * w); sc.push(cc.r, cc.g, cc.b); }
+  }
+  const starG = new THREE.BufferGeometry();
+  starG.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
+  starG.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
+  const stars = new THREE.Mesh(starG, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false, depthWrite: false }));
+  stars.renderOrder = -1; stars.frustumCulled = false;
+  trackRoot.add(stars);
+  // Earth, low over the launch pad: dead ahead down the start straight
+  const ec = document.createElement('canvas'); ec.width = ec.height = 256;
+  const eg = ec.getContext('2d');
+  eg.fillStyle = '#2a6fd0'; eg.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 16; i++) { eg.fillStyle = i % 3 ? '#4f9a58' : '#b8a66a'; eg.beginPath(); eg.ellipse(rand() * 256, rand() * 256, 14 + rand() * 34, 8 + rand() * 22, rand() * 3, 0, 7); eg.fill(); }
+  for (let i = 0; i < 34; i++) { eg.fillStyle = 'rgba(255,255,255,0.72)'; eg.beginPath(); eg.ellipse(rand() * 256, rand() * 256, 10 + rand() * 36, 3 + rand() * 7, -0.3 + rand() * 0.6, 0, 7); eg.fill(); }
+  const shade = eg.createLinearGradient(40, 40, 256, 220); // the night side
+  shade.addColorStop(0.55, 'rgba(2,3,8,0)'); shade.addColorStop(0.85, 'rgba(2,3,8,0.97)');
+  eg.fillStyle = shade; eg.fillRect(0, 0, 256, 256);
+  const earthTex = new THREE.CanvasTexture(ec); earthTex.colorSpace = THREE.SRGBColorSpace;
+  const earth = new THREE.Mesh(new THREE.CircleGeometry(52, 32), new THREE.MeshBasicMaterial({ map: earthTex, fog: false, depthWrite: false }));
+  earth.renderOrder = -1;
+  trackRoot.add(earth);
+  const earthDir = new THREE.Vector3(0.98, 0.13, 0.05).normalize();
+
+  const b = propBatch(), BOX = new THREE.BoxGeometry(1, 1, 1), HEX = new THREE.CylinderGeometry(1, 1, 1, 6), CYL = new THREE.CylinderGeometry(1, 1, 1, 12), TUBE = new THREE.CylinderGeometry(1, 1, 1, 12).rotateX(Math.PI / 2), DOME = new THREE.SphereGeometry(1, 16, 8, 0, 6.2832, 0, Math.PI / 2), LUMP = new THREE.IcosahedronGeometry(1, 0), CONE = new THREE.ConeGeometry(1, 1, 12);
+  const box = (c, w, h, d, x, y, z, o = {}) => b.put(BOX, c, x, y, z, { sx: w, sy: h, sz: d, ...o });
+  const WHITE = 0xeef0f4, PANEL = 0xc4c8d0, BLUE = 0x4fd8ff, DARK = 0x2a2d36, ORANGE = 0xff8a2a;
+  buildBarriers(data, b);
+  roadOnStilts(data, b, ground, rand, HEX, [0xc4c8d0, 0xb4b8c0, 0xd2d5da], 0x8a8d94);
+
+  // ---- The base: long modules along the start straight, a dome between the two roads, a glass walkway over the road ----
+  const frame = (i, sd, off) => { const k = ((i % N) + N) % N, [x, z] = besideRoad(data, k, sd, off), t = tangents[k], n = normals[k]; return { x, z, t, n, ry: Math.atan2(t.x, t.z), y: Math.min(samples[k].y, heightAt(x, z)) - 0.3, at: (a, o) => [x + t.x * a + n.x * o * sd, z + t.z * a + n.z * o * sd] }; };
+  const module = (f, len, r) => {
+    b.put(TUBE, WHITE, f.x, f.y + r + 0.6, f.z, { ry: f.ry, sx: r, sy: r, sz: len });
+    for (const a of [-len / 2, len / 2]) { const [x, z] = f.at(a, 0); b.put(DOME, PANEL, x, f.y + r + 0.6, z, { ry: f.ry, rx: a > 0 ? Math.PI / 2 : -Math.PI / 2, sx: r, sy: r * 0.7, sz: r }); }
+    for (let a = -len / 2 + 2; a < len / 2; a += 3) { const [x, z] = f.at(a, -r * 0.92); box(a % 6 < 3 ? BLUE : 0x8fe6ff, 0.12, 0.8, 1.5, x, f.y + r + 1, z, { ry: f.ry }); }
+    for (const a of [-len * 0.3, len * 0.3]) { const [x, z] = f.at(a, 0); box(PANEL, r * 1.4, 1, 1.2, x, f.y + 0.4, z, { ry: f.ry }); }
+    const [ax, az] = f.at(0, 0); box(ORANGE, 0.2, 0.5, len * 0.9, ax, f.y + r * 2 + 0.55, az, { ry: f.ry });
+  };
+  for (let i = -44; i <= 90; i += 30) { module(frame(i, -1, 5.5), 21, 3.6 + ((i + 44) % 60 ? 0.5 : 0)); module(frame(i + 12, 1, 6), 18, 3.2); }
+  const hub = [14, 0]; // (between the two roads)
+  b.put(DOME, 0xdfe3ea, hub[0], -0.5, hub[1], { sx: 15, sy: 11, sz: 15 });
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * 6.2832, x = hub[0] + Math.cos(a) * 15.2, z = hub[1] + Math.sin(a) * 15.2; box(BLUE, 1.6, 2.2, 1.6, x, 1.4, z, { ry: -a }); }
+  b.put(CYL, PANEL, hub[0], 13, hub[1], { sx: 0.5, sy: 7, sz: 0.5 });
+  b.put(CONE, ORANGE, hub[0], 17, hub[1], { sx: 0.8, sy: 1.6, sz: 0.8 });
+  { const a = frame(59, 1, 2), c = frame(59, -1, 2), mx = (a.x + c.x) / 2, mz = (a.z + c.z) / 2, span = Math.hypot(a.x - c.x, a.z - c.z);
+    b.put(TUBE, 0x9fe6ff, mx, 7.2, mz, { ry: a.ry + Math.PI / 2, sx: 1.8, sy: 1.8, sz: span + 2 });
+    for (let u = -span / 2; u <= span / 2; u += 4) box(WHITE, 4, 4, 0.5, mx + a.n.x * u, 7.2, mz + a.n.z * u, { ry: a.ry + Math.PI / 2, sx: 0.5, sy: 4.1, sz: 4.1 });
+    for (const q of [a, c]) box(PANEL, 2.4, 7.2, 2.4, q.x, 3.2, q.z); }
+
+  // ---- The glass tube on the way down into the base: white ribs over the road ----
+  const [t0, t1] = def.tube, RIB = 9, roofR = 13, shell = [];
+  const ribAt = (i, a) => { const q = samples[i], n = normals[i], lat = Math.cos(a) * roofR; return new THREE.Vector3(q.x + n.x * lat, q.y + Math.sin(a) * roofR * 0.82, q.z + n.z * lat); };
+  for (let i = t0; i <= t1; i += 8) for (let s = 0; s < RIB; s++) {
+    const p = ribAt(i, (s / RIB) * Math.PI), q = ribAt(i, ((s + 1) / RIB) * Math.PI), m = p.clone().add(q).multiplyScalar(0.5), d = q.clone().sub(p), ry = Math.atan2(tangents[i].x, tangents[i].z);
+    b.put(BOX, s === 0 || s === RIB - 1 ? PANEL : WHITE, m.x, m.y, m.z, { ry, rz: Math.atan2(d.y, d.x * normals[i].x + d.z * normals[i].z), sx: d.length() + 0.1, sy: 0.35, sz: 0.5 });
+  }
+  for (let i = t0; i < t1; i += 8) for (let s = 0; s < RIB; s++) {
+    const A = ribAt(i, (s / RIB) * Math.PI), B = ribAt(i, ((s + 1) / RIB) * Math.PI), C = ribAt(i + 8, (s / RIB) * Math.PI), D = ribAt(i + 8, ((s + 1) / RIB) * Math.PI);
+    for (const v of [A, C, B, B, C, D]) shell.push(v.x, v.y, v.z);
+  }
+  const shellG = new THREE.BufferGeometry();
+  shellG.setAttribute('position', new THREE.Float32BufferAttribute(shell, 3));
+  const shellM = new THREE.Mesh(shellG, new THREE.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: 0.16, fog: false, depthWrite: false, side: THREE.DoubleSide }));
+  trackRoot.add(shellM);
+
+  // ---- Over the rille: pylons with lights, solar farms stepping down its sides ----
+  for (const sd of [1, -1]) {
+    for (let i = 430; i < 700; i += 26) { const f = frame(i, sd, 0.6); const y = samples[i].y; box(PANEL, 0.3, 4.5, 0.3, f.x, y + 2.2, f.z); box(BLUE, 0.6, 0.35, 0.6, f.x, y + 4.5, f.z); }
+    if (sd < 0) for (let i = 450; i < 680; i += 46) for (let row = 0; row < 3; row++) { // (the far side only: the near side is the base)
+      const f = frame(i, sd, 14 + row * 9), [x, z] = [f.x, f.z], y = heightAt(x, z);
+      box(0x1d2a52, 9, 0.2, 5, x, y + 1.6, z, { ry: f.ry, rx: 0.5 * sd });
+      for (const dx of [-3, 0, 3]) box(0x3a4a7a, 0.08, 0.22, 5, x + f.t.x * dx, y + 1.62, z + f.t.z * dx, { ry: f.ry, rx: 0.5 * sd });
+      box(PANEL, 0.3, 1.6, 0.3, x, y + 0.8, z);
+    }
+  }
+
+  // ---- The launch pad, inside the small crater ----
+  const [rx, rz] = def.rocket, padY = heightAt(rx, rz);
+  b.put(CYL, 0x9a9ca2, rx, padY + 0.5, rz, { sx: 18, sy: 1, sz: 18 });
+  b.put(CYL, 0xffd23a, rx, padY + 1.02, rz, { sx: 15, sy: 0.05, sz: 15 });
+  b.put(CYL, 0x9a9ca2, rx, padY + 1.06, rz, { sx: 14, sy: 0.05, sz: 14 });
+  for (let h = 3; h < 40; h += 6) { box(0xd9472b, 8, 0.4, 0.4, rx - 9, padY + h, rz + 3); box(0xd9472b, 8, 0.4, 0.4, rx - 9, padY + h, rz - 3); box(0xd9472b, 0.4, 0.4, 6, rx - 13, padY + h, rz); }
+  for (const dz of [-3, 3]) for (const dx of [-13, -5]) box(0xb03a22, 0.5, 42, 0.5, rx + dx, padY + 21, rz + dz);
+  box(PANEL, 6, 0.6, 1, rx - 6, padY + 28, rz);
+  // A radar dish on the pad's far edge, and rocks that say nothing was ever tidied up
+  const dishAt = [rx - 28, rz + 18], dishY = heightAt(...dishAt);
+  b.put(CYL, PANEL, dishAt[0], dishY + 4, dishAt[1], { sx: 0.6, sy: 8, sz: 0.6 });
+  const dish = new THREE.Mesh(new THREE.SphereGeometry(5.5, 16, 6, 0, 6.2832, 0, 1.1).rotateX(Math.PI / 2 + 0.5), new THREE.MeshLambertMaterial({ color: 0xf1f3f7, side: THREE.DoubleSide, flatShading: true }));
+  dish.position.set(dishAt[0], dishY + 8.6, dishAt[1]); dish.castShadow = true;
+  trackRoot.add(dish);
+  for (let k = 0; k < 60; k++) {
+    const x = minX + rand() * (maxX - minX), z = minZ + rand() * (maxZ - minZ);
+    if (roadD(x, z) < 16 || (data.cut && data.cut.samples.some((p) => Math.hypot(p.x - x, p.z - z) < 11)) || Math.hypot(x - rx, z - rz) < 22) continue;
+    const s = 0.8 + rand() * rand() * 3.4;
+    b.put(LUMP, [0x8d8d90, 0x9c9b98, 0x7f7f84][k % 3], x, heightAt(x, z) + s * 0.3, z, { ry: rand() * 6, sx: s * (0.9 + rand() * 0.6), sy: s * 0.7, sz: s });
+  }
+
+  // ---- The crater floor: an old lander on its side beside the trail ----
+  const lx = cx0 + 22, lz = cz0;
+  { const ly = floorY + 0.2;
+    b.put(new THREE.CylinderGeometry(3.2, 3.8, 3.4, 8), 0xd9b23a, lx, ly + 3, lz, { rz: 0.3, ry: 0.5 });
+    b.put(new THREE.CylinderGeometry(1.2, 2.6, 2.4, 8), 0xc9ccd3, lx + 0.8, ly + 5.6, lz + 0.3, { rz: 0.3, ry: 0.5 });
+    for (let k = 0; k < 4; k++) { const a = k * 1.5708 + 0.6; box(0x8a8d94, 0.25, 5, 0.25, lx + Math.cos(a) * 3.8, ly + 1.2, lz + Math.sin(a) * 3.8, { rz: Math.cos(a) * 0.6, rx: -Math.sin(a) * 0.6 }); }
+    box(ORANGE, 0.1, 1.6, 2.4, lx - 3.5, ly + 3.2, lz, { rz: 0.3 }); }
+
+  const mesh = new THREE.Mesh(b.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  trackRoot.add(mesh);
+
+  // ---- What moves: the rocket's launch, a rover, a shuttle ----
+  const rb = propBatch();
+  rb.put(CYL, WHITE, 0, 14, 0, { sx: 3, sy: 24, sz: 3 });
+  for (let h = 4; h < 26; h += 7) rb.put(CYL, 0xd9472b, 0, h, 0, { sx: 3.02, sy: 1.6, sz: 3.02 });
+  rb.put(CONE, 0xd9472b, 0, 30, 0, { sx: 3, sy: 8, sz: 3 });
+  for (let k = 0; k < 4; k++) { const a = k * 1.5708; rb.put(new THREE.ConeGeometry(2.4, 7, 4), 0xd9472b, Math.cos(a) * 3.8, 4.5, Math.sin(a) * 3.8, { sx: 0.5, sz: 1 }); }
+  rb.put(CONE, 0x3a3d44, 0, 1.2, 0, { sx: 2, sy: 2.4, sz: 2 });
+  const rocket = new THREE.Mesh(rb.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  rocket.castShadow = true;
+  rocket.position.set(rx, padY + 1.2, rz);
+  trackRoot.add(rocket);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(2.6, 16, 10).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0xffb340, fog: false }));
+  flame.visible = false;
+  trackRoot.add(flame);
+  const vb = propBatch();
+  vb.put(BOX, WHITE, 0, 1.4, 0, { sx: 2.4, sy: 1, sz: 4 });
+  vb.put(BOX, BLUE, 0, 2.1, 0.5, { sx: 2, sy: 0.6, sz: 1.6 });
+  for (const dx of [-1.4, 1.4]) for (const dz of [-1.4, 1.4]) vb.put(new THREE.CylinderGeometry(0.6, 0.6, 0.5, 8).rotateZ(Math.PI / 2), DARK, dx, 0.6, dz);
+  vb.put(CYL, PANEL, -0.7, 3.3, -1.3, { sx: 0.06, sy: 2.4, sz: 0.06 });
+  const rover = new THREE.Mesh(vb.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  rover.castShadow = true;
+  trackRoot.add(rover);
+  const sb = propBatch();
+  sb.put(BOX, WHITE, 0, 0, 0, { sx: 3.5, sy: 2.2, sz: 13 });
+  sb.put(CONE, WHITE, 0, 0, 8, { rx: Math.PI / 2, sx: 1.6, sy: 3.6, sz: 1.2 });
+  sb.put(BOX, PANEL, 0, -0.4, -1.5, { sx: 16, sy: 0.3, sz: 6 });
+  sb.put(BOX, BLUE, 0, 0.4, 4.5, { sx: 2.2, sy: 1, sz: 1.5 });
+  sb.put(BOX, ORANGE, 0, 2, -5, { sx: 0.3, sy: 3.4, sz: 3 });
+  const shuttle = new THREE.Mesh(sb.geometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
+  trackRoot.add(shuttle);
+
+  let clock = 0;
+  return {
+    update(dt) {
+      clock += dt;
+      sky.update();
+      stars.position.copy(camera.position);
+      earth.position.copy(camera.position).addScaledVector(earthDir, 425);
+      earth.lookAt(camera.position);
+      dish.rotation.y = clock * 0.35;
+      // A launch every 46 s: 9 s of lift, then a new one is on the pad
+      const u = ((clock + 26) % 46) - 37, up = u > 0 ? 4.5 * u * u : 0;
+      rocket.position.y = padY + 1.2 + up;
+      rocket.visible = up < 330;
+      flame.visible = u > -1.2 && rocket.visible;
+      if (flame.visible) { flame.position.set(rx, rocket.position.y - 7, rz); flame.scale.set(1, 0.8 + 0.3 * Math.sin(clock * 31), 1); }
+      const ra = clock * 0.16, rr = 9;
+      rover.position.set(lx + 5 + Math.cos(ra) * rr, 0, lz + Math.sin(ra) * rr);
+      rover.position.y = heightAt(rover.position.x, rover.position.z) + 0.1;
+      rover.rotation.y = -ra;
+      const sa = clock * 0.08;
+      shuttle.position.set(-30 + Math.cos(sa) * 300, 42 + Math.sin(sa * 3) * 5, Math.sin(sa) * 120);
+      shuttle.rotation.y = Math.atan2(-Math.sin(sa) * 300, Math.cos(sa) * 120);
+    },
+  };
+}
+
+/**
  * Desert canyon on a golden afternoon. The ground is a height field: flat at road height beside the road, then a sandy
  * slope and red rock walls 13-30 m high. Each point takes the lowest of (nearby road height + rise with
  * distance), so where two parts of the track are close at different heights the ground follows the lower
@@ -3885,8 +4144,7 @@ world.addEventListener('postStep', () => { for (const k of karts) { k.preVx = k.
  * A rail only ever faces across the road, so a normal mostly along the road is one of those seams.
  */
 const railSnag = (k, nx, nz) => {
-  if (k.cut) return false; // (its walls don't run along the main road's tangents)
-  const t = track.tangents[k.trackIdx];
+  const t = k.cut ? track.cut.tangents[k.cutI] : track.tangents[k.trackIdx]; // (on a shortcut, along its own walls)
   return Math.abs(nx * t.x + nz * t.z) > Math.hypot(nx, nz) * CFG.kart.railSeam;
 };
 // Rails cost speed. 'collide' fires per contact point, before the solver (true impact speed); keep the
@@ -5318,7 +5576,7 @@ function nextTrack() {
 }
 
 // ---------- Grand Prix (72.9): the tracks in a row, points per race, the same field throughout ----------
-const CUP_TRACKS = ['meadow', 'canyon', 'frost', 'tech', 'jungle', 'mine'], CUP_POINTS = [10, 8, 6, 4, 2, 1], CUP_KEY = 'kartrush.cupBest';
+const CUP_TRACKS = ['meadow', 'canyon', 'frost', 'tech', 'jungle', 'mine', 'moon'], CUP_POINTS = [10, 8, 6, 4, 2, 1], CUP_KEY = 'kartrush.cupBest';
 let cup = null; // { at: index in CUP_TRACKS, pts: { racer: points }, over: the final standings are showing }
 const cupId = (k) => (k.isPlayer ? 'me' : k.name);
 const cupRaceScore = (k) => CUP_POINTS[k.place - 1] || 0;
@@ -5603,7 +5861,7 @@ function openPicker(kind) {
   $('pick-tabs').hidden = kind !== 'kart';
   for (const b of $('pick-tabs').children) b.classList.toggle('on', b.dataset.tab === kartTab);
   const options = {
-    track: () => Object.entries(CFG.tracks).filter(([, t]) => !t.debug || DEBUG).map(([id, t]) => ({
+    track: () => Object.entries(CFG.tracks).filter(([, t]) => !t.debug).map(([id, t]) => ({
       on: () => track.id === id, theme: t.theme, pick: () => selectTrack(id),
       html: `${trackShape(id).svg}<b>${icon(t.icon)}${t.name}</b><small>${trackShape(id).length} m · ${recordText(id)}</small>`,
     })),
@@ -8107,6 +8365,14 @@ function airLevel(k) {
 /** Run-off (`openEdges`, 71.1): past the curb the grass slows the kart. Logs on / off for the telemetry ('offroad'). */
 function offroadDrag(k) {
   const K = CFG.kart, i = k.trackIdx, { body } = k;
+  if (k.cut && track.cut.dust) {
+    const v = Math.hypot(body.velocity.x, body.velocity.z);
+    if (v <= K.dustSpeed || k.star > 0 || k.boost > 0) return;
+    const scale = Math.max(K.dustSpeed / v, 1 - K.dustDrag * CFG.physicsStep);
+    body.velocity.x *= scale;
+    body.velocity.z *= scale;
+    return;
+  }
   if (!track.oL[i] && !track.oR[i]) { if (k.offroad) offroadLog(k, false); return; }
   const lat = lateral(i, body.position);
   const depth = Math.abs(lat) - ((lat > 0 ? track.wL[i] : track.wR[i]) + CFG.track.curb);
@@ -8210,7 +8476,8 @@ function applyStabilityAssist(k) {
   if (snag && k.preVx !== undefined && Math.hypot(k.preVx, k.preVz) > Math.hypot(body.velocity.x, body.velocity.z) + 0.3) {
     if (!(k.snagAt > state.raceTime - 0.5)) teleEvent('snag', k, { idx: k.trackIdx, kmh: Math.round(Math.hypot(k.preVx, k.preVz) * 3.6), left: Math.round(Math.hypot(body.velocity.x, body.velocity.z) * 3.6) });
     k.snagAt = state.raceTime;
-    const i = k.trackIdx, t = track.tangents[i], n = track.normals[i], side = Math.sign(lateral(i, body.position)) || 1;
+    const i = k.trackIdx, c = k.cut ? track.cut : null, t = c ? c.tangents[k.cutI] : track.tangents[i], n = c ? c.normals[k.cutI] : track.normals[i];
+    const side = Math.sign(c ? (body.position.x - c.samples[k.cutI].x) * n.x + (body.position.z - c.samples[k.cutI].z) * n.z : lateral(i, body.position)) || 1;
     const along = k.preVx * t.x + k.preVz * t.z, across = k.preVx * n.x + k.preVz * n.z, off = across * side > 0 ? -side * K.railSeamOff : across;
     body.velocity.x = t.x * along + n.x * off; body.velocity.z = t.z * along + n.z * off;
     body.angularVelocity.y = k.preYaw;
@@ -8227,7 +8494,7 @@ function applyStabilityAssist(k) {
     // Dead against the rail with the gas held (player only: the AIs have their own watchdog): nudge it back along
     // the road and a little off the wall, so it gets going instead of waiting for the stuck reset
     if (k.isPlayer && k.ctl.gas && !k.ctl.brake && k.speed < K.railFreeBelow) {
-      const t = track.tangents[i0], tl = Math.hypot(t.x, t.z) || 1;
+      const t = k.cut ? track.cut.tangents[k.cutI] : track.tangents[i0], tl = Math.hypot(t.x, t.z) || 1;
       const dv = K.railFree * CFG.physicsStep;
       body.velocity.x += (t.x / tl) * dv + wallNx * dv * 0.5;
       body.velocity.z += (t.z / tl) * dv + wallNz * dv * 0.5;

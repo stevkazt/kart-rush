@@ -138,7 +138,7 @@ if (mode === 'autopilot' || mode === 'trace') {
   await ev(`window.__errs = []; window.addEventListener('error', (e) => __errs.push(e.message));`);
   await ev(`localStorage.setItem('kartrush.mode', 'cup'); document.querySelector('#mode-pick [data-mode=cup]').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, clientX: 0, clientY: 0 }))`);
   await ev(`(() => { const e = document.querySelector('#mode-pick [data-mode=cup]'), r = e.getBoundingClientRect(), o = { pointerId: 1, clientX: r.x + 4, clientY: r.y + 4 }; e.dispatchEvent(new PointerEvent('pointerdown', o)); e.dispatchEvent(new PointerEvent('pointerup', o)); const g = document.getElementById('btn-start'), q = g.getBoundingClientRect(), p = { pointerId: 2, clientX: q.x + 4, clientY: q.y + 4 }; g.dispatchEvent(new PointerEvent('pointerdown', p)); g.dispatchEvent(new PointerEvent('pointerup', p)); })()`);
-  for (let r = 0; r < 6; r++) {
+  for (let r = 0; r < 7; r++) {
     await sleep(1000);
     for (let t = 0; t < 600 && (await ev(`__s.phase`)) !== 'race'; t++) { await ev(`if (__s.intro > 0) document.getElementById('app').dispatchEvent(new PointerEvent('pointerdown'))`); await sleep(200); }
     console.log('race', r, await ev(`__t.id + ' ' + __t.def.name`));
